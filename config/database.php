@@ -64,6 +64,21 @@ return [
             ]) : [],
         ],
 
+        'salescrm' => [
+            'driver' => 'mysql',
+            'host' => env('SALESCRM_DB_HOST', '127.0.0.1'),
+            'port' => env('SALESCRM_DB_PORT', '3306'),
+            'database' => env('SALESCRM_DB_DATABASE', 'salescrm'),
+            'username' => env('SALESCRM_DB_USERNAME', 'root'),
+            'password' => env('SALESCRM_DB_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),
