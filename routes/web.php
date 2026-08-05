@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\EmployeeProfileController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -11,6 +12,8 @@ Route::get('/', function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::resource('employees', EmployeeProfileController::class)
+        ->parameters(['employees' => 'employeeProfile']);
 });
 
 require __DIR__.'/settings.php';
