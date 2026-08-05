@@ -16,11 +16,21 @@ export default function AuthSplitLayout({
                 <div className="absolute inset-0 bg-zinc-900" />
                 <Link
                     href={home()}
-                    className="relative z-20 flex items-center text-lg font-medium"
+                    className="relative z-20 flex items-center gap-2 text-lg font-semibold tracking-tight"
                 >
-                    <AppLogoIcon className="mr-2 size-8 fill-current text-white" />
+                    <div className="flex size-9 items-center justify-center rounded-lg bg-white/10">
+                        <AppLogoIcon className="size-5 fill-current text-white" />
+                    </div>
                     {name}
                 </Link>
+                <div className="relative z-20 mt-auto">
+                    <p className="text-lg font-medium">
+                        Human Resource Management
+                    </p>
+                    <p className="mt-2 text-sm text-white/70">
+                        Manage people, leave, and documents in one place.
+                    </p>
+                </div>
             </div>
             <div className="w-full lg:p-8">
                 <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
