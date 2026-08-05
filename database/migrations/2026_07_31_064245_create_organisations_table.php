@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('logo')->nullable();
             $table->tinyInteger('status')->default(1);
         });
-    }   
+    }
 
     /**
      * Reverse the migrations.
@@ -26,5 +26,5 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('organisations');
-    }   
+    }
 };
