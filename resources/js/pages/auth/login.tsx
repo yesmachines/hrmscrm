@@ -30,7 +30,7 @@ export default function Login({ status, canResetPassword }: Props) {
             </div>
 
             {status && (
-                <div className="mb-4 text-center text-sm font-medium text-[#0F766E]">
+                <div className="mb-4 text-center text-sm font-medium text-[#00B8A3]">
                     {status}
                 </div>
             )}
@@ -60,7 +60,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                     tabIndex={1}
                                     autoComplete="email"
                                     placeholder="name@company.com"
-                                    className="h-11 rounded-lg border-neutral-200 bg-white pl-10 text-neutral-900 placeholder:text-neutral-400 focus-visible:border-[#0F766E] focus-visible:ring-[#0F766E]/25"
+                                    className="h-11 rounded-lg border-neutral-200 bg-white pl-10 text-neutral-900 placeholder:text-neutral-400 focus-visible:border-[#00B8A3] focus-visible:ring-[#00F5D4]/30"
                                 />
                             </div>
                             <InputError message={errors.email} />
@@ -82,7 +82,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                     tabIndex={2}
                                     autoComplete="current-password"
                                     placeholder="Enter your password"
-                                    className="h-11 rounded-lg border-neutral-200 bg-white pr-10 pl-10 text-neutral-900 placeholder:text-neutral-400 focus-visible:border-[#0F766E] focus-visible:ring-[#0F766E]/25"
+                                    className="h-11 rounded-lg border-neutral-200 bg-white pr-10 pl-10 text-neutral-900 placeholder:text-neutral-400 focus-visible:border-[#00B8A3] focus-visible:ring-[#00F5D4]/30"
                                 />
                             </div>
                             <InputError message={errors.password} />
@@ -90,7 +90,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 <div className="flex justify-end">
                                     <TextLink
                                         href={request()}
-                                        className="text-sm font-medium text-[#0F766E] hover:text-[#0D9488]"
+                                        className="text-sm font-medium text-[#00B8A3] hover:text-[#009688]"
                                         tabIndex={5}
                                     >
                                         Forgot password?
@@ -103,7 +103,7 @@ export default function Login({ status, canResetPassword }: Props) {
 
                         <Button
                             type="submit"
-                            className="relative mt-1 h-11 w-full rounded-lg bg-gradient-to-r from-[#0B4F8A] to-[#0F766E] text-white hover:from-[#0A4578] hover:to-[#0D9488] focus-visible:ring-[#0F766E]/40"
+                            className="relative mt-1 h-11 w-full rounded-lg bg-gradient-to-r from-[#002B5E] to-[#001A33] text-white hover:from-[#003A7A] hover:to-[#002B5E] focus-visible:ring-[#00F5D4]/40"
                             tabIndex={4}
                             disabled={processing}
                             data-test="login-button"
@@ -113,7 +113,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 Sign in
                             </span>
                             {!processing && (
-                                <ArrowRight className="absolute top-1/2 right-4 size-4 -translate-y-1/2" />
+                                <ArrowRight className="absolute top-1/2 right-4 size-4 -translate-y-1/2 text-[#00F5D4]" />
                             )}
                         </Button>
                     </>
