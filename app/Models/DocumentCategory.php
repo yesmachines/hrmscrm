@@ -12,6 +12,17 @@ class DocumentCategory extends Model
 {
     public $timestamps = false;
 
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'status' => 'integer',
+            'parent_id' => 'integer',
+        ];
+    }
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_id');
@@ -20,5 +31,10 @@ class DocumentCategory extends Model
     public function children(): HasMany
     {
         return $this->hasMany(self::class, 'parent_id');
+    }
+
+    public function documentTypes(): HasMany
+    {
+        return $this->hasMany(DocumentType::class, 'category_id');
     }
 }

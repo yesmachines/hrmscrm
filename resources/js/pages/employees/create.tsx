@@ -17,6 +17,12 @@ type OrganisationOption = {
     short_name: string;
 };
 
+type OfficeLocationOption = {
+    id: number;
+    name: string;
+    organisation_id: number;
+};
+
 type RoleOption = {
     name: string;
 };
@@ -24,10 +30,12 @@ type RoleOption = {
 export default function EmployeesCreate({
     departments,
     organisations,
+    officeLocations,
     roles,
 }: {
     departments: DepartmentOption[];
     organisations: OrganisationOption[];
+    officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
 }) {
     return (
@@ -47,6 +55,7 @@ export default function EmployeesCreate({
                                 errors={errors}
                                 departments={departments}
                                 organisations={organisations}
+                                officeLocations={officeLocations}
                                 roles={roles}
                             />
 

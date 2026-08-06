@@ -2,6 +2,7 @@
 
 namespace App\Concerns;
 
+use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Employee;
@@ -106,7 +107,7 @@ trait EmployeeValidationRules
             'designation_id' => ['nullable', 'integer'],
             'employment_status' => ['nullable', 'string', Rule::in(['fulltime', 'parttime', 'contract', 'intern'])],
             'organisation_id' => ['nullable', 'integer', Rule::exists(Organisation::class, 'id')],
-            'office_location_id' => ['nullable', 'integer'],
+            'office_location_id' => ['nullable', 'integer', Rule::exists(OfficeLocation::class, 'id')],
             'joining_date' => ['nullable', 'date'],
             'resignation_date' => ['nullable', 'date', 'after_or_equal:joining_date'],
             'division' => ['required', 'string', 'max:255'],

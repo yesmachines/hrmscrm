@@ -16,6 +16,12 @@ type OrganisationOption = {
     short_name: string;
 };
 
+type OfficeLocationOption = {
+    id: number;
+    name: string;
+    organisation_id: number;
+};
+
 type RoleOption = {
     name: string;
 };
@@ -69,6 +75,7 @@ type Props = {
     defaults?: EmployeeFormValues;
     departments?: DepartmentOption[];
     organisations?: OrganisationOption[];
+    officeLocations?: OfficeLocationOption[];
     roles?: RoleOption[];
     isEdit?: boolean;
 };
@@ -127,6 +134,7 @@ export default function EmployeeProfileFormFields({
     defaults = {},
     departments = [],
     organisations = [],
+    officeLocations = [],
     roles = [],
     isEdit = false,
 }: Props) {
@@ -303,16 +311,23 @@ export default function EmployeeProfileFormFields({
                     </select>
                 </Field>
                 <Field
-                    label="Office location ID"
+                    label="Office location"
                     name="office_location_id"
                     error={errors.office_location_id}
                 >
-                    <Input
+                    <select
                         id="office_location_id"
-                        type="number"
                         name="office_location_id"
                         defaultValue={defaults.office_location_id ?? ''}
-                    />
+                        className={fieldClass}
+                    >
+                        <option value="">Select</option>
+                        {officeLocations.map((location) => (
+                            <option key={location.id} value={location.id}>
+                                {location.name}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
                 <Field
                     label="Designation ID"

@@ -17,6 +17,12 @@ type OrganisationOption = {
     short_name: string;
 };
 
+type OfficeLocationOption = {
+    id: number;
+    name: string;
+    organisation_id: number;
+};
+
 type RoleOption = {
     name: string;
 };
@@ -48,11 +54,13 @@ export default function EmployeesEdit({
     employee,
     departments,
     organisations,
+    officeLocations,
     roles,
 }: {
     employee: Employee;
     departments: DepartmentOption[];
     organisations: OrganisationOption[];
+    officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
 }) {
     setLayoutProps({
@@ -90,6 +98,7 @@ export default function EmployeesEdit({
                                 errors={errors}
                                 departments={departments}
                                 organisations={organisations}
+                                officeLocations={officeLocations}
                                 roles={roles}
                                 defaults={employee}
                                 isEdit

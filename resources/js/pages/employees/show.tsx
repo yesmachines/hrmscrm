@@ -52,6 +52,7 @@ type Employee = {
     has_report: boolean;
     department: { id: number; name: string } | null;
     organisation: { id: number; name: string; short_name: string } | null;
+    office_location: { id: number; name: string; city: string } | null;
     profile: Profile | null;
 };
 
@@ -156,6 +157,10 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
                     <Detail
                         label="Organisation"
                         value={employee.organisation?.name}
+                    />
+                    <Detail
+                        label="Office location"
+                        value={employee.office_location?.name}
                     />
                     <Detail label="Joining date" value={employee.joining_date} />
                     <Detail

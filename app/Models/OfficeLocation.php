@@ -11,6 +11,17 @@ class OfficeLocation extends Model
 {
     public $timestamps = false;
 
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'organisation_id' => 'integer',
+            'country_id' => 'integer',
+        ];
+    }
+
     public function organisation(): BelongsTo
     {
         return $this->belongsTo(Organisation::class);

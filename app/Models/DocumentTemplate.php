@@ -11,6 +11,17 @@ class DocumentTemplate extends Model
 {
     public $timestamps = false;
 
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'status' => 'integer',
+            'document_type_id' => 'integer',
+        ];
+    }
+
     public function documentType(): BelongsTo
     {
         return $this->belongsTo(DocumentType::class);

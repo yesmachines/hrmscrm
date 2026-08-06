@@ -7,6 +7,7 @@ use App\Actions\DeleteEmployee;
 use App\Actions\UpdateEmployee;
 use App\Http\Requests\StoreEmployeeProfileRequest;
 use App\Http\Requests\UpdateEmployeeProfileRequest;
+use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Employee;
@@ -56,6 +57,7 @@ class EmployeeController extends Controller
         return Inertia::render('employees/create', [
             'departments' => $this->departments(),
             'organisations' => $this->organisations(),
+            'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
         ]);
     }
@@ -93,6 +95,7 @@ class EmployeeController extends Controller
             'employee' => $this->employeePayload($employee),
             'departments' => $this->departments(),
             'organisations' => $this->organisations(),
+            'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
         ]);
     }
@@ -164,6 +167,26 @@ class EmployeeController extends Controller
     }
 
     /**
+     * HRMS office locations for employee assignment.
+     *
+     * @return list<array{id: int, name: string, organisation_id: int}>
+     */
+    private function officeLocations(): array
+    {
+        return OfficeLocation::query()
+            ->orderBy('office_name')
+            ->get(['id', 'office_name', 'organisation_id', 'city'])
+            ->map(fn (OfficeLocation $location): array => [
+                'id' => $location->id,
+                'name' => $location->city
+                    ? "{$location->office_name} ({$location->city})"
+                    : $location->office_name,
+                'organisation_id' => $location->organisation_id,
+            ])
+            ->all();
+    }
+
+    /**
      * Sales CRM Spatie roles for employee ACL (excludes superadmin).
      *
      * @return list<array{name: string}>
@@ -188,6 +211,12 @@ class EmployeeController extends Controller
             ? Organisation::query()
                 ->where('id', $employee->organisation_id)
                 ->first(['id', 'org_name', 'short_name'])
+            : null;
+
+        $officeLocation = $employee->office_location_id
+            ? OfficeLocation::query()
+                ->where('id', $employee->office_location_id)
+                ->first(['id', 'office_name', 'city'])
             : null;
 
         return [
@@ -218,6 +247,13 @@ class EmployeeController extends Controller
                     'id' => $organisation->id,
                     'name' => $organisation->org_name,
                     'short_name' => $organisation->short_name,
+                ]
+                : null,
+            'office_location' => $officeLocation
+                ? [
+                    'id' => $officeLocation->id,
+                    'name' => $officeLocation->office_name,
+                    'city' => $officeLocation->city,
                 ]
                 : null,
             'profile' => $profile,
