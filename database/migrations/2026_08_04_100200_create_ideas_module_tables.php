@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('ideas', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('employee_id')->index();
             $table->text('title')->nullable();
             $table->longText('description')->nullable();
             $table->string('idea_files')->nullable();
@@ -20,9 +20,10 @@ return new class extends Migration
                 'approved',
                 'rejected',
                 'implemented',
-            ])->default('submitted');
+            ])->default('submitted')->index();
             $table->longText('review_comment')->nullable();
             $table->timestamps();
+            $table->index('created_at');
         });
 
         Schema::create('idea_tracks', function (Blueprint $table) {

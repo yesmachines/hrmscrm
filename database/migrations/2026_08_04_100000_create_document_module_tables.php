@@ -32,12 +32,12 @@ return new class extends Migration
 
         Schema::create('employee_documents', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('employee_id')->index();
             $table->foreignId('document_type_id')->constrained('document_types')->cascadeOnDelete();
             $table->string('document_number')->nullable();
             $table->string('document_title')->nullable();
             $table->date('issue_date')->nullable();
-            $table->date('expiry_date')->nullable();
+            $table->date('expiry_date')->nullable()->index();
             $table->text('remarks')->nullable();
             $table->string('current_version')->nullable();
             $table->unsignedBigInteger('created_by')->nullable();
@@ -50,7 +50,7 @@ return new class extends Migration
                 'cancelled',
                 'archived',
                 'expired',
-            ])->default('draft');
+            ])->default('draft')->index();
             $table->timestamps();
             $table->foreignId('document_template_id')->nullable()->constrained('document_templates')->nullOnDelete();
         });

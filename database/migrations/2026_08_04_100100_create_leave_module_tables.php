@@ -44,13 +44,13 @@ return new class extends Migration
 
         Schema::create('leave_requests', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('employee_id');
+            $table->unsignedBigInteger('employee_id')->index();
             $table->foreignId('leave_type_id')->constrained('leave_types')->cascadeOnDelete();
-            $table->dateTime('start_date');
-            $table->dateTime('end_date')->nullable();
+            $table->dateTime('start_date')->index();
+            $table->dateTime('end_date')->nullable()->index();
             $table->float('total_days')->nullable();
             $table->text('remarks')->nullable();
-            $table->enum('status', ['applied', 'approved', 'rejected', 'cancelled'])->default('applied');
+            $table->enum('status', ['applied', 'approved', 'rejected', 'cancelled'])->default('applied')->index();
             $table->timestamps();
             $table->unsignedBigInteger('created_by')->nullable();
         });
