@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
-import { Form, Head, Link, setLayoutProps } from '@inertiajs/react';
-import EmployeeProfileController from '@/actions/App/Http/Controllers/EmployeeProfileController';
+import { Head, Link, setLayoutProps } from '@inertiajs/react';
+import EmployeeController from '@/actions/App/Http/Controllers/EmployeeController';
+import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
 
-type Employee = {
-    id: number;
+type Profile = {
     gender: string | null;
     dob_personal: string | null;
     marital_status: string | null;
@@ -31,11 +30,29 @@ type Employee = {
     dob_passport: string | null;
     total_experience: number | null;
     highest_education: string | null;
-    employee: {
-        id: number;
-        name: string;
-        email: string;
-    } | null;
+};
+
+type Employee = {
+    id: number;
+    name: string | null;
+    email: string | null;
+    roles: string | null;
+    emp_num: string;
+    employee_code: string | null;
+    phone: string | null;
+    designation: string;
+    employment_status: string | null;
+    organisation_id: number | null;
+    office_location_id: number | null;
+    joining_date: string | null;
+    resignation_date: string | null;
+    division: string;
+    image_url: string | null;
+    status: number;
+    has_report: boolean;
+    department: { id: number; name: string } | null;
+    organisation: { id: number; name: string; short_name: string } | null;
+    profile: Profile | null;
 };
 
 function Detail({
@@ -43,14 +60,22 @@ function Detail({
     value,
 }: {
     label: string;
-    value: string | number | null | undefined;
+    value: string | number | null | undefined | boolean;
 }) {
+    let display: string | number = '—';
+
+    if (typeof value === 'boolean') {
+        display = value ? 'Yes' : 'No';
+    } else if (value !== null && value !== undefined && value !== '') {
+        display = value;
+    }
+
     return (
         <div className="space-y-1">
             <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {label}
             </dt>
-            <dd className="text-sm text-foreground">{value || '—'}</dd>
+            <dd className="text-sm text-foreground">{display}</dd>
         </div>
     );
 }
@@ -71,18 +96,16 @@ function Section({
 }
 
 export default function EmployeesShow({ employee }: { employee: Employee }) {
-    const name = employee.employee?.name ?? 'Employee';
+    const name = employee.name ?? 'Employee';
+    const profile = employee.profile;
 
     setLayoutProps({
         breadcrumbs: [
             { title: 'Dashboard', href: dashboard() },
-            {
-                title: 'Employees',
-                href: EmployeeProfileController.index.url(),
-            },
+            { title: 'Employees', href: EmployeeController.index.url() },
             {
                 title: name,
-                href: EmployeeProfileController.show.url(employee.id),
+                href: EmployeeController.show.url(employee.id),
             },
         ],
     });
@@ -93,129 +116,89 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
 
             <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        title={name}
-                        description={employee.employee?.email}
-                    />
+                    <Heading title={name} description={employee.email ?? undefined} />
                     <div className="flex gap-2">
                         <Button variant="outline" asChild>
                             <Link
-                                href={EmployeeProfileController.edit.url(
-                                    employee.id,
-                                )}
+                                href={EmployeeController.edit.url(employee.id)}
                                 prefetch
                             >
                                 Edit
                             </Link>
                         </Button>
-                        <Form
-                            {...EmployeeProfileController.destroy.form(
-                                employee.id,
-                            )}
-                            options={{
-                                preserveScroll: true,
-                            }}
-                            onSubmit={(event) => {
-                                if (
-                                    !confirm(
-                                        'Delete this employee profile? This cannot be undone.',
-                                    )
-                                ) {
-                                    event.preventDefault();
-                                }
-                            }}
-                        >
-                            {({ processing }) => (
-                                <Button
-                                    type="submit"
-                                    variant="destructive"
-                                    disabled={processing}
-                                >
-                                    {processing && <Spinner />}
-                                    Delete
-                                </Button>
-                            )}
-                        </Form>
+                        <DeleteConfirmDialog
+                            form={EmployeeController.destroy.form(employee.id)}
+                            title="Delete employee?"
+                            description={`This will permanently delete ${name}. This cannot be undone.`}
+                            confirmLabel="Delete employee"
+                        />
                     </div>
                 </div>
 
-                <Section title="Personal">
-                    <Detail label="Gender" value={employee.gender} />
+                <Section title="Employee">
+                    <Detail label="Employee number" value={employee.emp_num} />
                     <Detail
-                        label="Date of birth"
-                        value={employee.dob_personal}
+                        label="Employee code"
+                        value={employee.employee_code}
+                    />
+                    <Detail label="ACL / Role" value={employee.roles} />
+                    <Detail label="Designation" value={employee.designation} />
+                    <Detail label="Division" value={employee.division} />
+                    <Detail label="Phone" value={employee.phone} />
+                    <Detail
+                        label="Employment status"
+                        value={employee.employment_status}
                     />
                     <Detail
-                        label="Marital status"
-                        value={employee.marital_status}
+                        label="Department"
+                        value={employee.department?.name}
                     />
-                    <Detail label="Nationality" value={employee.nationality} />
-                    <Detail label="Religion" value={employee.religion} />
-                    <Detail label="Blood group" value={employee.blood_group} />
+                    <Detail
+                        label="Organisation"
+                        value={employee.organisation?.name}
+                    />
+                    <Detail label="Joining date" value={employee.joining_date} />
+                    <Detail
+                        label="Resignation date"
+                        value={employee.resignation_date}
+                    />
+                    <Detail
+                        label="Status"
+                        value={employee.status === 1 ? 'Active' : 'Inactive'}
+                    />
+                    <Detail label="Has report" value={employee.has_report} />
                 </Section>
 
-                <Section title="Contact (UAE)">
+                <Section title="Personal profile">
+                    <Detail label="Gender" value={profile?.gender} />
+                    <Detail label="Date of birth" value={profile?.dob_personal} />
+                    <Detail
+                        label="Marital status"
+                        value={profile?.marital_status}
+                    />
+                    <Detail label="Nationality" value={profile?.nationality} />
+                    <Detail label="Religion" value={profile?.religion} />
+                    <Detail label="Blood group" value={profile?.blood_group} />
                     <Detail
                         label="Personal email"
-                        value={employee.personal_email}
+                        value={profile?.personal_email}
                     />
                     <Detail
                         label="Personal mobile"
-                        value={employee.personal_mobile}
+                        value={profile?.personal_mobile}
                     />
-                    <Detail label="Address" value={employee.address_uae} />
+                    <Detail label="Address UAE" value={profile?.address_uae} />
                     <Detail
-                        label="Emergency contact"
-                        value={employee.emergency_contact_name}
-                    />
-                    <Detail
-                        label="Emergency relation"
-                        value={employee.emergency_relation}
-                    />
-                    <Detail
-                        label="Emergency mobile"
-                        value={employee.emergency_mobile}
-                    />
-                </Section>
-
-                <Section title="Home country">
-                    <Detail
-                        label="Country code"
-                        value={employee.home_country}
-                    />
-                    <Detail label="Home mobile" value={employee.home_mobile} />
-                    <Detail
-                        label="Home address"
-                        value={employee.address_home}
-                    />
-                    <Detail
-                        label="Home emergency name"
-                        value={employee.home_emergency_name}
-                    />
-                    <Detail
-                        label="Home emergency relation"
-                        value={employee.home_emergency_relation}
-                    />
-                    <Detail
-                        label="Home emergency mobile"
-                        value={employee.home_emergency_mobile}
-                    />
-                </Section>
-
-                <Section title="Visa & education">
-                    <Detail label="Visa type" value={employee.visa_type} />
-                    <Detail label="Visa from" value={employee.visa_from} />
-                    <Detail
-                        label="Passport DOB"
-                        value={employee.dob_passport}
-                    />
-                    <Detail
-                        label="Total experience"
-                        value={employee.total_experience}
+                        label="Visa type"
+                        value={profile?.visa_type}
                     />
                     <Detail
                         label="Highest education"
-                        value={employee.highest_education}
+                        value={profile?.highest_education}
+                    />
+                    <Detail
+                        label="Total experience"
+                        value={profile?.total_experience}
                     />
                 </Section>
             </div>

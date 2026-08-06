@@ -44,7 +44,27 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+use App\Models\SalesCrm\User as SalesCrmUser;
+use App\Support\SalesCrmRoles;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Create a Sales CRM user that is allowed to log in to HRMS (admin or hr).
+ */
+function createHrmsLoginUser(string $role = 'admin', array $attributes = []): SalesCrmUser
 {
-    // ..
+    $user = SalesCrmUser::factory()->create($attributes);
+
+    if (! DB::connection('salescrm')->table('roles')->where('name', $role)->exists()) {
+        DB::connection('salescrm')->table('roles')->insert([
+            'name' => $role,
+            'guard_name' => 'web',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    SalesCrmRoles::assignRoles($user->id, [$role]);
+
+    return $user;
 }

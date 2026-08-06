@@ -1,82 +1,98 @@
 import { Form, Head, Link, setLayoutProps } from '@inertiajs/react';
-import EmployeeProfileController from '@/actions/App/Http/Controllers/EmployeeProfileController';
+import EmployeeController from '@/actions/App/Http/Controllers/EmployeeController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
 import EmployeeProfileFormFields from './form-fields';
 
-type Employee = {
+type DepartmentOption = {
     id: number;
-    gender: string | null;
-    dob_personal: string | null;
-    marital_status: string | null;
-    nationality: string | null;
-    religion: string | null;
-    blood_group: string | null;
-    personal_email: string | null;
-    personal_mobile: string | null;
-    address_uae: string | null;
-    emergency_contact_name: string | null;
-    emergency_relation: string | null;
-    emergency_mobile: string | null;
-    home_country: number | null;
-    address_home: string | null;
-    home_mobile: string | null;
-    home_emergency_name: string | null;
-    home_emergency_relation: string | null;
-    home_emergency_mobile: string | null;
-    visa_type: string | null;
-    visa_from: string | null;
-    dob_passport: string | null;
-    total_experience: number | null;
-    highest_education: string | null;
-    employee: {
-        id: number;
-        name: string;
-        email: string;
-    } | null;
+    name: string;
 };
 
-export default function EmployeesEdit({ employee }: { employee: Employee }) {
+type OrganisationOption = {
+    id: number;
+    name: string;
+    short_name: string;
+};
+
+type RoleOption = {
+    name: string;
+};
+
+type Employee = {
+    id: number;
+    name: string | null;
+    email: string | null;
+    roles: string | null;
+    emp_num: string;
+    employee_code: string | null;
+    phone: string | null;
+    designation: string;
+    designation_id: number | null;
+    employment_status: string | null;
+    organisation_id: number | null;
+    office_location_id: number | null;
+    joining_date: string | null;
+    resignation_date: string | null;
+    division: string;
+    image_url: string | null;
+    status: number;
+    has_report: boolean;
+    department_id: number | null;
+    profile: Record<string, unknown> | null;
+};
+
+export default function EmployeesEdit({
+    employee,
+    departments,
+    organisations,
+    roles,
+}: {
+    employee: Employee;
+    departments: DepartmentOption[];
+    organisations: OrganisationOption[];
+    roles: RoleOption[];
+}) {
     setLayoutProps({
         breadcrumbs: [
             { title: 'Dashboard', href: dashboard() },
+            { title: 'Employees', href: EmployeeController.index.url() },
             {
-                title: 'Employees',
-                href: EmployeeProfileController.index.url(),
-            },
-            {
-                title: employee.employee?.name ?? 'Employee',
-                href: EmployeeProfileController.show.url(employee.id),
+                title: employee.name ?? 'Employee',
+                href: EmployeeController.show.url(employee.id),
             },
             {
                 title: 'Edit',
-                href: EmployeeProfileController.edit.url(employee.id),
+                href: EmployeeController.edit.url(employee.id),
             },
         ],
     });
 
     return (
         <>
-            <Head title={`Edit ${employee.employee?.name ?? 'employee'}`} />
+            <Head title={`Edit ${employee.name ?? 'employee'}`} />
 
             <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6 md:p-8">
                 <Heading
                     title="Edit employee"
-                    description="Update this employee profile"
+                    description="Update employee account and profile"
                 />
 
                 <Form
-                    {...EmployeeProfileController.update.form(employee.id)}
+                    {...EmployeeController.update.form(employee.id)}
                     className="space-y-6"
                 >
                     {({ processing, errors }) => (
                         <>
                             <EmployeeProfileFormFields
                                 errors={errors}
-                                lockedEmployee={employee.employee}
+                                departments={departments}
+                                organisations={organisations}
+                                roles={roles}
                                 defaults={employee}
+                                isEdit
                             />
 
                             <div className="flex items-center gap-3">
@@ -86,7 +102,7 @@ export default function EmployeesEdit({ employee }: { employee: Employee }) {
                                 </Button>
                                 <Button variant="outline" asChild>
                                     <Link
-                                        href={EmployeeProfileController.show.url(
+                                        href={EmployeeController.show.url(
                                             employee.id,
                                         )}
                                     >

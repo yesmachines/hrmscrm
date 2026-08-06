@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Models\EmployeeProfile;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -17,7 +16,7 @@ class EmployeeProfileFactory extends Factory
     public function definition(): array
     {
         return [
-            'employee_id' => User::factory(),
+            'employee_id' => fake()->unique()->numberBetween(100000, 999999),
             'gender' => fake()->randomElement(['M', 'F']),
             'dob_personal' => fake()->date(),
             'marital_status' => fake()->randomElement(['single', 'married', 'divorced', 'widowed']),

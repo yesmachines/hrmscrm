@@ -1,18 +1,35 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import EmployeeProfileController from '@/actions/App/Http/Controllers/EmployeeProfileController';
+import EmployeeController from '@/actions/App/Http/Controllers/EmployeeController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
 import EmployeeProfileFormFields from './form-fields';
 
-type UserOption = {
+type DepartmentOption = {
     id: number;
     name: string;
-    email: string;
 };
 
-export default function EmployeesCreate({ users }: { users: UserOption[] }) {
+type OrganisationOption = {
+    id: number;
+    name: string;
+    short_name: string;
+};
+
+type RoleOption = {
+    name: string;
+};
+
+export default function EmployeesCreate({
+    departments,
+    organisations,
+    roles,
+}: {
+    departments: DepartmentOption[];
+    organisations: OrganisationOption[];
+    roles: RoleOption[];
+}) {
     return (
         <>
             <Head title="Add employee" />
@@ -20,18 +37,17 @@ export default function EmployeesCreate({ users }: { users: UserOption[] }) {
             <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6 md:p-8">
                 <Heading
                     title="Add employee"
-                    description="Create a new employee profile"
+                    description="Create a new employee account and profile"
                 />
 
-                <Form
-                    {...EmployeeProfileController.store.form()}
-                    className="space-y-6"
-                >
+                <Form {...EmployeeController.store.form()} className="space-y-6">
                     {({ processing, errors }) => (
                         <>
                             <EmployeeProfileFormFields
                                 errors={errors}
-                                users={users}
+                                departments={departments}
+                                organisations={organisations}
+                                roles={roles}
                             />
 
                             <div className="flex items-center gap-3">
@@ -40,9 +56,7 @@ export default function EmployeesCreate({ users }: { users: UserOption[] }) {
                                     Save employee
                                 </Button>
                                 <Button variant="outline" asChild>
-                                    <Link
-                                        href={EmployeeProfileController.index.url()}
-                                    >
+                                    <Link href={EmployeeController.index.url()}>
                                         Cancel
                                     </Link>
                                 </Button>
@@ -58,13 +72,7 @@ export default function EmployeesCreate({ users }: { users: UserOption[] }) {
 EmployeesCreate.layout = {
     breadcrumbs: [
         { title: 'Dashboard', href: dashboard() },
-        {
-            title: 'Employees',
-            href: EmployeeProfileController.index.url(),
-        },
-        {
-            title: 'Add',
-            href: EmployeeProfileController.create.url(),
-        },
+        { title: 'Employees', href: EmployeeController.index.url() },
+        { title: 'Add', href: EmployeeController.create.url() },
     ],
 };

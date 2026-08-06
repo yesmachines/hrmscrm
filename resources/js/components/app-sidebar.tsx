@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
-import { LayoutGrid, Users } from 'lucide-react';
-import { index as employeesIndex } from '@/actions/App/Http/Controllers/EmployeeProfileController';
+import { Building2, LayoutGrid, Users } from 'lucide-react';
+import { index as employeesIndex } from '@/actions/App/Http/Controllers/EmployeeController';
+import { index as organisationsIndex } from '@/actions/App/Http/Controllers/OrganisationController';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import {
@@ -24,6 +25,11 @@ const mainNavItems: NavItem[] = [
         title: 'Employees',
         href: employeesIndex(),
         icon: Users,
+    },
+    {
+        title: 'Organisations',
+        href: organisationsIndex(),
+        icon: Building2,
     },
 ];
 

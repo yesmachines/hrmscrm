@@ -64,6 +64,26 @@ return [
             ]) : [],
         ],
 
+        'salescrm' => [
+            'driver' => 'mysql',
+            'url' => env('SALES_DB_URL'),
+            'host' => env('SALES_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('SALES_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('SALES_DB_DATABASE', 'salescrm'),
+            'username' => env('SALES_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('SALES_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('SALES_DB_SOCKET', env('DB_SOCKET', '')),
+            'charset' => env('SALES_DB_CHARSET', 'utf8mb4'),
+            'collation' => env('SALES_DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => env('SALES_DB_PREFIX', 'cm_'),
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

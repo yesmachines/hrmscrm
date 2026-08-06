@@ -1,48 +1,46 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
-import EmployeeController from '@/actions/App/Http/Controllers/EmployeeController';
+import OrganisationController from '@/actions/App/Http/Controllers/OrganisationController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
-type EmployeeRow = {
+type OrganisationRow = {
     id: number;
-    emp_num: string;
-    designation: string;
-    division: string;
-    phone: string | null;
-    employment_status: string | null;
+    org_name: string;
+    short_name: string;
+    logo: string | null;
     status: number;
-    user: { id: number; name: string; email: string } | null;
-    department: { id: number; name: string } | null;
-    profile: { id: number; nationality: string | null } | null;
 };
 
-type PaginatedEmployees = {
-    data: EmployeeRow[];
+type PaginatedOrganisations = {
+    data: OrganisationRow[];
     links: { url: string | null; label: string; active: boolean }[];
 };
 
-export default function EmployeesIndex({
-    employees,
+export default function OrganisationsIndex({
+    organisations,
 }: {
-    employees: PaginatedEmployees;
+    organisations: PaginatedOrganisations;
 }) {
     return (
         <>
-            <Head title="Employees" />
+            <Head title="Organisations" />
 
             <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
-                        title="Employees"
-                        description="Manage employees and their profiles"
+                        title="Organisations"
+                        description="Manage companies and organisation records"
                     />
                     <Button asChild>
-                        <Link href={EmployeeController.create.url()} prefetch>
+                        <Link
+                            href={OrganisationController.create.url()}
+                            prefetch
+                        >
                             <Plus className="size-4" />
-                            Add employee
+                            Add organisation
                         </Link>
                     </Button>
                 </div>
@@ -51,13 +49,10 @@ export default function EmployeesIndex({
                     <table className="w-full text-left text-sm">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
+                                <th className="px-4 py-3 font-medium">Logo</th>
                                 <th className="px-4 py-3 font-medium">Name</th>
-                                <th className="px-4 py-3 font-medium">Emp #</th>
-                                <th className="hidden px-4 py-3 font-medium md:table-cell">
-                                    Designation
-                                </th>
-                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
-                                    Division
+                                <th className="px-4 py-3 font-medium">
+                                    Short name
                                 </th>
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     Status
@@ -68,15 +63,15 @@ export default function EmployeesIndex({
                             </tr>
                         </thead>
                         <tbody>
-                            {employees.data.length === 0 ? (
+                            {organisations.data.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={6}
+                                        colSpan={5}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
-                                        No employees found.{' '}
+                                        No organisations found.{' '}
                                         <Link
-                                            href={EmployeeController.create.url()}
+                                            href={OrganisationController.create.url()}
                                             className="font-medium text-primary hover:underline"
                                         >
                                             Create one
@@ -84,25 +79,29 @@ export default function EmployeesIndex({
                                     </td>
                                 </tr>
                             ) : (
-                                employees.data.map((row) => (
+                                organisations.data.map((row) => (
                                     <tr
                                         key={row.id}
                                         className="border-b border-border last:border-0"
                                     >
                                         <td className="px-4 py-3">
-                                            <div className="font-medium">
-                                                {row.user?.name ?? '—'}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {row.user?.email}
-                                            </div>
+                                            {row.logo ? (
+                                                <img
+                                                    src={row.logo}
+                                                    alt=""
+                                                    className="h-10 w-10 rounded-md border border-border object-contain bg-muted/30"
+                                                />
+                                            ) : (
+                                                <span className="text-muted-foreground">
+                                                    —
+                                                </span>
+                                            )}
                                         </td>
-                                        <td className="px-4 py-3">{row.emp_num}</td>
-                                        <td className="hidden px-4 py-3 md:table-cell">
-                                            {row.designation}
+                                        <td className="px-4 py-3 font-medium">
+                                            {row.org_name}
                                         </td>
-                                        <td className="hidden px-4 py-3 lg:table-cell">
-                                            {row.division}
+                                        <td className="px-4 py-3">
+                                            {row.short_name}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <span
@@ -125,7 +124,7 @@ export default function EmployeesIndex({
                                                     asChild
                                                 >
                                                     <Link
-                                                        href={EmployeeController.show.url(
+                                                        href={OrganisationController.show.url(
                                                             row.id,
                                                         )}
                                                         prefetch
@@ -139,7 +138,7 @@ export default function EmployeesIndex({
                                                     asChild
                                                 >
                                                     <Link
-                                                        href={EmployeeController.edit.url(
+                                                        href={OrganisationController.edit.url(
                                                             row.id,
                                                         )}
                                                         prefetch
@@ -148,12 +147,12 @@ export default function EmployeesIndex({
                                                     </Link>
                                                 </Button>
                                                 <DeleteConfirmDialog
-                                                    form={EmployeeController.destroy.form(
+                                                    form={OrganisationController.destroy.form(
                                                         row.id,
                                                     )}
-                                                    title="Delete employee?"
-                                                    description={`This will permanently delete ${row.user?.name ?? 'this employee'}. This cannot be undone.`}
-                                                    confirmLabel="Delete employee"
+                                                    title="Delete organisation?"
+                                                    description={`This will permanently delete ${row.org_name}. This cannot be undone.`}
+                                                    confirmLabel="Delete organisation"
                                                     trigger={
                                                         <Button
                                                             variant="destructive"
@@ -173,9 +172,9 @@ export default function EmployeesIndex({
                     </table>
                 </div>
 
-                {employees.links.length > 3 && (
+                {organisations.links.length > 3 && (
                     <div className="flex flex-wrap gap-2">
-                        {employees.links.map((link, index) =>
+                        {organisations.links.map((link, index) =>
                             link.url ? (
                                 <Link
                                     key={index}
@@ -206,9 +205,9 @@ export default function EmployeesIndex({
     );
 }
 
-EmployeesIndex.layout = {
+OrganisationsIndex.layout = {
     breadcrumbs: [
         { title: 'Dashboard', href: dashboard() },
-        { title: 'Employees', href: EmployeeController.index.url() },
+        { title: 'Organisations', href: OrganisationController.index.url() },
     ],
 };

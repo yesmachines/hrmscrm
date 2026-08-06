@@ -30,6 +30,12 @@
         <env name="DB_PORT" value="3306" force="true"/>
         <env name="DB_USERNAME" value="root" force="true"/>
         <env name="DB_PASSWORD" value="" force="true"/>
+        <env name="SALES_DB_HOST" value="127.0.0.1" force="true"/>
+        <env name="SALES_DB_PORT" value="3306" force="true"/>
+        <env name="SALES_DB_DATABASE" value="salescrm_testing" force="true"/>
+        <env name="SALES_DB_USERNAME" value="root" force="true"/>
+        <env name="SALES_DB_PASSWORD" value="" force="true"/>
+        <env name="SALES_DB_PREFIX" value="cm_" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

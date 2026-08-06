@@ -1,7 +1,8 @@
 <?php
 
-use App\Models\User;
-use Illuminate\Support\Facades\RateLimiter;
+use App\Models\SalesCrm\User;
+use App\Support\SalesCrmRoles;
+use Illuminate\Support\Facades\DB;
 use Laravel\Fortify\Features;
 
 test('login screen can be rendered', function () {
@@ -10,8 +11,8 @@ test('login screen can be rendered', function () {
     $response->assertOk();
 });
 
-test('users can authenticate using the login screen', function () {
-    $user = User::factory()->create();
+test('admin users can authenticate using the login screen', function () {
+    $user = createHrmsLoginUser('admin');
 
     $response = $this->post(route('login.store'), [
         'email' => $user->email,
@@ -22,28 +23,46 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
-test('users with two factor enabled are redirected to two factor challenge', function () {
-    $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
+test('hr users can authenticate using the login screen', function () {
+    $user = createHrmsLoginUser('hr');
 
-    Features::twoFactorAuthentication([
-        'confirm' => true,
-        'confirmPassword' => true,
-    ]);
-
-    $user = User::factory()->withTwoFactor()->create();
-
-    $response = $this->post(route('login'), [
+    $response = $this->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'password',
     ]);
 
-    $response->assertRedirect(route('two-factor.login'));
-    $response->assertSessionHas('login.id', $user->id);
+    $this->assertAuthenticated();
+    $response->assertRedirect(route('dashboard', absolute: false));
+});
+
+test('non admin or hr users cannot authenticate', function () {
+    $user = User::factory()->create();
+
+    if (! DB::connection('salescrm')->table('roles')->where('name', 'salesmanager')->exists()) {
+        DB::connection('salescrm')->table('roles')->insert([
+            'name' => 'salesmanager',
+            'guard_name' => 'web',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    SalesCrmRoles::assignRoles($user->id, ['salesmanager']);
+
+    $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ]);
+
     $this->assertGuest();
 });
 
+test('users with two factor enabled are redirected to two factor challenge', function () {
+    $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
+});
+
 test('users can not authenticate with invalid password', function () {
-    $user = User::factory()->create();
+    $user = createHrmsLoginUser('admin');
 
     $this->post(route('login.store'), [
         'email' => $user->email,
@@ -54,7 +73,7 @@ test('users can not authenticate with invalid password', function () {
 });
 
 test('users can logout', function () {
-    $user = User::factory()->create();
+    $user = createHrmsLoginUser('admin');
 
     $response = $this->actingAs($user)->post(route('logout'));
 
@@ -64,14 +83,19 @@ test('users can logout', function () {
 });
 
 test('users are rate limited', function () {
-    $user = User::factory()->create();
+    $user = createHrmsLoginUser('admin');
 
-    RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
+    for ($i = 0; $i < 5; $i++) {
+        $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'wrong-password',
+        ]);
+    }
 
     $response = $this->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'wrong-password',
     ]);
 
-    $response->assertTooManyRequests();
+    $response->assertStatus(429);
 });

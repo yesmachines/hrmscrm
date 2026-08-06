@@ -5,8 +5,40 @@ import { Label } from '@/components/ui/label';
 
 type Errors = Record<string, string>;
 
+type DepartmentOption = {
+    id: number;
+    name: string;
+};
+
+type OrganisationOption = {
+    id: number;
+    name: string;
+    short_name: string;
+};
+
+type RoleOption = {
+    name: string;
+};
+
 type EmployeeFormValues = {
-    employee_id?: number | string;
+    name?: string | null;
+    email?: string | null;
+    roles?: string | null;
+    emp_num?: string | null;
+    employee_code?: string | null;
+    phone?: string | null;
+    designation?: string | null;
+    designation_id?: number | string | null;
+    employment_status?: string | null;
+    organisation_id?: number | string | null;
+    office_location_id?: number | string | null;
+    joining_date?: string | null;
+    resignation_date?: string | null;
+    division?: string | null;
+    image_url?: string | null;
+    status?: number | string | null;
+    has_report?: boolean | number | null;
+    department_id?: number | string | null;
     gender?: string | null;
     dob_personal?: string | null;
     marital_status?: string | null;
@@ -32,17 +64,13 @@ type EmployeeFormValues = {
     highest_education?: string | null;
 };
 
-type UserOption = {
-    id: number;
-    name: string;
-    email: string;
-};
-
 type Props = {
     errors: Errors;
     defaults?: EmployeeFormValues;
-    users?: UserOption[];
-    lockedEmployee?: { id: number; name: string; email: string } | null;
+    departments?: DepartmentOption[];
+    organisations?: OrganisationOption[];
+    roles?: RoleOption[];
+    isEdit?: boolean;
 };
 
 const fieldClass =
@@ -70,16 +98,25 @@ function Field({
 
 function Section({
     title,
+    description,
     children,
 }: {
     title: string;
+    description?: string;
     children: ReactNode;
 }) {
     return (
         <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                {title}
-            </h3>
+            <div>
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                    {title}
+                </h3>
+                {description && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {description}
+                    </p>
+                )}
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">{children}</div>
         </section>
     );
@@ -88,53 +125,286 @@ function Section({
 export default function EmployeeProfileFormFields({
     errors,
     defaults = {},
-    users = [],
-    lockedEmployee = null,
+    departments = [],
+    organisations = [],
+    roles = [],
+    isEdit = false,
 }: Props) {
+    const profile = (defaults as EmployeeFormValues & { profile?: EmployeeFormValues })
+        .profile;
+
+    const profileDefaults = {
+        ...defaults,
+        ...(profile ?? {}),
+    };
+
     return (
         <div className="space-y-5">
-            <Section title="Employee">
-                {lockedEmployee ? (
-                    <div className="sm:col-span-2">
-                        <p className="text-sm font-medium text-foreground">
-                            {lockedEmployee.name}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                            {lockedEmployee.email}
-                        </p>
-                    </div>
-                ) : (
-                    <Field
-                        label="User"
-                        name="employee_id"
-                        error={errors.employee_id}
+            <Section title="Account">
+                <Field label="Full name" name="name" error={errors.name}>
+                    <Input
+                        id="name"
+                        name="name"
+                        required
+                        defaultValue={defaults.name ?? ''}
+                    />
+                </Field>
+                <Field label="Work email" name="email" error={errors.email}>
+                    <Input
+                        id="email"
+                        type="email"
+                        name="email"
+                        required
+                        defaultValue={defaults.email ?? ''}
+                    />
+                </Field>
+                <Field
+                    label={isEdit ? 'Password (optional)' : 'Password'}
+                    name="password"
+                    error={errors.password}
+                >
+                    <Input
+                        id="password"
+                        type="password"
+                        name="password"
+                        required={!isEdit}
+                        autoComplete="new-password"
+                    />
+                </Field>
+                <Field
+                    label="ACL / Role"
+                    name="roles"
+                    error={errors.roles}
+                >
+                    <select
+                        id="roles"
+                        name="roles"
+                        required={!isEdit}
+                        defaultValue={defaults.roles ?? ''}
+                        className={fieldClass}
                     >
-                        <select
-                            id="employee_id"
-                            name="employee_id"
-                            required
-                            defaultValue={defaults.employee_id ?? ''}
-                            className={fieldClass}
-                        >
-                            <option value="" disabled>
-                                Select a user
+                        <option value="">Select</option>
+                        {roles.map((role) => (
+                            <option key={role.name} value={role.name}>
+                                {role.name}
                             </option>
-                            {users.map((user) => (
-                                <option key={user.id} value={user.id}>
-                                    {user.name} ({user.email})
-                                </option>
-                            ))}
-                        </select>
-                    </Field>
-                )}
+                        ))}
+                    </select>
+                </Field>
             </Section>
 
-            <Section title="Personal">
+            <Section title="Employee">
+                <Field label="Employee number" name="emp_num" error={errors.emp_num}>
+                    <Input
+                        id="emp_num"
+                        name="emp_num"
+                        required
+                        defaultValue={defaults.emp_num ?? ''}
+                    />
+                </Field>
+                <Field
+                    label="Employee code"
+                    name="employee_code"
+                    error={errors.employee_code}
+                >
+                    <Input
+                        id="employee_code"
+                        name="employee_code"
+                        defaultValue={defaults.employee_code ?? ''}
+                    />
+                </Field>
+                <Field
+                    label="Designation"
+                    name="designation"
+                    error={errors.designation}
+                >
+                    <Input
+                        id="designation"
+                        name="designation"
+                        required
+                        defaultValue={defaults.designation ?? ''}
+                    />
+                </Field>
+                <Field label="Division" name="division" error={errors.division}>
+                    <Input
+                        id="division"
+                        name="division"
+                        required
+                        defaultValue={defaults.division ?? ''}
+                    />
+                </Field>
+                <Field label="Phone" name="phone" error={errors.phone}>
+                    <Input
+                        id="phone"
+                        name="phone"
+                        defaultValue={defaults.phone ?? ''}
+                    />
+                </Field>
+                <Field
+                    label="Employment status"
+                    name="employment_status"
+                    error={errors.employment_status}
+                >
+                    <select
+                        id="employment_status"
+                        name="employment_status"
+                        defaultValue={defaults.employment_status ?? ''}
+                        className={fieldClass}
+                    >
+                        <option value="">Select</option>
+                        <option value="fulltime">Full time</option>
+                        <option value="parttime">Part time</option>
+                        <option value="contract">Contract</option>
+                        <option value="intern">Intern</option>
+                    </select>
+                </Field>
+                <Field
+                    label="Department"
+                    name="department_id"
+                    error={errors.department_id}
+                >
+                    <select
+                        id="department_id"
+                        name="department_id"
+                        defaultValue={defaults.department_id ?? ''}
+                        className={fieldClass}
+                    >
+                        <option value="">Select</option>
+                        {departments.map((department) => (
+                            <option key={department.id} value={department.id}>
+                                {department.name}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+                <Field
+                    label="Organisation"
+                    name="organisation_id"
+                    error={errors.organisation_id}
+                >
+                    <select
+                        id="organisation_id"
+                        name="organisation_id"
+                        defaultValue={defaults.organisation_id ?? ''}
+                        className={fieldClass}
+                    >
+                        <option value="">Select</option>
+                        {organisations.map((organisation) => (
+                            <option
+                                key={organisation.id}
+                                value={organisation.id}
+                            >
+                                {organisation.name}
+                                {organisation.short_name
+                                    ? ` (${organisation.short_name})`
+                                    : ''}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+                <Field
+                    label="Office location ID"
+                    name="office_location_id"
+                    error={errors.office_location_id}
+                >
+                    <Input
+                        id="office_location_id"
+                        type="number"
+                        name="office_location_id"
+                        defaultValue={defaults.office_location_id ?? ''}
+                    />
+                </Field>
+                <Field
+                    label="Designation ID"
+                    name="designation_id"
+                    error={errors.designation_id}
+                >
+                    <Input
+                        id="designation_id"
+                        type="number"
+                        name="designation_id"
+                        defaultValue={defaults.designation_id ?? ''}
+                    />
+                </Field>
+                <Field
+                    label="Joining date"
+                    name="joining_date"
+                    error={errors.joining_date}
+                >
+                    <Input
+                        id="joining_date"
+                        type="date"
+                        name="joining_date"
+                        defaultValue={defaults.joining_date ?? ''}
+                    />
+                </Field>
+                <Field
+                    label="Resignation date"
+                    name="resignation_date"
+                    error={errors.resignation_date}
+                >
+                    <Input
+                        id="resignation_date"
+                        type="date"
+                        name="resignation_date"
+                        defaultValue={defaults.resignation_date ?? ''}
+                    />
+                </Field>
+                <Field label="Status" name="status" error={errors.status}>
+                    <select
+                        id="status"
+                        name="status"
+                        defaultValue={
+                            defaults.status === null || defaults.status === undefined
+                                ? '1'
+                                : String(defaults.status)
+                        }
+                        className={fieldClass}
+                    >
+                        <option value="1">Active</option>
+                        <option value="0">Inactive</option>
+                    </select>
+                </Field>
+                <Field
+                    label="Has report"
+                    name="has_report"
+                    error={errors.has_report}
+                >
+                    <select
+                        id="has_report"
+                        name="has_report"
+                        defaultValue={
+                            defaults.has_report === false || defaults.has_report === 0
+                                ? '0'
+                                : '1'
+                        }
+                        className={fieldClass}
+                    >
+                        <option value="1">Yes</option>
+                        <option value="0">No</option>
+                    </select>
+                </Field>
+                <div className="sm:col-span-2">
+                    <Field
+                        label="Image URL"
+                        name="image_url"
+                        error={errors.image_url}
+                    >
+                        <Input
+                            id="image_url"
+                            name="image_url"
+                            defaultValue={defaults.image_url ?? ''}
+                        />
+                    </Field>
+                </div>
+            </Section>
+
+            <Section title="Personal profile">
                 <Field label="Gender" name="gender" error={errors.gender}>
                     <select
                         id="gender"
                         name="gender"
-                        defaultValue={defaults.gender ?? ''}
+                        defaultValue={profileDefaults.gender ?? ''}
                         className={fieldClass}
                     >
                         <option value="">Select</option>
@@ -151,7 +421,7 @@ export default function EmployeeProfileFormFields({
                         id="dob_personal"
                         type="date"
                         name="dob_personal"
-                        defaultValue={defaults.dob_personal ?? ''}
+                        defaultValue={profileDefaults.dob_personal ?? ''}
                     />
                 </Field>
                 <Field
@@ -162,7 +432,7 @@ export default function EmployeeProfileFormFields({
                     <select
                         id="marital_status"
                         name="marital_status"
-                        defaultValue={defaults.marital_status ?? ''}
+                        defaultValue={profileDefaults.marital_status ?? ''}
                         className={fieldClass}
                     >
                         <option value="">Select</option>
@@ -180,14 +450,14 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="nationality"
                         name="nationality"
-                        defaultValue={defaults.nationality ?? ''}
+                        defaultValue={profileDefaults.nationality ?? ''}
                     />
                 </Field>
                 <Field label="Religion" name="religion" error={errors.religion}>
                     <Input
                         id="religion"
                         name="religion"
-                        defaultValue={defaults.religion ?? ''}
+                        defaultValue={profileDefaults.religion ?? ''}
                     />
                 </Field>
                 <Field
@@ -198,7 +468,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="blood_group"
                         name="blood_group"
-                        defaultValue={defaults.blood_group ?? ''}
+                        defaultValue={profileDefaults.blood_group ?? ''}
                     />
                 </Field>
             </Section>
@@ -213,7 +483,7 @@ export default function EmployeeProfileFormFields({
                         id="personal_email"
                         type="email"
                         name="personal_email"
-                        defaultValue={defaults.personal_email ?? ''}
+                        defaultValue={profileDefaults.personal_email ?? ''}
                     />
                 </Field>
                 <Field
@@ -224,7 +494,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="personal_mobile"
                         name="personal_mobile"
-                        defaultValue={defaults.personal_mobile ?? ''}
+                        defaultValue={profileDefaults.personal_mobile ?? ''}
                     />
                 </Field>
                 <div className="sm:col-span-2">
@@ -236,7 +506,7 @@ export default function EmployeeProfileFormFields({
                         <Input
                             id="address_uae"
                             name="address_uae"
-                            defaultValue={defaults.address_uae ?? ''}
+                            defaultValue={profileDefaults.address_uae ?? ''}
                         />
                     </Field>
                 </div>
@@ -248,7 +518,9 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="emergency_contact_name"
                         name="emergency_contact_name"
-                        defaultValue={defaults.emergency_contact_name ?? ''}
+                        defaultValue={
+                            profileDefaults.emergency_contact_name ?? ''
+                        }
                     />
                 </Field>
                 <Field
@@ -259,7 +531,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="emergency_relation"
                         name="emergency_relation"
-                        defaultValue={defaults.emergency_relation ?? ''}
+                        defaultValue={profileDefaults.emergency_relation ?? ''}
                     />
                 </Field>
                 <Field
@@ -270,7 +542,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="emergency_mobile"
                         name="emergency_mobile"
-                        defaultValue={defaults.emergency_mobile ?? ''}
+                        defaultValue={profileDefaults.emergency_mobile ?? ''}
                     />
                 </Field>
             </Section>
@@ -285,7 +557,7 @@ export default function EmployeeProfileFormFields({
                         id="home_country"
                         type="number"
                         name="home_country"
-                        defaultValue={defaults.home_country ?? ''}
+                        defaultValue={profileDefaults.home_country ?? ''}
                     />
                 </Field>
                 <Field
@@ -296,7 +568,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="home_mobile"
                         name="home_mobile"
-                        defaultValue={defaults.home_mobile ?? ''}
+                        defaultValue={profileDefaults.home_mobile ?? ''}
                     />
                 </Field>
                 <div className="sm:col-span-2">
@@ -308,7 +580,7 @@ export default function EmployeeProfileFormFields({
                         <Input
                             id="address_home"
                             name="address_home"
-                            defaultValue={defaults.address_home ?? ''}
+                            defaultValue={profileDefaults.address_home ?? ''}
                         />
                     </Field>
                 </div>
@@ -320,7 +592,9 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="home_emergency_name"
                         name="home_emergency_name"
-                        defaultValue={defaults.home_emergency_name ?? ''}
+                        defaultValue={
+                            profileDefaults.home_emergency_name ?? ''
+                        }
                     />
                 </Field>
                 <Field
@@ -331,7 +605,9 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="home_emergency_relation"
                         name="home_emergency_relation"
-                        defaultValue={defaults.home_emergency_relation ?? ''}
+                        defaultValue={
+                            profileDefaults.home_emergency_relation ?? ''
+                        }
                     />
                 </Field>
                 <Field
@@ -342,7 +618,9 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="home_emergency_mobile"
                         name="home_emergency_mobile"
-                        defaultValue={defaults.home_emergency_mobile ?? ''}
+                        defaultValue={
+                            profileDefaults.home_emergency_mobile ?? ''
+                        }
                     />
                 </Field>
             </Section>
@@ -356,7 +634,7 @@ export default function EmployeeProfileFormFields({
                     <select
                         id="visa_type"
                         name="visa_type"
-                        defaultValue={defaults.visa_type ?? ''}
+                        defaultValue={profileDefaults.visa_type ?? ''}
                         className={fieldClass}
                     >
                         <option value="">Select</option>
@@ -372,7 +650,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="visa_from"
                         name="visa_from"
-                        defaultValue={defaults.visa_from ?? ''}
+                        defaultValue={profileDefaults.visa_from ?? ''}
                     />
                 </Field>
                 <Field
@@ -384,7 +662,7 @@ export default function EmployeeProfileFormFields({
                         id="dob_passport"
                         type="date"
                         name="dob_passport"
-                        defaultValue={defaults.dob_passport ?? ''}
+                        defaultValue={profileDefaults.dob_passport ?? ''}
                     />
                 </Field>
                 <Field
@@ -398,7 +676,7 @@ export default function EmployeeProfileFormFields({
                         step="0.1"
                         min="0"
                         name="total_experience"
-                        defaultValue={defaults.total_experience ?? ''}
+                        defaultValue={profileDefaults.total_experience ?? ''}
                     />
                 </Field>
                 <Field
@@ -409,7 +687,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="highest_education"
                         name="highest_education"
-                        defaultValue={defaults.highest_education ?? ''}
+                        defaultValue={profileDefaults.highest_education ?? ''}
                     />
                 </Field>
             </Section>

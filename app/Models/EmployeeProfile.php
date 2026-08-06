@@ -6,10 +6,11 @@ use Database\Factories\EmployeeProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
+ * HRMS employee profile linked to Sales CRM `cm_employees.id` via employee_id.
+ *
  * @property int $id
  * @property int $employee_id
  * @property string|null $gender
@@ -35,7 +36,6 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $dob_passport
  * @property float|null $total_experience
  * @property string|null $highest_education
- * @property-read User|null $employee
  */
 #[Fillable([
     'employee_id',
@@ -69,11 +69,6 @@ class EmployeeProfile extends Model
     use HasFactory;
 
     public $timestamps = false;
-
-    public function employee(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'employee_id');
-    }
 
     /**
      * @return array<string, string>
