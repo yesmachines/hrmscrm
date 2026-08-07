@@ -4,6 +4,8 @@ use App\Http\Controllers\DocumentCategoryController;
 use App\Http\Controllers\DocumentTemplateController;
 use App\Http\Controllers\DocumentTypeController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\LeavePolicyController;
+use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\OfficeLocationController;
 use App\Http\Controllers\OrganisationController;
 use App\Http\Middleware\EnsureHrmsLoginRole;
@@ -24,6 +26,8 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('document-categories', DocumentCategoryController::class);
     Route::resource('document-types', DocumentTypeController::class);
     Route::resource('document-templates', DocumentTemplateController::class);
+    Route::resource('leave-types', LeaveTypeController::class);
+    Route::resource('leave-policies', LeavePolicyController::class);
 });
 
 require __DIR__.'/settings.php';

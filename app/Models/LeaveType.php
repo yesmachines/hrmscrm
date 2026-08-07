@@ -33,6 +33,7 @@ class LeaveType extends Model
             'allow_once' => 'boolean',
             'allow_balance' => 'boolean',
             'requires_handover' => 'boolean',
+            'status' => 'integer',
         ];
     }
 
@@ -44,5 +45,10 @@ class LeaveType extends Model
     public function requests(): HasMany
     {
         return $this->hasMany(LeaveRequest::class);
+    }
+
+    public function balances(): HasMany
+    {
+        return $this->hasMany(LeaveBalance::class);
     }
 }

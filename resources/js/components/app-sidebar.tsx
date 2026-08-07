@@ -1,6 +1,8 @@
 import { Link } from '@inertiajs/react';
 import {
     Building2,
+    CalendarDays,
+    ClipboardList,
     FileStack,
     Files,
     FolderTree,
@@ -12,6 +14,8 @@ import { index as documentCategoriesIndex } from '@/actions/App/Http/Controllers
 import { index as documentTemplatesIndex } from '@/actions/App/Http/Controllers/DocumentTemplateController';
 import { index as documentTypesIndex } from '@/actions/App/Http/Controllers/DocumentTypeController';
 import { index as employeesIndex } from '@/actions/App/Http/Controllers/EmployeeController';
+import { index as leavePoliciesIndex } from '@/actions/App/Http/Controllers/LeavePolicyController';
+import { index as leaveTypesIndex } from '@/actions/App/Http/Controllers/LeaveTypeController';
 import { index as officeLocationsIndex } from '@/actions/App/Http/Controllers/OfficeLocationController';
 import { index as organisationsIndex } from '@/actions/App/Http/Controllers/OrganisationController';
 import AppLogo from '@/components/app-logo';
@@ -39,29 +43,60 @@ const mainNavItems: NavItem[] = [
         icon: Users,
     },
     {
-        title: 'Organisations',
-        href: organisationsIndex(),
+        title: 'Organisation',
         icon: Building2,
+        href: organisationsIndex(),
+        items: [
+            {
+                title: 'Organisations',
+                href: organisationsIndex(),
+                icon: Building2,
+            },
+            {
+                title: 'Office locations',
+                href: officeLocationsIndex(),
+                icon: MapPin,
+            },
+        ],
     },
     {
-        title: 'Office locations',
-        href: officeLocationsIndex(),
-        icon: MapPin,
-    },
-    {
-        title: 'Document categories',
-        href: documentCategoriesIndex(),
-        icon: FolderTree,
-    },
-    {
-        title: 'Document types',
-        href: documentTypesIndex(),
+        title: 'Documents',
         icon: Files,
+        href: documentCategoriesIndex(),
+        items: [
+            {
+                title: 'Categories',
+                href: documentCategoriesIndex(),
+                icon: FolderTree,
+            },
+            {
+                title: 'Types',
+                href: documentTypesIndex(),
+                icon: Files,
+            },
+            {
+                title: 'Templates',
+                href: documentTemplatesIndex(),
+                icon: FileStack,
+            },
+        ],
     },
     {
-        title: 'Document templates',
-        href: documentTemplatesIndex(),
-        icon: FileStack,
+        title: 'Leave',
+        icon: CalendarDays,
+        href: leaveTypesIndex(),
+        items: [
+            {
+                title: 'Leave types',
+                href: leaveTypesIndex(),
+                icon: CalendarDays,
+            },
+            {
+                title: 'Leave policies',
+                href: leavePoliciesIndex(),
+                icon: ClipboardList,
+            },
+        ],
     },
 ];
 

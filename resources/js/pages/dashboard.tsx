@@ -46,13 +46,6 @@ export default function Dashboard() {
                         Good {greeting()}
                         {firstName ? `, ${firstName}` : ''}
                     </h1>
-                    <p className="max-w-xl text-base text-muted-foreground">
-                        Empowering people. Simplifying HR. Driving{' '}
-                        <span className="font-medium text-primary">
-                            performance
-                        </span>
-                        .
-                    </p>
                 </div>
 
                 <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
