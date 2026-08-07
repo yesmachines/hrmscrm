@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\SalesCrm\PersonalAccessToken;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +26,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureSanctum();
     }
 
     /**
@@ -46,5 +49,10 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null,
         );
+    }
+
+    protected function configureSanctum(): void
+    {
+        Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
     }
 }
