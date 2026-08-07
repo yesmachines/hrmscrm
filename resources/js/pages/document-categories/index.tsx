@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import DocumentCategoryController from '@/actions/App/Http/Controllers/DocumentCategoryController';
-import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
+import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -110,53 +110,20 @@ export default function DocumentCategoriesIndex({
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={DocumentCategoryController.show.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        View
-                                                    </Link>
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={DocumentCategoryController.edit.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        Edit
-                                                    </Link>
-                                                </Button>
-                                                <DeleteConfirmDialog
-                                                    form={DocumentCategoryController.destroy.form(
-                                                        row.id,
-                                                    )}
-                                                    title="Delete document category?"
-                                                    description={`This will permanently delete ${row.category_name}. This cannot be undone.`}
-                                                    confirmLabel="Delete category"
-                                                    trigger={
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            type="button"
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+                                            <RowActionsMenu
+                                                viewHref={DocumentCategoryController.show.url(
+                                                    row.id,
+                                                )}
+                                                editHref={DocumentCategoryController.edit.url(
+                                                    row.id,
+                                                )}
+                                                destroyForm={DocumentCategoryController.destroy.form(
+                                                    row.id,
+                                                )}
+                                                deleteTitle="Delete document category?"
+                                                deleteDescription={`This will permanently delete ${row.category_name}. This cannot be undone.`}
+                                                deleteConfirmLabel="Delete category"
+                                            />
                                         </td>
                                     </tr>
                                 ))

@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import LeavePolicyController from '@/actions/App/Http/Controllers/LeavePolicyController';
-import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
+import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -106,53 +106,20 @@ export default function LeavePoliciesIndex({
                                                 : 'No'}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={LeavePolicyController.show.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        View
-                                                    </Link>
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={LeavePolicyController.edit.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        Edit
-                                                    </Link>
-                                                </Button>
-                                                <DeleteConfirmDialog
-                                                    form={LeavePolicyController.destroy.form(
-                                                        row.id,
-                                                    )}
-                                                    title="Delete leave policy?"
-                                                    description="This will permanently delete this leave policy. This cannot be undone."
-                                                    confirmLabel="Delete leave policy"
-                                                    trigger={
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            type="button"
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+                                            <RowActionsMenu
+                                                viewHref={LeavePolicyController.show.url(
+                                                    row.id,
+                                                )}
+                                                editHref={LeavePolicyController.edit.url(
+                                                    row.id,
+                                                )}
+                                                destroyForm={LeavePolicyController.destroy.form(
+                                                    row.id,
+                                                )}
+                                                deleteTitle="Delete leave policy?"
+                                                deleteDescription="This will permanently delete this leave policy. This cannot be undone."
+                                                deleteConfirmLabel="Delete leave policy"
+                                            />
                                         </td>
                                     </tr>
                                 ))

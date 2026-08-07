@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import OrganisationController from '@/actions/App/Http/Controllers/OrganisationController';
-import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
+import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -117,53 +117,20 @@ export default function OrganisationsIndex({
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={OrganisationController.show.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        View
-                                                    </Link>
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={OrganisationController.edit.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        Edit
-                                                    </Link>
-                                                </Button>
-                                                <DeleteConfirmDialog
-                                                    form={OrganisationController.destroy.form(
-                                                        row.id,
-                                                    )}
-                                                    title="Delete organisation?"
-                                                    description={`This will permanently delete ${row.org_name}. This cannot be undone.`}
-                                                    confirmLabel="Delete organisation"
-                                                    trigger={
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            type="button"
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+                                            <RowActionsMenu
+                                                viewHref={OrganisationController.show.url(
+                                                    row.id,
+                                                )}
+                                                editHref={OrganisationController.edit.url(
+                                                    row.id,
+                                                )}
+                                                destroyForm={OrganisationController.destroy.form(
+                                                    row.id,
+                                                )}
+                                                deleteTitle="Delete organisation?"
+                                                deleteDescription={`This will permanently delete ${row.org_name}. This cannot be undone.`}
+                                                deleteConfirmLabel="Delete organisation"
+                                            />
                                         </td>
                                     </tr>
                                 ))

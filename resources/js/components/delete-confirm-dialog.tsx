@@ -23,6 +23,8 @@ type Props = {
     confirmLabel?: string;
     triggerLabel?: string;
     trigger?: ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 };
 
 export default function DeleteConfirmDialog({
@@ -32,16 +34,20 @@ export default function DeleteConfirmDialog({
     confirmLabel = 'Delete',
     triggerLabel = 'Delete',
     trigger,
+    open,
+    onOpenChange,
 }: Props) {
     return (
-        <Dialog>
-            <DialogTrigger asChild>
-                {trigger ?? (
-                    <Button variant="destructive" type="button">
-                        {triggerLabel}
-                    </Button>
-                )}
-            </DialogTrigger>
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            {trigger !== null && (
+                <DialogTrigger asChild>
+                    {trigger ?? (
+                        <Button variant="destructive" type="button">
+                            {triggerLabel}
+                        </Button>
+                    )}
+                </DialogTrigger>
+            )}
 
             <DialogContent>
                 <DialogTitle>{title}</DialogTitle>
@@ -49,7 +55,14 @@ export default function DeleteConfirmDialog({
 
                 <Form
                     action={form.action}
-                    method={form.method as 'get' | 'post' | 'put' | 'patch' | 'delete'}
+                    method={
+                        form.method as
+                            | 'get'
+                            | 'post'
+                            | 'put'
+                            | 'patch'
+                            | 'delete'
+                    }
                     className="space-y-6"
                 >
                     {({ processing }) => (

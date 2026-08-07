@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import OfficeLocationController from '@/actions/App/Http/Controllers/OfficeLocationController';
-import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
+import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -100,53 +100,20 @@ export default function OfficeLocationsIndex({
                                             {row.city}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={OfficeLocationController.show.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        View
-                                                    </Link>
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={OfficeLocationController.edit.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        Edit
-                                                    </Link>
-                                                </Button>
-                                                <DeleteConfirmDialog
-                                                    form={OfficeLocationController.destroy.form(
-                                                        row.id,
-                                                    )}
-                                                    title="Delete office location?"
-                                                    description={`This will permanently delete ${row.office_name}. This cannot be undone.`}
-                                                    confirmLabel="Delete office location"
-                                                    trigger={
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            type="button"
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+                                            <RowActionsMenu
+                                                viewHref={OfficeLocationController.show.url(
+                                                    row.id,
+                                                )}
+                                                editHref={OfficeLocationController.edit.url(
+                                                    row.id,
+                                                )}
+                                                destroyForm={OfficeLocationController.destroy.form(
+                                                    row.id,
+                                                )}
+                                                deleteTitle="Delete office location?"
+                                                deleteDescription={`This will permanently delete ${row.office_name}. This cannot be undone.`}
+                                                deleteConfirmLabel="Delete office location"
+                                            />
                                         </td>
                                     </tr>
                                 ))

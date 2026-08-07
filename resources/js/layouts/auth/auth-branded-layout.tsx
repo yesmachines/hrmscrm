@@ -103,8 +103,12 @@ export default function AuthBrandedLayout({
 
                         <div className="rounded-2xl bg-white p-7 shadow-[0_25px_60px_-15px_rgba(10,42,92,0.45)] sm:p-9">
                             <div className="mb-6 flex flex-col items-center text-center">
-                                <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-[#00F5D4]/15 text-[#00B8A3]">
-                                    <Users className="size-6" strokeWidth={1.75} />
+                                <div className="mb-3 size-14 overflow-hidden rounded-2xl shadow-sm">
+                                    <img
+                                        src="/logo.png"
+                                        alt={name}
+                                        className="size-full object-cover"
+                                    />
                                 </div>
                                 <p className="text-xl font-bold tracking-tight text-[#001A33]">
                                     {name}

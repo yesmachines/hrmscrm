@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import EmployeeController from '@/actions/App/Http/Controllers/EmployeeController';
-import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
+import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -118,53 +118,20 @@ export default function EmployeesIndex({
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={EmployeeController.show.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        View
-                                                    </Link>
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={EmployeeController.edit.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        Edit
-                                                    </Link>
-                                                </Button>
-                                                <DeleteConfirmDialog
-                                                    form={EmployeeController.destroy.form(
-                                                        row.id,
-                                                    )}
-                                                    title="Delete employee?"
-                                                    description={`This will permanently delete ${row.user?.name ?? 'this employee'}. This cannot be undone.`}
-                                                    confirmLabel="Delete employee"
-                                                    trigger={
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            type="button"
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+                                            <RowActionsMenu
+                                                viewHref={EmployeeController.show.url(
+                                                    row.id,
+                                                )}
+                                                editHref={EmployeeController.edit.url(
+                                                    row.id,
+                                                )}
+                                                destroyForm={EmployeeController.destroy.form(
+                                                    row.id,
+                                                )}
+                                                deleteTitle="Delete employee?"
+                                                deleteDescription={`This will permanently delete ${row.user?.name ?? 'this employee'}. This cannot be undone.`}
+                                                deleteConfirmLabel="Delete employee"
+                                            />
                                         </td>
                                     </tr>
                                 ))

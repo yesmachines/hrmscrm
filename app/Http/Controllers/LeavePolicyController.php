@@ -124,12 +124,14 @@ class LeavePolicyController extends Controller
     private function organisations(): array
     {
         return Organisation::query()
-            ->where('status', 1)
+            ->orderByDesc('status')
             ->orderBy('org_name')
-            ->get(['id', 'org_name'])
+            ->get(['id', 'org_name', 'status'])
             ->map(fn (Organisation $organisation): array => [
                 'id' => $organisation->id,
-                'name' => $organisation->org_name,
+                'name' => $organisation->status === 1
+                    ? $organisation->org_name
+                    : $organisation->org_name.' (Inactive)',
             ])
             ->all();
     }

@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import DocumentTypeController from '@/actions/App/Http/Controllers/DocumentTypeController';
-import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
+import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -114,53 +114,20 @@ export default function DocumentTypesIndex({
                                             )}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={DocumentTypeController.show.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        View
-                                                    </Link>
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={DocumentTypeController.edit.url(
-                                                            row.id,
-                                                        )}
-                                                        prefetch
-                                                    >
-                                                        Edit
-                                                    </Link>
-                                                </Button>
-                                                <DeleteConfirmDialog
-                                                    form={DocumentTypeController.destroy.form(
-                                                        row.id,
-                                                    )}
-                                                    title="Delete document type?"
-                                                    description={`This will permanently delete ${row.document_name}. This cannot be undone.`}
-                                                    confirmLabel="Delete document type"
-                                                    trigger={
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            type="button"
-                                                        >
-                                                            Delete
-                                                        </Button>
-                                                    }
-                                                />
-                                            </div>
+                                            <RowActionsMenu
+                                                viewHref={DocumentTypeController.show.url(
+                                                    row.id,
+                                                )}
+                                                editHref={DocumentTypeController.edit.url(
+                                                    row.id,
+                                                )}
+                                                destroyForm={DocumentTypeController.destroy.form(
+                                                    row.id,
+                                                )}
+                                                deleteTitle="Delete document type?"
+                                                deleteDescription={`This will permanently delete ${row.document_name}. This cannot be undone.`}
+                                                deleteConfirmLabel="Delete document type"
+                                            />
                                         </td>
                                     </tr>
                                 ))
