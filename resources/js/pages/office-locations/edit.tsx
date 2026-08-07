@@ -1,5 +1,5 @@
 import { Form, Head, Link, setLayoutProps } from '@inertiajs/react';
-import OfficeLocationController from '@/actions/App/Http/Controllers/OfficeLocationController';
+import OfficeLocationController from '@/actions/App/Http/Controllers/Organisation/OfficeLocationController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';

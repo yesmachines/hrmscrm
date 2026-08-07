@@ -1,13 +1,13 @@
 <?php
 
-use App\Http\Controllers\DocumentCategoryController;
-use App\Http\Controllers\DocumentTemplateController;
-use App\Http\Controllers\DocumentTypeController;
-use App\Http\Controllers\EmployeeController;
-use App\Http\Controllers\LeavePolicyController;
-use App\Http\Controllers\LeaveTypeController;
-use App\Http\Controllers\OfficeLocationController;
-use App\Http\Controllers\OrganisationController;
+use App\Http\Controllers\Documents\DocumentCategoryController;
+use App\Http\Controllers\Documents\DocumentTemplateController;
+use App\Http\Controllers\Documents\DocumentTypeController;
+use App\Http\Controllers\Employees\EmployeeController;
+use App\Http\Controllers\Leave\LeavePolicyController;
+use App\Http\Controllers\Leave\LeaveTypeController;
+use App\Http\Controllers\Organisation\OfficeLocationController;
+use App\Http\Controllers\Organisation\OrganisationController;
 use App\Http\Middleware\EnsureHrmsLoginRole;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;

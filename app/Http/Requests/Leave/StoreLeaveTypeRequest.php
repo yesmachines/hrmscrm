@@ -1,13 +1,12 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Leave;
 
-use App\Models\LeaveType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class UpdateLeaveTypeRequest extends FormRequest
+class StoreLeaveTypeRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -45,17 +44,9 @@ class UpdateLeaveTypeRequest extends FormRequest
      */
     public function rules(): array
     {
-        /** @var LeaveType $leaveType */
-        $leaveType = $this->route('leave_type');
-
         return [
             'leave_name' => ['required', 'string', 'max:255'],
-            'code' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('leave_types', 'code')->ignore($leaveType->id),
-            ],
+            'code' => ['required', 'string', 'max:255', 'unique:leave_types,code'],
             'is_paid' => ['nullable', 'boolean'],
             'requires_attachment' => ['nullable', 'boolean'],
             'requires_approval' => ['nullable', 'boolean'],

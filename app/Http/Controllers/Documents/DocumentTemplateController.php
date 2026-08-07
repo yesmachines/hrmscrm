@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Documents;
 
-use App\Http\Requests\StoreDocumentTemplateRequest;
-use App\Http\Requests\UpdateDocumentTemplateRequest;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Documents\StoreDocumentTemplateRequest;
+use App\Http\Requests\Documents\UpdateDocumentTemplateRequest;
 use App\Models\DocumentTemplate;
 use App\Models\DocumentType;
 use Illuminate\Http\RedirectResponse;

@@ -1,6 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
-import OrganisationController from '@/actions/App/Http/Controllers/OrganisationController';
+import OrganisationController from '@/actions/App/Http/Controllers/Organisation/OrganisationController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';

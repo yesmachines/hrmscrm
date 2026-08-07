@@ -1,6 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
-import LeaveTypeController from '@/actions/App/Http/Controllers/LeaveTypeController';
+import LeaveTypeController from '@/actions/App/Http/Controllers/Leave/LeaveTypeController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';

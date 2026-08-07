@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Organisation;
 
-use App\Http\Requests\StoreOfficeLocationRequest;
-use App\Http\Requests\UpdateOfficeLocationRequest;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Organisation\StoreOfficeLocationRequest;
+use App\Http\Requests\Organisation\UpdateOfficeLocationRequest;
 use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Country;

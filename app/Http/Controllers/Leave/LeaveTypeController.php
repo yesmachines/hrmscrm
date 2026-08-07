@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Leave;
 
-use App\Http\Requests\StoreLeaveTypeRequest;
-use App\Http\Requests\UpdateLeaveTypeRequest;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Leave\StoreLeaveTypeRequest;
+use App\Http\Requests\Leave\UpdateLeaveTypeRequest;
 use App\Models\LeaveType;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Organisation;
 
 use App\Models\Organisation;
 use App\Models\SalesCrm\Country;
@@ -8,7 +8,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class StoreOfficeLocationRequest extends FormRequest
+class UpdateOfficeLocationRequest extends FormRequest
 {
     public function authorize(): bool
     {

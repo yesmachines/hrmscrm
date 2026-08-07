@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Documents;
 
-use App\Http\Requests\StoreDocumentCategoryRequest;
-use App\Http\Requests\UpdateDocumentCategoryRequest;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Documents\StoreDocumentCategoryRequest;
+use App\Http\Requests\Documents\UpdateDocumentCategoryRequest;
 use App\Models\DocumentCategory;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Head, Link, setLayoutProps } from '@inertiajs/react';
-import OrganisationController from '@/actions/App/Http/Controllers/OrganisationController';
+import OrganisationController from '@/actions/App/Http/Controllers/Organisation/OrganisationController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';

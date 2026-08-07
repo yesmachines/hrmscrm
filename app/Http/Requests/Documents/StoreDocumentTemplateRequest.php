@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Documents;
 
 use App\Models\DocumentType;
 use Illuminate\Contracts\Validation\ValidationRule;

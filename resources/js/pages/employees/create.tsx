@@ -1,5 +1,5 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import EmployeeController from '@/actions/App/Http/Controllers/EmployeeController';
+import EmployeeController from '@/actions/App/Http/Controllers/Employees/EmployeeController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';

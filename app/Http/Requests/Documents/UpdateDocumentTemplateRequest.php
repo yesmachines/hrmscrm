@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Documents;
 
-use App\Models\DocumentCategory;
+use App\Models\DocumentType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class StoreDocumentCategoryRequest extends FormRequest
+class UpdateDocumentTemplateRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -16,10 +16,6 @@ class StoreDocumentCategoryRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->input('parent_id') === '') {
-            $this->merge(['parent_id' => null]);
-        }
-
         if ($this->has('status') && $this->input('status') !== null && $this->input('status') !== '') {
             $this->merge(['status' => (int) $this->input('status')]);
         }
@@ -31,10 +27,10 @@ class StoreDocumentCategoryRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'category_name' => ['required', 'string', 'max:255'],
-            'short_code' => ['required', 'string', 'max:255'],
+            'document_type_id' => ['required', 'integer', Rule::exists(DocumentType::class, 'id')],
+            'template_name' => ['required', 'string', 'max:255'],
+            'template_code' => ['required', 'string', 'max:255'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
-            'parent_id' => ['nullable', 'integer', Rule::exists(DocumentCategory::class, 'id')],
         ];
     }
 
@@ -46,10 +42,10 @@ class StoreDocumentCategoryRequest extends FormRequest
         $validated = $this->validated();
 
         return [
-            'category_name' => $validated['category_name'],
-            'short_code' => $validated['short_code'],
+            'document_type_id' => $validated['document_type_id'],
+            'template_name' => $validated['template_name'],
+            'template_code' => $validated['template_code'],
             'status' => (int) ($validated['status'] ?? 1),
-            'parent_id' => $validated['parent_id'] ?? null,
         ];
     }
 }

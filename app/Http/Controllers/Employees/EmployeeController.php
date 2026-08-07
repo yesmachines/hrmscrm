@@ -1,12 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Employees;
 
 use App\Actions\CreateEmployee;
 use App\Actions\DeleteEmployee;
 use App\Actions\UpdateEmployee;
-use App\Http\Requests\StoreEmployeeProfileRequest;
-use App\Http\Requests\UpdateEmployeeProfileRequest;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Employees\StoreEmployeeProfileRequest;
+use App\Http\Requests\Employees\UpdateEmployeeProfileRequest;
 use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Department;

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Leave;
 
 use App\Models\LeaveType;
 use App\Models\Organisation;
@@ -8,7 +8,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class UpdateLeavePolicyRequest extends FormRequest
+class StoreLeavePolicyRequest extends FormRequest
 {
     public function authorize(): bool
     {

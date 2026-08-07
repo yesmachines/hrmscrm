@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Documents;
 
-use App\Models\DocumentType;
+use App\Models\DocumentCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class UpdateDocumentTemplateRequest extends FormRequest
+class UpdateDocumentCategoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -16,6 +16,10 @@ class UpdateDocumentTemplateRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if ($this->input('parent_id') === '') {
+            $this->merge(['parent_id' => null]);
+        }
+
         if ($this->has('status') && $this->input('status') !== null && $this->input('status') !== '') {
             $this->merge(['status' => (int) $this->input('status')]);
         }
@@ -26,11 +30,19 @@ class UpdateDocumentTemplateRequest extends FormRequest
      */
     public function rules(): array
     {
+        /** @var DocumentCategory $category */
+        $category = $this->route('document_category');
+
         return [
-            'document_type_id' => ['required', 'integer', Rule::exists(DocumentType::class, 'id')],
-            'template_name' => ['required', 'string', 'max:255'],
-            'template_code' => ['required', 'string', 'max:255'],
+            'category_name' => ['required', 'string', 'max:255'],
+            'short_code' => ['required', 'string', 'max:255'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
+            'parent_id' => [
+                'nullable',
+                'integer',
+                Rule::exists(DocumentCategory::class, 'id'),
+                Rule::notIn([$category->id]),
+            ],
         ];
     }
 
@@ -42,10 +54,10 @@ class UpdateDocumentTemplateRequest extends FormRequest
         $validated = $this->validated();
 
         return [
-            'document_type_id' => $validated['document_type_id'],
-            'template_name' => $validated['template_name'],
-            'template_code' => $validated['template_code'],
+            'category_name' => $validated['category_name'],
+            'short_code' => $validated['short_code'],
             'status' => (int) ($validated['status'] ?? 1),
+            'parent_id' => $validated['parent_id'] ?? null,
         ];
     }
 }

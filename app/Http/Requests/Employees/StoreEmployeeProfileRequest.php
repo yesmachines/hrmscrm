@@ -1,13 +1,12 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Employees;
 
 use App\Concerns\EmployeeValidationRules;
-use App\Models\SalesCrm\Employee;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class UpdateEmployeeProfileRequest extends FormRequest
+class StoreEmployeeProfileRequest extends FormRequest
 {
     use EmployeeValidationRules;
 
@@ -26,10 +25,7 @@ class UpdateEmployeeProfileRequest extends FormRequest
      */
     public function rules(): array
     {
-        /** @var Employee $employee */
-        $employee = $this->route('employee');
-
-        return $this->employeeRules($employee, isCreate: false);
+        return $this->employeeRules(isCreate: true);
     }
 
     /**

@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Documents;
 
 use App\Models\DocumentCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class UpdateDocumentCategoryRequest extends FormRequest
+class StoreDocumentCategoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -30,19 +30,11 @@ class UpdateDocumentCategoryRequest extends FormRequest
      */
     public function rules(): array
     {
-        /** @var DocumentCategory $category */
-        $category = $this->route('document_category');
-
         return [
             'category_name' => ['required', 'string', 'max:255'],
             'short_code' => ['required', 'string', 'max:255'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
-            'parent_id' => [
-                'nullable',
-                'integer',
-                Rule::exists(DocumentCategory::class, 'id'),
-                Rule::notIn([$category->id]),
-            ],
+            'parent_id' => ['nullable', 'integer', Rule::exists(DocumentCategory::class, 'id')],
         ];
     }
 

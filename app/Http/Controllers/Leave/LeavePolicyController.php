@@ -1,9 +1,10 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Leave;
 
-use App\Http\Requests\StoreLeavePolicyRequest;
-use App\Http\Requests\UpdateLeavePolicyRequest;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Leave\StoreLeavePolicyRequest;
+use App\Http\Requests\Leave\UpdateLeavePolicyRequest;
 use App\Models\LeavePolicy;
 use App\Models\LeaveType;
 use App\Models\Organisation;

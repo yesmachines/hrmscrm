@@ -1,5 +1,5 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import LeavePolicyController from '@/actions/App/Http/Controllers/LeavePolicyController';
+import LeavePolicyController from '@/actions/App/Http/Controllers/Leave/LeavePolicyController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';

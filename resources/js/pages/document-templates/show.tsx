@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Head, Link, setLayoutProps } from '@inertiajs/react';
-import DocumentTemplateController from '@/actions/App/Http/Controllers/DocumentTemplateController';
+import DocumentTemplateController from '@/actions/App/Http/Controllers/Documents/DocumentTemplateController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';

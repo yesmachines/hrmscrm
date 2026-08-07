@@ -1,10 +1,11 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Organisation;
 
 use App\Actions\StoreOrganisationLogo;
-use App\Http\Requests\StoreOrganisationRequest;
-use App\Http\Requests\UpdateOrganisationRequest;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Organisation\StoreOrganisationRequest;
+use App\Http\Requests\Organisation\UpdateOrganisationRequest;
 use App\Models\Organisation;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;

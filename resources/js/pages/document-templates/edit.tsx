@@ -1,5 +1,5 @@
 import { Form, Head, Link, setLayoutProps } from '@inertiajs/react';
-import DocumentTemplateController from '@/actions/App/Http/Controllers/DocumentTemplateController';
+import DocumentTemplateController from '@/actions/App/Http/Controllers/Documents/DocumentTemplateController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';

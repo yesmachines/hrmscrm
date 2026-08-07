@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Head, Link, setLayoutProps } from '@inertiajs/react';
-import EmployeeController from '@/actions/App/Http/Controllers/EmployeeController';
+import EmployeeController from '@/actions/App/Http/Controllers/Employees/EmployeeController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
