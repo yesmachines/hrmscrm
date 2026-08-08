@@ -115,7 +115,7 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
         <>
             <Head title={name} />
 
-            <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading title={name} description={employee.email ?? undefined} />
                     <div className="flex gap-2">
