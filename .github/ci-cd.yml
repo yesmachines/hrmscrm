@@ -25,7 +25,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /var/www/ymhrms
-            export PATH=$PATH:/usr/local/bin:/usr/bin:/root/.local/share/pnpm
 
             git pull origin ${{ github.ref_name }}
 
