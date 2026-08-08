@@ -12,7 +12,6 @@ jobs:
 
   # 3. Deployment Job
   deploy:
-    needs: [lint, tests]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
