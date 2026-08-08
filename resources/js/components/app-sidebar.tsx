@@ -7,6 +7,7 @@ import {
     Files,
     FolderTree,
     LayoutGrid,
+    Lightbulb,
     MapPin,
     Users,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ import { index as documentCategoriesIndex } from '@/actions/App/Http/Controllers
 import { index as documentTemplatesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentTemplateController';
 import { index as documentTypesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentTypeController';
 import { index as employeesIndex } from '@/actions/App/Http/Controllers/Employees/EmployeeController';
+import { index as ideasIndex } from '@/actions/App/Http/Controllers/IdeaController';
 import { index as leavePoliciesIndex } from '@/actions/App/Http/Controllers/Leave/LeavePolicyController';
 import { index as leaveTypesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveTypeController';
 import { index as officeLocationsIndex } from '@/actions/App/Http/Controllers/Organisation/OfficeLocationController';
@@ -41,6 +43,11 @@ const mainNavItems: NavItem[] = [
         title: 'Employees',
         href: employeesIndex(),
         icon: Users,
+    },
+    {
+        title: 'Ideas',
+        href: ideasIndex(),
+        icon: Lightbulb,
     },
     {
         title: 'Organisation',

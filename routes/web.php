@@ -28,6 +28,10 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('document-templates', DocumentTemplateController::class);
     Route::resource('leave-types', LeaveTypeController::class);
     Route::resource('leave-policies', LeavePolicyController::class);
+
+    Route::get('ideas', [\App\Http\Controllers\IdeaController::class, 'index'])->name('ideas.index');
+    Route::get('ideas/{idea}', [\App\Http\Controllers\IdeaController::class, 'show'])->name('ideas.show');
+    Route::post('ideas/{idea}/status', [\App\Http\Controllers\IdeaController::class, 'updateStatus'])->name('ideas.update-status');
 });
 
 require __DIR__.'/settings.php';

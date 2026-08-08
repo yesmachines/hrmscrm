@@ -22,4 +22,9 @@ class IdeaTrack extends Model
     {
         return $this->belongsTo(Idea::class);
     }
+
+    public function doneBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'done_by');
+    }
 }
