@@ -66,7 +66,7 @@ export default function EmployeesCreate({
                                 </Button>
                                 <Button variant="outline" asChild>
                                     <Link href={EmployeeController.index.url()}>
-                                        Cancel
+                                        Cancel1
                                     </Link>
                                 </Button>
                             </div>
