@@ -86,20 +86,30 @@ export default function Login({ status, canResetPassword }: Props) {
                                 />
                             </div>
                             <InputError message={errors.password} />
-                            {canResetPassword && (
-                                <div className="flex justify-end">
-                                    <TextLink
-                                        href={request()}
-                                        className="text-sm font-medium text-[#00B8A3] hover:text-[#009688]"
-                                        tabIndex={5}
-                                    >
-                                        Forgot password?
-                                    </TextLink>
-                                </div>
-                            )}
                         </div>
 
-                        <input type="hidden" name="remember" value="1" />
+                        <div className="flex items-center justify-between">
+                            <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-600 select-none">
+                                <input
+                                    type="checkbox"
+                                    name="remember"
+                                    value="1"
+                                    tabIndex={3}
+                                    className="size-4 cursor-pointer rounded border-neutral-300 text-[#00B8A3] focus:ring-[#00B8A3]/30"
+                                />
+                                <span>Remember me</span>
+                            </label>
+
+                            {canResetPassword && (
+                                <TextLink
+                                    href={request()}
+                                    className="text-sm font-medium text-[#00B8A3] hover:text-[#009688]"
+                                    tabIndex={5}
+                                >
+                                    Forgot password?
+                                </TextLink>
+                            )}
+                        </div>
 
                         <Button
                             type="submit"
