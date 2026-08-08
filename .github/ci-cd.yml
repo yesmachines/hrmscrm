@@ -42,5 +42,4 @@ jobs:
             pnpm run build
 
             php artisan optimize:clear
-            php artisan queue:restart
             sudo supervisorctl restart ymhrms-app-worker:*
