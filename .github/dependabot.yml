@@ -1,12 +1,142 @@
-version: 2
-updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 5
-    groups:
-      github-actions:
-        patterns:
-          - "*"
+name: CI-CD
+
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
+
+jobs:
+  # 1. Linter Job
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+
+      # --- PNPM SETUP ---
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v5
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      # ------------------
+
+      - name: Install Dependencies
+        run: |
+          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+          npm install
+
+      - name: Run Pint
+        run: composer lint
+
+      - name: Format Frontend
+        run: npm run format
+
+      - name: Lint Frontend
+        run: npm run lint
+
+  # 2. Test Job
+  tests:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ["8.4"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          tools: composer:v2
+          coverage: xdebug
+
+      # --- PNPM SETUP ---
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Install Node Dependencies
+        run: pnpm install
+      # ------------------
+
+      - name: Install Dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Copy Environment File
+        run: cp .env.example .env
+
+      - name: Generate Application Key
+        run: php artisan key:generate
+
+      - name: Build Assets
+        run: pnpm run build
+
+      - name: Tests
+        run: ./vendor/bin/pest
+
+  # 3. Deployment Job
+  deploy:
+    needs: [lint, tests]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          timeout: 60s
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/ymhrms
+            export PATH=$PATH:/usr/local/bin:/usr/bin:/root/.local/share/pnpm
+
+            git pull origin ${{ github.ref_name }}
+
+            export COMPOSER_ALLOW_SUPERUSER=1
+            if [[ "${{ github.ref_name }}" == "main" ]]; then
+              composer install --no-dev --optimize-autoloader --no-interaction
+            else
+              composer install --optimize-autoloader --no-interaction
+            fi
+
+            php artisan migrate --force
+
+            # Frontend build using pnpm
+            pnpm install
+            pnpm run build
+
+            php artisan optimize:clear
+            php artisan queue:restart
+            sudo supervisorctl restart ymhrms-app-worker:*
