@@ -694,6 +694,7 @@ export default function EmployeeProfileFormFields({
                         type="number"
                         step="0.1"
                         min="0"
+                        max="80"
                         name="total_experience"
                         defaultValue={profileDefaults.total_experience ?? ''}
                     />
