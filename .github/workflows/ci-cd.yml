@@ -37,8 +37,8 @@ jobs:
             php artisan migrate --force
 
             # Frontend build using pnpm
-            pnpm install
-            pnpm run build
+            npm install
+            npm run build
 
             php artisan optimize:clear
             sudo supervisorctl restart ymhrms-worker:*
