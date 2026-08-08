@@ -27,7 +27,7 @@ type IdeaData = {
     created_at: string;
     employee: {
         id: number;
-        name: string;
+        user: { name: string } | null;
         employee_code: string | null;
         designation: string | null;
         department: { name: string } | null;
@@ -65,7 +65,7 @@ export default function IdeaShow({ idea }: { idea: IdeaData }) {
                         </Button>
                         <Heading
                             title={idea.title}
-                            description={`Submitted by ${idea.employee?.name ?? 'Unknown'} on ${new Date(idea.created_at).toLocaleDateString()}`}
+                            description={`Submitted by ${idea.employee?.user?.name ?? 'Unknown'} on ${new Date(idea.created_at).toLocaleDateString()}`}
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -177,19 +177,19 @@ export default function IdeaShow({ idea }: { idea: IdeaData }) {
                                     <div className="size-12 shrink-0 overflow-hidden rounded-full bg-muted">
                                         {idea.employee.image_url ? (
                                             <img
-                                                src={idea.employee.image_url}
-                                                alt={idea.employee.name}
+                                                src={`/storage/${idea.employee.image_url}`}
+                                                alt={idea.employee.user?.name}
                                                 className="size-full object-cover"
                                             />
                                         ) : (
                                             <div className="flex size-full items-center justify-center text-lg font-medium text-muted-foreground">
-                                                {idea.employee.name.charAt(0)}
+                                                {idea.employee.user?.name?.charAt(0) ?? '?'}
                                             </div>
                                         )}
                                     </div>
                                     <div className="flex flex-col overflow-hidden">
                                         <span className="truncate font-medium text-foreground">
-                                            {idea.employee.name}
+                                            {idea.employee.user?.name ?? 'Unknown'}
                                         </span>
                                         <span className="truncate text-xs text-muted-foreground">
                                             {idea.employee.designation ?? 'No designation'}

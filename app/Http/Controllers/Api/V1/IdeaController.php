@@ -15,7 +15,10 @@ class IdeaController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
+            'employee_id' => [
+                'required',
+                \Illuminate\Validation\Rule::exists(\App\Models\SalesCrm\Employee::class, 'id'),
+            ],
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'files' => 'nullable|array',

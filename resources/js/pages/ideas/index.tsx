@@ -12,7 +12,7 @@ type IdeaRow = {
     created_at: string;
     employee: {
         id: number;
-        name: string;
+        user: { name: string } | null;
         employee_code: string | null;
         image_url: string | null;
     } | null;
@@ -67,11 +67,28 @@ export default function IdeasIndex({ ideas }: { ideas: PaginatedIdeas }) {
                                             {row.title}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="font-medium">
-                                                {row.employee?.name ?? 'Unknown'}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {row.employee?.employee_code}
+                                            <div className="flex items-center gap-3">
+                                                <div className="size-8 shrink-0 overflow-hidden rounded-full bg-muted">
+                                                    {row.employee?.image_url ? (
+                                                        <img
+                                                            src={`/storage/${row.employee.image_url}`}
+                                                            alt={row.employee.user?.name}
+                                                            className="size-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex size-full items-center justify-center text-sm font-medium text-muted-foreground">
+                                                            {row.employee?.user?.name?.charAt(0) ?? '?'}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div className="font-medium">
+                                                        {row.employee?.user?.name ?? 'Unknown'}
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {row.employee?.employee_code}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">

@@ -10,7 +10,10 @@ class IdeaController extends Controller
 {
     public function index(Request $request)
     {
-        $ideas = Idea::with('employee:id,name,employee_code,image_url')
+        $ideas = Idea::with([
+            'employee:id,user_id,employee_code,image_url',
+            'employee.user:id,name',
+        ])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 
@@ -22,10 +25,11 @@ class IdeaController extends Controller
     public function show(Idea $idea)
     {
         $idea->load([
-            'employee:id,name,employee_code,designation,department_id,image_url',
+            'employee:id,user_id,employee_code,designation,department_id,image_url',
+            'employee.user:id,name',
             'employee.department:id,name',
             'tracks' => function ($query) {
-                $query->orderBy('created_at', 'desc');
+                $query->orderBy('action_on', 'desc');
             },
             'tracks.doneBy:id,name',
         ]);
