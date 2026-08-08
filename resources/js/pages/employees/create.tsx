@@ -62,7 +62,7 @@ export default function EmployeesCreate({
                             <div className="flex items-center justify-end gap-3">
                                 <Button type="submit" disabled={processing}>
                                     {processing && <Spinner />}
-                                    Save employee
+                                    Save employee1
                                 </Button>
                                 <Button variant="outline" asChild>
                                     <Link href={EmployeeController.index.url()}>
