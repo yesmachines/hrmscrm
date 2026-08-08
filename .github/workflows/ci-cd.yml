@@ -1,0 +1,44 @@
+name: CI-CD
+
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
+
+jobs:
+
+  # 3. Deployment Job
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          timeout: 60s
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/ymhrms
+
+            git pull origin ${{ github.ref_name }}
+
+            export COMPOSER_ALLOW_SUPERUSER=1
+            if [[ "${{ github.ref_name }}" == "main" ]]; then
+              composer install --no-dev --optimize-autoloader --no-interaction
+            else
+              composer install --optimize-autoloader --no-interaction
+            fi
+
+            php artisan migrate --force
+
+            # Frontend build using pnpm
+            pnpm install
+            pnpm run build
+
+            php artisan optimize:clear
+            sudo supervisorctl restart ymhrms-worker:*
