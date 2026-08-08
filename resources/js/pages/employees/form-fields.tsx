@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -113,18 +113,18 @@ function Section({
     children: ReactNode;
 }) {
     return (
-        <section className="flex flex-col gap-5 rounded-[1.25rem] border border-border/50 bg-card/80 backdrop-blur-sm p-6 shadow-sm md:p-8">
+        <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
             <div>
-                <h3 className="text-base font-semibold tracking-tight text-foreground">
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">
                     {title}
                 </h3>
                 {description && (
-                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                         {description}
                     </p>
                 )}
             </div>
-            <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">{children}</div>
+            <div className="grid gap-4 sm:grid-cols-2">{children}</div>
         </section>
     );
 }
@@ -145,8 +145,6 @@ export default function EmployeeProfileFormFields({
         ...defaults,
         ...(profile ?? {}),
     };
-
-    const [joiningDate, setJoiningDate] = useState(defaults.joining_date ?? '');
 
     return (
         <div className="space-y-5">
@@ -352,8 +350,7 @@ export default function EmployeeProfileFormFields({
                         id="joining_date"
                         type="date"
                         name="joining_date"
-                        value={joiningDate}
-                        onChange={(e) => setJoiningDate(e.target.value)}
+                        defaultValue={defaults.joining_date ?? ''}
                     />
                 </Field>
                 <Field
@@ -366,7 +363,6 @@ export default function EmployeeProfileFormFields({
                         type="date"
                         name="resignation_date"
                         defaultValue={defaults.resignation_date ?? ''}
-                        min={joiningDate}
                     />
                 </Field>
                 <Field label="Status" name="status" error={errors.status}>

@@ -31,26 +31,39 @@ const modules = [
 ] as const;
 
 export default function Dashboard() {
+    const { auth } = usePage().props;
+    const firstName = auth.user?.name?.split(' ')[0] ?? '';
+
     return (
         <>
             <Head title="Dashboard" />
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-10 p-6 md:p-10">
-                <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4 mt-4">
+            <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 p-6 md:p-8">
+                <div className="space-y-3">
+                    <p className="text-sm font-medium tracking-[0.2em] text-primary uppercase">
+                        HRMS
+                    </p>
+                    <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+                        Good {greeting()}
+                        {firstName ? `, ${firstName}` : ''}
+                    </h1>
+                </div>
+
+                <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                     {modules.map((module) => (
                         <div
                             key={module.title}
-                            className="group relative flex flex-col rounded-[1.25rem] border border-border/50 bg-card/80 backdrop-blur-sm p-6 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/30 hover:bg-card hover:shadow-xl hover:shadow-primary/5"
+                            className="rounded-2xl border border-border bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
                         >
-                            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors duration-300 group-hover:bg-primary/15 group-hover:text-primary">
+                            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                                 <module.icon
-                                    className="size-6 transition-transform duration-300 group-hover:scale-110"
-                                    strokeWidth={2}
+                                    className="size-5"
+                                    strokeWidth={1.75}
                                 />
                             </div>
-                            <h2 className="mt-6 text-lg font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
+                            <h2 className="mt-5 text-base font-semibold tracking-tight">
                                 {module.title}
                             </h2>
-                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                                 {module.description}
                             </p>
                         </div>
@@ -59,6 +72,20 @@ export default function Dashboard() {
             </div>
         </>
     );
+}
+
+function greeting(): string {
+    const hour = new Date().getHours();
+
+    if (hour < 12) {
+        return 'morning';
+    }
+
+    if (hour < 17) {
+        return 'afternoon';
+    }
+
+    return 'evening';
 }
 
 Dashboard.layout = {
