@@ -23,7 +23,12 @@ jobs:
           username: ${{ vars.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
             cd /var/www/ymhrms
+
+            git config --global --add safe.directory /var/www/ymhrms
 
             git pull origin ${{ github.ref_name }}
 
