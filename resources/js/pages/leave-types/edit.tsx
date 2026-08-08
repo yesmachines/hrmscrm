@@ -45,7 +45,7 @@ export default function LeaveTypesEdit({ leaveType }: { leaveType: LeaveType }) 
         <>
             <Head title={`Edit ${leaveType.leave_name}`} />
 
-            <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
                 <Heading
                     title="Edit leave type"
                     description="Update leave type details"
@@ -62,7 +62,7 @@ export default function LeaveTypesEdit({ leaveType }: { leaveType: LeaveType }) 
                                 defaults={leaveType}
                             />
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-end gap-3">
                                 <Button type="submit" disabled={processing}>
                                     {processing && <Spinner />}
                                     Update leave type

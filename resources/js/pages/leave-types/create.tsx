@@ -11,7 +11,7 @@ export default function LeaveTypesCreate() {
         <>
             <Head title="Add leave type" />
 
-            <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
                 <Heading
                     title="Add leave type"
                     description="Create a new leave type"
@@ -25,7 +25,7 @@ export default function LeaveTypesCreate() {
                         <>
                             <LeaveTypeFormFields errors={errors} />
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-end gap-3">
                                 <Button type="submit" disabled={processing}>
                                     {processing && <Spinner />}
                                     Save leave type
