@@ -4,7 +4,11 @@ use App\Http\Controllers\Documents\DocumentCategoryController;
 use App\Http\Controllers\Documents\DocumentTemplateController;
 use App\Http\Controllers\Documents\DocumentTypeController;
 use App\Http\Controllers\Employees\EmployeeController;
+use App\Http\Controllers\IdeaController;
+use App\Http\Controllers\Leave\LeaveBalanceController;
+use App\Http\Controllers\Leave\LeaveHistoryController;
 use App\Http\Controllers\Leave\LeavePolicyController;
+use App\Http\Controllers\Leave\LeaveRequestController;
 use App\Http\Controllers\Leave\LeaveTypeController;
 use App\Http\Controllers\Organisation\OfficeLocationController;
 use App\Http\Controllers\Organisation\OrganisationController;
@@ -28,10 +32,13 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('document-templates', DocumentTemplateController::class);
     Route::resource('leave-types', LeaveTypeController::class);
     Route::resource('leave-policies', LeavePolicyController::class);
+    Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'show', 'update']);
+    Route::resource('leave-balances', LeaveBalanceController::class);
+    Route::resource('leave-histories', LeaveHistoryController::class);
 
-    Route::get('ideas', [\App\Http\Controllers\IdeaController::class, 'index'])->name('ideas.index');
-    Route::get('ideas/{idea}', [\App\Http\Controllers\IdeaController::class, 'show'])->name('ideas.show');
-    Route::post('ideas/{idea}/status', [\App\Http\Controllers\IdeaController::class, 'updateStatus'])->name('ideas.update-status');
+    Route::get('ideas', [IdeaController::class, 'index'])->name('ideas.index');
+    Route::get('ideas/{idea}', [IdeaController::class, 'show'])->name('ideas.show');
+    Route::post('ideas/{idea}/status', [IdeaController::class, 'updateStatus'])->name('ideas.update-status');
 });
 
 require __DIR__.'/settings.php';

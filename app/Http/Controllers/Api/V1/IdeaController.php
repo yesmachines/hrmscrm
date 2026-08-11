@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Idea;
-use Illuminate\Http\Request;
+use App\Models\SalesCrm\Employee;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class IdeaController extends Controller
 {
@@ -17,7 +19,7 @@ class IdeaController extends Controller
         $validated = $request->validate([
             'employee_id' => [
                 'required',
-                \Illuminate\Validation\Rule::exists(\App\Models\SalesCrm\Employee::class, 'id'),
+                Rule::exists(Employee::class, 'id'),
             ],
             'title' => 'required|string|max:255',
             'description' => 'required|string',
@@ -42,7 +44,7 @@ class IdeaController extends Controller
 
         $idea->tracks()->create([
             'action_type' => 'submitted',
-            'remarks' => 'Idea submitted via API',
+            'remarks' => 'Idea submitted',
             'done_by' => $request->user()?->id,
             'action_on' => now(),
         ]);

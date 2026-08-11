@@ -17,6 +17,9 @@ import { index as documentTypesIndex } from '@/actions/App/Http/Controllers/Docu
 import { index as employeesIndex } from '@/actions/App/Http/Controllers/Employees/EmployeeController';
 import { index as ideasIndex } from '@/actions/App/Http/Controllers/IdeaController';
 import { index as leavePoliciesIndex } from '@/actions/App/Http/Controllers/Leave/LeavePolicyController';
+import { index as leaveBalancesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveBalanceController';
+import { index as leaveHistoriesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveHistoryController';
+import { index as leaveRequestsIndex } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import { index as leaveTypesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveTypeController';
 import { index as officeLocationsIndex } from '@/actions/App/Http/Controllers/Organisation/OfficeLocationController';
 import { index as organisationsIndex } from '@/actions/App/Http/Controllers/Organisation/OrganisationController';
@@ -93,6 +96,21 @@ const mainNavItems: NavItem[] = [
         icon: CalendarDays,
         href: leaveTypesIndex(),
         items: [
+            {
+                title: 'Leave requests',
+                href: leaveRequestsIndex(),
+                icon: CalendarDays,
+            },
+            {
+                title: 'Leave balances',
+                href: leaveBalancesIndex(),
+                icon: CalendarDays,
+            },
+            {
+                title: 'Leave histories',
+                href: leaveHistoriesIndex(),
+                icon: CalendarDays,
+            },
             {
                 title: 'Leave types',
                 href: leaveTypesIndex(),

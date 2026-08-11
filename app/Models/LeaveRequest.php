@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\SalesCrm\Employee;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,11 @@ class LeaveRequest extends Model
             'end_date' => 'datetime',
             'total_days' => 'float',
         ];
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
     }
 
     public function leaveType(): BelongsTo

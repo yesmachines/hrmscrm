@@ -174,19 +174,6 @@ export default function IdeaShow({ idea }: { idea: IdeaData }) {
                             </h3>
                             {idea.employee ? (
                                 <div className="flex items-center gap-4">
-                                    <div className="size-12 shrink-0 overflow-hidden rounded-full bg-muted">
-                                        {idea.employee.image_url ? (
-                                            <img
-                                                src={`/storage/${idea.employee.image_url}`}
-                                                alt={idea.employee.user?.name}
-                                                className="size-full object-cover"
-                                            />
-                                        ) : (
-                                            <div className="flex size-full items-center justify-center text-lg font-medium text-muted-foreground">
-                                                {idea.employee.user?.name?.charAt(0) ?? '?'}
-                                            </div>
-                                        )}
-                                    </div>
                                     <div className="flex flex-col overflow-hidden">
                                         <span className="truncate font-medium text-foreground">
                                             {idea.employee.user?.name ?? 'Unknown'}
