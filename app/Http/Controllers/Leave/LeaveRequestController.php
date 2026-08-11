@@ -61,6 +61,15 @@ class LeaveRequestController extends Controller
             'action_on' => now(),
         ]);
 
+        if (in_array($validated['status'], ['approved', 'rejected'])) {
+            $leave_request->approvals()->create([
+                'approval_level' => 'Final',
+                'approver_id' => $request->user()?->id,
+                'remarks' => $validated['remarks'] ?? null,
+                'approved_date' => now(),
+            ]);
+        }
+
         return back()->with('success', 'Leave request status updated successfully.');
     }
 }

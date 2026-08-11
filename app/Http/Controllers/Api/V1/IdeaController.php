@@ -12,6 +12,29 @@ use Illuminate\Validation\Rule;
 class IdeaController extends Controller
 {
     /**
+     * Get a listing of the user's ideas.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $employee = Employee::where('user_id', $user->id)->first();
+        if (! $employee) {
+            return response()->json(['message' => 'Employee record not found.'], 404);
+        }
+
+        $ideas = Idea::with('tracks')
+            ->where('employee_id', $employee->id)
+            ->orderBy('created_at', 'desc')
+            ->paginate(15);
+
+        return response()->json($ideas);
+    }
+
+    /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request): JsonResponse

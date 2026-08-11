@@ -13,6 +13,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('me', [AuthController::class, 'me'])->name('api.v1.me');
         Route::post('logout', [AuthController::class, 'logout'])->name('api.v1.logout');
+        Route::get('ideas', [IdeaController::class, 'index'])->name('api.v1.ideas.index');
         Route::post('ideas', [IdeaController::class, 'store'])->name('api.v1.ideas.store');
 
         Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.leaves.index');
