@@ -31,7 +31,7 @@ class IdeaController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 
-        return $this->successResponse($ideas);
+        return $this->successPaginatedResponse($ideas, 'ideas');
     }
 
     /**

@@ -15,7 +15,7 @@ trait ApiResponse
     public function successResponse($data = null, $message = 'Success', $code = 200)
     {
         $response = [
-            'status' => $code,
+            'statusCode' => $code,
             'message' => $message,
         ];
 
@@ -39,13 +39,41 @@ trait ApiResponse
     public function errorResponse($message = 'Error', $code = 400, $data = null)
     {
         $response = [
-            'status' => $code,
+            'statusCode' => $code,
             'message' => $message,
         ];
 
         if (!is_null($data)) {
             $response['data'] = $data;
         }
+
+        return response()->json($response, $code);
+    }
+
+    /**
+     * Build a success response with pagination
+     *
+     * @param  \Illuminate\Pagination\LengthAwarePaginator  $paginator
+     * @param  string  $itemsKey
+     * @param  string  $message
+     * @param  int  $code
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function successPaginatedResponse($paginator, $itemsKey = 'items', $message = 'Success', $code = 200)
+    {
+        $response = [
+            'statusCode' => $code,
+            'message' => $message,
+            'data' => [
+                $itemsKey => $paginator->items(),
+                'pagination' => [
+                    'total' => $paginator->total(),
+                    'per_page' => $paginator->perPage(),
+                    'current_page' => $paginator->currentPage(),
+                    'last_page' => $paginator->lastPage(),
+                ],
+            ],
+        ];
 
         return response()->json($response, $code);
     }

@@ -174,6 +174,6 @@ class LeaveController extends Controller
 
         $leaveRequests = $query->paginate(15);
 
-        return $this->successResponse($leaveRequests);
+        return $this->successPaginatedResponse($leaveRequests, 'leave_requests');
     }
 }
