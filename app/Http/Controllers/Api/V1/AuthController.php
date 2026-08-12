@@ -35,20 +35,19 @@ class AuthController extends Controller
 
         $user->load('employee');
 
-        return response()->json([
-            'token' => $token,
-            'token_type' => 'Bearer',
-            'user' => new UserResource($user),
-        ]);
+        $data = clone $user;
+        $data->access_token = $token;
+
+        return $this->successResponse($data);
     }
 
-    public function me(Request $request): UserResource
+    public function me(Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
         $user->load('employee');
 
-        return new UserResource($user);
+        return $this->successResponse(new UserResource($user));
     }
 
     public function logout(Request $request): JsonResponse
@@ -59,8 +58,6 @@ class AuthController extends Controller
             $accessToken->delete();
         }
 
-        return response()->json([
-            'message' => __('Logged out successfully.'),
-        ]);
+        return $this->successResponse(null, __('Logged out successfully.'));
     }
 }

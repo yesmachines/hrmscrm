@@ -18,12 +18,12 @@ class IdeaController extends Controller
     {
         $user = $request->user();
         if (! $user) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
+            return $this->errorResponse('Unauthenticated.', 401);
         }
 
         $employee = Employee::where('user_id', $user->id)->first();
         if (! $employee) {
-            return response()->json(['message' => 'Employee record not found.'], 404);
+            return $this->errorResponse('Employee record not found.', 404);
         }
 
         $ideas = Idea::with('tracks')
@@ -31,7 +31,7 @@ class IdeaController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 
-        return response()->json($ideas);
+        return $this->successResponse($ideas);
     }
 
     /**
@@ -72,9 +72,8 @@ class IdeaController extends Controller
             'action_on' => now(),
         ]);
 
-        return response()->json([
-            'message' => 'Idea submitted successfully.',
+        return $this->successResponse([
             'idea' => $idea->load('tracks'),
-        ], 201);
+        ], 'Idea submitted successfully.', 201);
     }
 }

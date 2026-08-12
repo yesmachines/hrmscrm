@@ -21,14 +21,14 @@ class LeaveController extends Controller
     {
         $user = $request->user();
         if (! $user) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
+            return $this->errorResponse('Unauthenticated.', 401);
         }
 
         // The user ID maps to an Employee in the salescrm DB
         $employee = Employee::where('user_id', $user->id)->first();
 
         if (! $employee) {
-            return response()->json(['message' => 'Employee record not found.'], 404);
+            return $this->errorResponse('Employee record not found.', 404);
         }
 
         // Fetch all leave types
@@ -65,7 +65,7 @@ class LeaveController extends Controller
             ];
         });
 
-        return response()->json([
+        return $this->successResponse([
             'employee' => [
                 'id' => $employee->id,
                 'name' => $user->name,
@@ -93,7 +93,7 @@ class LeaveController extends Controller
         $employee = Employee::where('user_id', $user->id)->first();
 
         if (! $employee) {
-            return response()->json(['message' => 'Employee record not found.'], 404);
+            return $this->errorResponse('Employee record not found.', 404);
         }
 
         // For simplicity, we trust the client's total_days if provided,
@@ -133,10 +133,7 @@ class LeaveController extends Controller
             ]);
         }
 
-        return response()->json([
-            'message' => 'Leave request submitted successfully.',
-            'data' => $leaveRequest->load('files'),
-        ], 201);
+        return $this->successResponse($leaveRequest->load('files'), 'Leave request submitted successfully.', 201);
     }
 
     /**
@@ -146,12 +143,12 @@ class LeaveController extends Controller
     {
         $user = $request->user();
         if (! $user) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
+            return $this->errorResponse('Unauthenticated.', 401);
         }
 
         $employee = Employee::where('user_id', $user->id)->first();
         if (! $employee) {
-            return response()->json(['message' => 'Employee record not found.'], 404);
+            return $this->errorResponse('Employee record not found.', 404);
         }
 
         $query = LeaveRequest::with('leaveType:id,leave_name')
@@ -177,6 +174,6 @@ class LeaveController extends Controller
 
         $leaveRequests = $query->paginate(15);
 
-        return response()->json($leaveRequests);
+        return $this->successResponse($leaveRequests);
     }
 }
