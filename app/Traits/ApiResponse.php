@@ -2,6 +2,9 @@
 
 namespace App\Traits;
 
+use Illuminate\Http\JsonResponse;
+use Illuminate\Pagination\LengthAwarePaginator;
+
 trait ApiResponse
 {
     /**
@@ -10,7 +13,7 @@ trait ApiResponse
      * @param  mixed  $data
      * @param  string  $message
      * @param  int  $code
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function successResponse($data = null, $message = 'Success', $code = 200)
     {
@@ -19,7 +22,7 @@ trait ApiResponse
             'message' => $message,
         ];
 
-        if (!is_null($data)) {
+        if (! is_null($data)) {
             $response['data'] = $data;
         } else {
             $response['data'] = [];
@@ -34,7 +37,7 @@ trait ApiResponse
      * @param  string  $message
      * @param  int  $code
      * @param  mixed  $data
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function errorResponse($message = 'Error', $code = 400, $data = null)
     {
@@ -43,7 +46,7 @@ trait ApiResponse
             'message' => $message,
         ];
 
-        if (!is_null($data)) {
+        if (! is_null($data)) {
             $response['data'] = $data;
         }
 
@@ -53,11 +56,11 @@ trait ApiResponse
     /**
      * Build a success response with pagination
      *
-     * @param  \Illuminate\Pagination\LengthAwarePaginator  $paginator
+     * @param  LengthAwarePaginator  $paginator
      * @param  string  $itemsKey
      * @param  string  $message
      * @param  int  $code
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
     public function successPaginatedResponse($paginator, $itemsKey = 'items', $message = 'Success', $code = 200)
     {

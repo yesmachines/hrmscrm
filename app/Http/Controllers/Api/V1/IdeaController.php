@@ -46,13 +46,13 @@ class IdeaController extends Controller
             ],
             'title' => 'required|string|max:255',
             'description' => 'required|string',
-            'files' => 'nullable|array',
-            'files.*' => 'file|mimes:jpeg,png,jpg,gif,svg,pdf,doc,docx|max:10240',
+            'idea_files' => 'nullable|array',
+            'idea_files.*' => 'file|mimes:jpeg,png,jpg,gif,svg,pdf,doc,docx|max:10240',
         ]);
 
         $filePaths = [];
-        if ($request->hasFile('files')) {
-            foreach ($request->file('files') as $file) {
+        if ($request->hasFile('idea_files')) {
+            foreach ($request->file('idea_files') as $file) {
                 $filePaths[] = $file->store('ideas', 'public');
             }
         }

@@ -159,11 +159,11 @@ class LeaveController extends Controller
         if ($request->filled('leave_type_id')) {
             $query->where('leave_type_id', $request->leave_type_id);
         }
-        
+
         if ($request->filled('year')) {
             $query->whereYear('created_at', $request->year);
         }
-        
+
         if ($request->filled('month')) {
             $query->whereMonth('created_at', $request->month);
         }
