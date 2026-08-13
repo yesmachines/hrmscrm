@@ -39,11 +39,17 @@ class IdeaController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        $employee = Employee::where('user_id', $user->id)->first();
+        if (! $employee) {
+            return $this->errorResponse('Employee record not found.', 404);
+        }
+
         $validated = $request->validate([
-            'employee_id' => [
-                'required',
-                Rule::exists(Employee::class, 'id'),
-            ],
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'idea_files' => 'nullable|array',
@@ -58,7 +64,7 @@ class IdeaController extends Controller
         }
 
         $idea = Idea::create([
-            'employee_id' => $validated['employee_id'],
+            'employee_id' => $employee->id,
             'title' => $validated['title'],
             'description' => $validated['description'],
             'idea_files' => $filePaths,
