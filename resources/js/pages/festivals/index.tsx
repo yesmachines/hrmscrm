@@ -96,7 +96,9 @@ export default function FestivalsIndex({
                                             {row.shortcode}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
-                                            {row.start_date ? `${row.start_date} to ${row.end_date}` : 'Not set'}
+                                            {row.type === 'festival' || row.start_date === row.end_date
+                                                ? (row.start_date ?? 'Not set')
+                                                : (row.start_date ? `${row.start_date} to ${row.end_date}` : 'Not set')}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <span

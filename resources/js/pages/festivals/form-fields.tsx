@@ -51,6 +51,8 @@ export default function FestivalFormFields({
     countriesList = [],
     onCountriesChange,
 }: Props) {
+    const isHoliday = defaults.type === 'holiday';
+
     return (
         <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
             <div>
@@ -83,8 +85,8 @@ export default function FestivalFormFields({
                         defaultValue={defaults.type ?? 'festival'}
                         className={fieldClass}
                     >
-                        <option value="festival">Festival</option>
-                        <option value="holiday">Holiday</option>
+                        <option value="festival">Festival (Single Day)</option>
+                        <option value="holiday">Holiday (Date Range)</option>
                     </select>
                 </Field>
 
@@ -99,26 +101,33 @@ export default function FestivalFormFields({
                     </Field>
                 )}
 
-                <Field label="Start Date" name="start_date" error={errors.start_date}>
+                <Field
+                    label={isHoliday ? 'Start Date' : 'Date'}
+                    name="start_date"
+                    error={errors.start_date}
+                >
                     <Input
                         id="start_date"
                         name="start_date"
                         type="date"
+                        required
                         defaultValue={defaults.start_date ?? ''}
                     />
                 </Field>
 
-                <Field label="End Date" name="end_date" error={errors.end_date}>
-                    <Input
-                        id="end_date"
-                        name="end_date"
-                        type="date"
-                        defaultValue={defaults.end_date ?? ''}
-                    />
-                </Field>
+                {isHoliday && (
+                    <Field label="End Date" name="end_date" error={errors.end_date}>
+                        <Input
+                            id="end_date"
+                            name="end_date"
+                            type="date"
+                            required
+                            defaultValue={defaults.end_date ?? ''}
+                        />
+                    </Field>
+                )}
 
                 <Field label="Status" name="is_active" error={errors.is_active}>
-
                     <select
                         id="is_active"
                         name="is_active"
