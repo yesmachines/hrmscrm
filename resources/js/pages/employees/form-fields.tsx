@@ -471,12 +471,20 @@ export default function EmployeeProfileFormFields({
                     <select
                         id="nationality"
                         name="nationality"
-                        defaultValue={profileDefaults.nationality ?? ''}
+                        defaultValue={
+                            countries.find(
+                                (country) =>
+                                    country.name.toLowerCase() ===
+                                        profileDefaults.nationality?.toLowerCase() ||
+                                    String(country.id) ===
+                                        String(profileDefaults.nationality),
+                            )?.name ?? (profileDefaults.nationality ?? '')
+                        }
                         className={fieldClass}
                     >
                         <option value="">Select</option>
                         {countries.map((country) => (
-                            <option key={country.id} value={country.id}>
+                            <option key={country.id} value={country.name}>
                                 {country.name}
                             </option>
                         ))}

@@ -14,6 +14,7 @@ use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Employee;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,14 +29,14 @@ class EmployeeController extends Controller
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('emp_num', 'like', "%{$search}%")
-                      ->orWhere('employee_code', 'like', "%{$search}%")
-                      ->orWhere('designation', 'like', "%{$search}%")
-                      ->orWhere('division', 'like', "%{$search}%")
-                      ->orWhere('phone', 'like', "%{$search}%")
-                      ->orWhereHas('user', function ($q) use ($search) {
-                          $q->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
-                      });
+                        ->orWhere('employee_code', 'like', "%{$search}%")
+                        ->orWhere('designation', 'like', "%{$search}%")
+                        ->orWhere('division', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereHas('user', function ($q) use ($search) {
+                            $q->where('name', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%");
+                        });
                 });
             })
             ->orderByDesc('id')
@@ -43,9 +44,29 @@ class EmployeeController extends Controller
             ->withQueryString();
 
         $profiles = Employee::profilesFor($employees->getCollection());
+        $countryIds = $profiles->pluck('nationality')
+            ->filter(fn ($n) => $n !== null && is_numeric($n))
+            ->map(fn ($n) => (int) $n)
+            ->unique()
+            ->all();
+
+        $countryMap = $countryIds !== []
+            ? DB::connection('salescrm')
+                ->table('countries')
+                ->whereIn('id', $countryIds)
+                ->pluck('name', 'id')
+                ->all()
+            : [];
 
         $employees->setCollection(
-            $employees->getCollection()->map(function (Employee $employee) use ($profiles) {
+            $employees->getCollection()->map(function (Employee $employee) use ($profiles, $countryMap) {
+                $profile = $profiles->get($employee->id);
+                $profileData = $profile ? $profile->toArray() : null;
+
+                if ($profileData && ! empty($profileData['nationality']) && is_numeric($profileData['nationality'])) {
+                    $profileData['nationality'] = $countryMap[(int) $profileData['nationality']] ?? $profileData['nationality'];
+                }
+
                 return [
                     'id' => $employee->id,
                     'emp_num' => $employee->emp_num,
@@ -58,7 +79,7 @@ class EmployeeController extends Controller
                     'joining_date' => $employee->joining_date?->format('Y-m-d'),
                     'user' => $employee->user,
                     'department' => $employee->department,
-                    'profile' => $profiles->get($employee->id),
+                    'profile' => $profileData,
                 ];
             }),
         );
@@ -221,7 +242,7 @@ class EmployeeController extends Controller
      */
     private function countries(): array
     {
-        return \Illuminate\Support\Facades\DB::connection('salescrm')
+        return DB::connection('salescrm')
             ->table('countries')
             ->where('status', 1)
             ->orderBy('name')
@@ -252,6 +273,30 @@ class EmployeeController extends Controller
                 ->where('id', $employee->office_location_id)
                 ->first(['id', 'office_name', 'city'])
             : null;
+
+        $profilePayload = null;
+        if ($profile !== null) {
+            $nationality = $profile->nationality;
+            if ($nationality !== null && is_numeric($nationality)) {
+                $nationality = DB::connection('salescrm')
+                    ->table('countries')
+                    ->where('id', (int) $nationality)
+                    ->value('name') ?? $nationality;
+            }
+
+            $homeCountryName = null;
+            if ($profile->home_country !== null) {
+                $homeCountryName = DB::connection('salescrm')
+                    ->table('countries')
+                    ->where('id', (int) $profile->home_country)
+                    ->value('name');
+            }
+
+            $profilePayload = array_merge($profile->toArray(), [
+                'nationality' => $nationality,
+                'home_country_name' => $homeCountryName,
+            ]);
+        }
 
         return [
             'id' => $employee->id,
@@ -290,7 +335,7 @@ class EmployeeController extends Controller
                     'city' => $officeLocation->city,
                 ]
                 : null,
-            'profile' => $profile,
+            'profile' => $profilePayload,
         ];
     }
 }

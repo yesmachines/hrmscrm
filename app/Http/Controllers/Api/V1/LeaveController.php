@@ -94,16 +94,43 @@ class LeaveController extends Controller
         }
 
         $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
-        if (! $profile || ! $profile->home_country) {
+        if (! $profile) {
+            return $this->successResponse(['festivals' => [], 'holidays' => [], 'limit_reached' => false]);
+        }
+
+        $countryIds = [];
+
+        if (! empty($profile->home_country)) {
+            $countryIds[] = (int) $profile->home_country;
+        }
+
+        if (! empty($profile->nationality)) {
+            if (is_numeric($profile->nationality)) {
+                $countryIds[] = (int) $profile->nationality;
+            } else {
+                $matchedCountryId = DB::connection('salescrm')
+                    ->table('countries')
+                    ->where('name', 'like', $profile->nationality)
+                    ->value('id');
+                if ($matchedCountryId) {
+                    $countryIds[] = (int) $matchedCountryId;
+                }
+            }
+        }
+
+        $countryIds = array_values(array_unique($countryIds));
+
+        if (empty($countryIds)) {
             return $this->successResponse(['festivals' => [], 'holidays' => [], 'limit_reached' => false]);
         }
 
         $festivals = DB::table('festivals')
             ->join('festival_nationality', 'festivals.id', '=', 'festival_nationality.festival_id')
-            ->where('festival_nationality.country_id', $profile->home_country)
+            ->whereIn('festival_nationality.country_id', $countryIds)
             ->whereNull('festivals.deleted_at')
             ->where('festivals.is_active', true)
             ->select('festivals.id', 'festivals.name', 'festivals.type', 'festivals.shortcode', 'festivals.start_date', 'festivals.end_date')
+            ->distinct()
             ->get();
 
         $festivalLeaveType = LeaveType::where('leave_name', 'like', '%Festival%')->first();

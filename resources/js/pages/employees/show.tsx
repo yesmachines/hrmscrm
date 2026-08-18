@@ -20,6 +20,7 @@ type Profile = {
     emergency_relation: string | null;
     emergency_mobile: string | null;
     home_country: number | null;
+    home_country_name?: string | null;
     address_home: string | null;
     home_mobile: string | null;
     home_emergency_name: string | null;
@@ -91,7 +92,7 @@ function Section({
     return (
         <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-            <dl className="grid gap-4 sm:grid-cols-2">{children}</dl>
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</dl>
         </section>
     );
 }
@@ -175,15 +176,18 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
                 </Section>
 
                 <Section title="Personal profile">
-                    <Detail label="Gender" value={profile?.gender} />
+                    <Detail label="Gender" value={profile?.gender === 'M' ? 'Male' : profile?.gender === 'F' ? 'Female' : profile?.gender} />
                     <Detail label="Date of birth" value={profile?.dob_personal} />
                     <Detail
                         label="Marital status"
-                        value={profile?.marital_status}
+                        value={profile?.marital_status ? profile.marital_status.charAt(0).toUpperCase() + profile.marital_status.slice(1) : null}
                     />
                     <Detail label="Nationality" value={profile?.nationality} />
                     <Detail label="Religion" value={profile?.religion} />
                     <Detail label="Blood group" value={profile?.blood_group} />
+                </Section>
+
+                <Section title="Contact (UAE)">
                     <Detail
                         label="Personal email"
                         value={profile?.personal_email}
@@ -192,18 +196,68 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
                         label="Personal mobile"
                         value={profile?.personal_mobile}
                     />
-                    <Detail label="Address UAE" value={profile?.address_uae} />
+                    <Detail label="Address (UAE)" value={profile?.address_uae} />
+                    <Detail
+                        label="Emergency contact"
+                        value={profile?.emergency_contact_name}
+                    />
+                    <Detail
+                        label="Emergency relation"
+                        value={profile?.emergency_relation}
+                    />
+                    <Detail
+                        label="Emergency mobile"
+                        value={profile?.emergency_mobile}
+                    />
+                </Section>
+
+                <Section title="Home country">
+                    <Detail
+                        label="Home country"
+                        value={profile?.home_country_name ?? profile?.home_country}
+                    />
+                    <Detail
+                        label="Home mobile"
+                        value={profile?.home_mobile}
+                    />
+                    <Detail
+                        label="Home address"
+                        value={profile?.address_home}
+                    />
+                    <Detail
+                        label="Home emergency name"
+                        value={profile?.home_emergency_name}
+                    />
+                    <Detail
+                        label="Home emergency relation"
+                        value={profile?.home_emergency_relation}
+                    />
+                    <Detail
+                        label="Home emergency mobile"
+                        value={profile?.home_emergency_mobile}
+                    />
+                </Section>
+
+                <Section title="Visa & education">
                     <Detail
                         label="Visa type"
-                        value={profile?.visa_type}
+                        value={profile?.visa_type ? (profile.visa_type === 'workpermit' ? 'Work permit' : profile.visa_type.charAt(0).toUpperCase() + profile.visa_type.slice(1)) : null}
+                    />
+                    <Detail
+                        label="Visa from"
+                        value={profile?.visa_from}
+                    />
+                    <Detail
+                        label="Passport DOB"
+                        value={profile?.dob_passport}
+                    />
+                    <Detail
+                        label="Total experience"
+                        value={profile?.total_experience !== null && profile?.total_experience !== undefined ? `${profile.total_experience} years` : null}
                     />
                     <Detail
                         label="Highest education"
                         value={profile?.highest_education}
-                    />
-                    <Detail
-                        label="Total experience"
-                        value={profile?.total_experience}
                     />
                 </Section>
             </div>
