@@ -56,12 +56,14 @@ export default function EmployeesEdit({
     organisations,
     officeLocations,
     roles,
+    countries,
 }: {
     employee: Employee;
     departments: DepartmentOption[];
     organisations: OrganisationOption[];
     officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
+    countries: { id: number; name: string }[];
 }) {
     setLayoutProps({
         breadcrumbs: [
@@ -100,6 +102,7 @@ export default function EmployeesEdit({
                                 organisations={organisations}
                                 officeLocations={officeLocations}
                                 roles={roles}
+                                countries={countries}
                                 defaults={employee}
                                 isEdit
                             />

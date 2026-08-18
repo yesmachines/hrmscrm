@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 type Props = {
-    viewHref: NonNullable<InertiaLinkProps['href']>;
+    viewHref?: InertiaLinkProps['href'];
     editHref: NonNullable<InertiaLinkProps['href']>;
     destroyForm: {
         action: string;
@@ -49,11 +49,13 @@ export default function RowActionsMenu({
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-40">
-                    <DropdownMenuItem asChild>
-                        <Link href={viewHref} prefetch>
-                            View
-                        </Link>
-                    </DropdownMenuItem>
+                    {viewHref && (
+                        <DropdownMenuItem asChild>
+                            <Link href={viewHref} prefetch>
+                                View
+                            </Link>
+                        </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem asChild>
                         <Link href={editHref} prefetch>
                             Edit

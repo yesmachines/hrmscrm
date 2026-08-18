@@ -32,11 +32,13 @@ export default function EmployeesCreate({
     organisations,
     officeLocations,
     roles,
+    countries,
 }: {
     departments: DepartmentOption[];
     organisations: OrganisationOption[];
     officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
+    countries: { id: number; name: string }[];
 }) {
     return (
         <>
@@ -57,6 +59,7 @@ export default function EmployeesCreate({
                                 organisations={organisations}
                                 officeLocations={officeLocations}
                                 roles={roles}
+                                countries={countries}
                             />
 
                             <div className="flex items-center justify-end gap-3">

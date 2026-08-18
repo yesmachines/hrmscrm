@@ -77,6 +77,7 @@ type Props = {
     organisations?: OrganisationOption[];
     officeLocations?: OfficeLocationOption[];
     roles?: RoleOption[];
+    countries?: { id: number; name: string }[];
     isEdit?: boolean;
 };
 
@@ -136,6 +137,7 @@ export default function EmployeeProfileFormFields({
     organisations = [],
     officeLocations = [],
     roles = [],
+    countries = [],
     isEdit = false,
 }: Props) {
     const profile = (defaults as EmployeeFormValues & { profile?: EmployeeFormValues })
@@ -466,11 +468,19 @@ export default function EmployeeProfileFormFields({
                     name="nationality"
                     error={errors.nationality}
                 >
-                    <Input
+                    <select
                         id="nationality"
                         name="nationality"
                         defaultValue={profileDefaults.nationality ?? ''}
-                    />
+                        className={fieldClass}
+                    >
+                        <option value="">Select</option>
+                        {countries.map((country) => (
+                            <option key={country.id} value={country.id}>
+                                {country.name}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
                 <Field label="Religion" name="religion" error={errors.religion}>
                     <Input
@@ -568,16 +578,23 @@ export default function EmployeeProfileFormFields({
 
             <Section title="Home country">
                 <Field
-                    label="Home country code"
+                    label="Home country"
                     name="home_country"
                     error={errors.home_country}
                 >
-                    <Input
+                    <select
                         id="home_country"
-                        type="number"
                         name="home_country"
                         defaultValue={profileDefaults.home_country ?? ''}
-                    />
+                        className={fieldClass}
+                    >
+                        <option value="">Select</option>
+                        {countries.map((country) => (
+                            <option key={country.id} value={country.id}>
+                                {country.name}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
                 <Field
                     label="Home mobile"

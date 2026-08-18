@@ -21,8 +21,23 @@ class EmployeeController extends Controller
 {
     public function index(): Response
     {
+        $search = request('search');
+
         $employees = Employee::query()
             ->with(['user:id,name,email', 'department:id,name'])
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('emp_num', 'like', "%{$search}%")
+                      ->orWhere('employee_code', 'like', "%{$search}%")
+                      ->orWhere('designation', 'like', "%{$search}%")
+                      ->orWhere('division', 'like', "%{$search}%")
+                      ->orWhere('phone', 'like', "%{$search}%")
+                      ->orWhereHas('user', function ($q) use ($search) {
+                          $q->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                      });
+                });
+            })
             ->orderByDesc('id')
             ->paginate(10)
             ->withQueryString();
@@ -60,6 +75,7 @@ class EmployeeController extends Controller
             'organisations' => $this->organisations(),
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
+            'countries' => $this->countries(),
         ]);
     }
 
@@ -98,6 +114,7 @@ class EmployeeController extends Controller
             'organisations' => $this->organisations(),
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
+            'countries' => $this->countries(),
         ]);
     }
 
@@ -197,6 +214,20 @@ class EmployeeController extends Controller
     private function roles(): array
     {
         return SalesCrmRoles::employeeRoleOptions();
+    }
+
+    /**
+     * @return array<int, object>
+     */
+    private function countries(): array
+    {
+        return \Illuminate\Support\Facades\DB::connection('salescrm')
+            ->table('countries')
+            ->where('status', 1)
+            ->orderBy('name')
+            ->select('id', 'name')
+            ->get()
+            ->toArray();
     }
 
     /**

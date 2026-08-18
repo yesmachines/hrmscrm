@@ -18,6 +18,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.leaves.index');
         Route::get('leaves/meta', [LeaveController::class, 'meta'])->name('api.v1.leaves.meta');
+        Route::get('leaves/festivals', [LeaveController::class, 'festivals'])->name('api.v1.leaves.festivals');
         Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.leaves.store');
     });
 });

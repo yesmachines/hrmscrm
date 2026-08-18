@@ -23,6 +23,7 @@ import { index as leaveRequestsIndex } from '@/actions/App/Http/Controllers/Leav
 import { index as leaveTypesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveTypeController';
 import { index as officeLocationsIndex } from '@/actions/App/Http/Controllers/Organisation/OfficeLocationController';
 import { index as organisationsIndex } from '@/actions/App/Http/Controllers/Organisation/OrganisationController';
+import { index as festivalsIndex } from '@/actions/App/Http/Controllers/Leave/FestivalController';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import {
@@ -120,6 +121,11 @@ const mainNavItems: NavItem[] = [
                 title: 'Leave policies',
                 href: leavePoliciesIndex(),
                 icon: ClipboardList,
+            },
+            {
+                title: 'Festivals',
+                href: festivalsIndex(),
+                icon: CalendarDays,
             },
         ],
     },

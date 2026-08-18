@@ -1,73 +1,47 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { Plus, Search } from 'lucide-react';
-import { useState } from 'react';
-import EmployeeController from '@/actions/App/Http/Controllers/Employees/EmployeeController';
+import { Head, Link } from '@inertiajs/react';
+import { Plus } from 'lucide-react';
+import FestivalController from '@/actions/App/Http/Controllers/Leave/FestivalController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
 
-type EmployeeRow = {
+type FestivalRow = {
     id: number;
-    emp_num: string;
-    designation: string;
-    division: string;
-    phone: string | null;
-    employment_status: string | null;
-    status: number;
-    user: { id: number; name: string; email: string } | null;
-    department: { id: number; name: string } | null;
-    profile: { id: number; nationality: string | null } | null;
+    name: string;
+    is_active: number;
+    type: string;
+    shortcode: string;
+    start_date: string | null;
+    end_date: string | null;
 };
 
-type PaginatedEmployees = {
-    data: EmployeeRow[];
+type PaginatedFestivals = {
+    data: FestivalRow[];
     links: { url: string | null; label: string; active: boolean }[];
 };
 
-export default function EmployeesIndex({
-    employees,
+export default function FestivalsIndex({
+    festivals,
 }: {
-    employees: PaginatedEmployees;
+    festivals: PaginatedFestivals;
 }) {
-    const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-    const [search, setSearch] = useState(searchParams.get('search') || '');
-
     return (
         <>
-            <Head title="Employees" />
+            <Head title="Festivals" />
 
             <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
-                        title="Employees"
-                        description="Manage employees and their profiles"
+                        title="Festivals"
+                        description="Manage festivals and their dates"
                     />
-                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                        <form 
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                router.get(EmployeeController.index.url(), { search }, { preserveState: true });
-                            }} 
-                            className="relative flex-1 sm:w-64"
-                        >
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                type="text"
-                                placeholder="Search employees..."
-                                className="pl-9 bg-white"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                        </form>
-                        <Button asChild>
-                            <Link href={EmployeeController.create.url()} prefetch>
-                                <Plus className="size-4" />
-                                Add employee
-                            </Link>
-                        </Button>
-                    </div>
+                    <Button asChild>
+                        <Link href={FestivalController.create.url()} prefetch>
+                            <Plus className="size-4" />
+                            Add festival
+                        </Link>
+                    </Button>
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
@@ -75,12 +49,12 @@ export default function EmployeesIndex({
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
-                                <th className="px-4 py-3 font-medium">Emp #</th>
-                                <th className="hidden px-4 py-3 font-medium md:table-cell">
-                                    Designation
+                                <th className="px-4 py-3 font-medium">Type</th>
+                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                    Shortcode
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
-                                    Division
+                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                    Dates
                                 </th>
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     Status
@@ -91,15 +65,15 @@ export default function EmployeesIndex({
                             </tr>
                         </thead>
                         <tbody>
-                            {employees.data.length === 0 ? (
+                            {festivals.data.length === 0 ? (
                                 <tr>
                                     <td
                                         colSpan={6}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
-                                        No employees found.{' '}
+                                        No festivals found.{' '}
                                         <Link
-                                            href={EmployeeController.create.url()}
+                                            href={FestivalController.create.url()}
                                             className="font-medium text-primary hover:underline"
                                         >
                                             Create one
@@ -107,53 +81,47 @@ export default function EmployeesIndex({
                                     </td>
                                 </tr>
                             ) : (
-                                employees.data.map((row) => (
+                                festivals.data.map((row) => (
                                     <tr
                                         key={row.id}
                                         className="border-b border-border last:border-0"
                                     >
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium">
-                                                {row.user?.name ?? '—'}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {row.user?.email}
-                                            </div>
+                                        <td className="px-4 py-3 font-medium">
+                                            {row.name}
                                         </td>
-                                        <td className="px-4 py-3">{row.emp_num}</td>
-                                        <td className="hidden px-4 py-3 md:table-cell">
-                                            {row.designation}
+                                        <td className="px-4 py-3 capitalize">
+                                            {row.type}
                                         </td>
-                                        <td className="hidden px-4 py-3 lg:table-cell">
-                                            {row.division}
+                                        <td className="hidden px-4 py-3 sm:table-cell font-mono text-xs">
+                                            {row.shortcode}
+                                        </td>
+                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                            {row.start_date ? `${row.start_date} to ${row.end_date}` : 'Not set'}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <span
                                                 className={
-                                                    row.status === 1
+                                                    row.is_active === 1
                                                         ? 'text-primary'
                                                         : 'text-muted-foreground'
                                                 }
                                             >
-                                                {row.status === 1
+                                                {row.is_active === 1
                                                     ? 'Active'
                                                     : 'Inactive'}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
                                             <RowActionsMenu
-                                                viewHref={EmployeeController.show.url(
+                                                editHref={FestivalController.edit.url(
                                                     row.id,
                                                 )}
-                                                editHref={EmployeeController.edit.url(
+                                                destroyForm={FestivalController.destroy.form(
                                                     row.id,
                                                 )}
-                                                destroyForm={EmployeeController.destroy.form(
-                                                    row.id,
-                                                )}
-                                                deleteTitle="Delete employee?"
-                                                deleteDescription={`This will permanently delete ${row.user?.name ?? 'this employee'}. This cannot be undone.`}
-                                                deleteConfirmLabel="Delete employee"
+                                                deleteTitle="Delete festival?"
+                                                deleteDescription={`This will permanently delete ${row.name}. This cannot be undone.`}
+                                                deleteConfirmLabel="Delete festival"
                                             />
                                         </td>
                                     </tr>
@@ -163,9 +131,9 @@ export default function EmployeesIndex({
                     </table>
                 </div>
 
-                {employees.links.length > 3 && (
+                {festivals.links.length > 3 && (
                     <div className="flex flex-wrap gap-2">
-                        {employees.links.map((link, index) =>
+                        {festivals.links.map((link, index) =>
                             link.url ? (
                                 <Link
                                     key={index}
@@ -196,9 +164,12 @@ export default function EmployeesIndex({
     );
 }
 
-EmployeesIndex.layout = {
+FestivalsIndex.layout = {
     breadcrumbs: [
         { title: 'Dashboard', href: dashboard() },
-        { title: 'Employees', href: EmployeeController.index.url() },
+        {
+            title: 'Festivals',
+            href: FestivalController.index.url(),
+        },
     ],
 };

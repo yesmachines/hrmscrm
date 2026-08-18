@@ -5,6 +5,7 @@ use App\Http\Controllers\Documents\DocumentTemplateController;
 use App\Http\Controllers\Documents\DocumentTypeController;
 use App\Http\Controllers\Employees\EmployeeController;
 use App\Http\Controllers\IdeaController;
+use App\Http\Controllers\Leave\FestivalController;
 use App\Http\Controllers\Leave\LeaveBalanceController;
 use App\Http\Controllers\Leave\LeaveHistoryController;
 use App\Http\Controllers\Leave\LeavePolicyController;
@@ -32,6 +33,7 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('document-templates', DocumentTemplateController::class);
     Route::resource('leave-types', LeaveTypeController::class);
     Route::resource('leave-policies', LeavePolicyController::class);
+    Route::resource('festivals', FestivalController::class);
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'show', 'update']);
     Route::resource('leave-balances', LeaveBalanceController::class);
     Route::resource('leave-histories', LeaveHistoryController::class);
