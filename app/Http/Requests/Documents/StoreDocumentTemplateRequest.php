@@ -29,7 +29,7 @@ class StoreDocumentTemplateRequest extends FormRequest
         return [
             'document_type_id' => ['required', 'integer', Rule::exists(DocumentType::class, 'id')],
             'template_name' => ['required', 'string', 'max:255'],
-            'template_code' => ['required', 'string', 'max:255'],
+            'template_code' => ['required', 'string'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
         ];
     }

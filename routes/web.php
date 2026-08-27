@@ -1,8 +1,12 @@
 <?php
 
 use App\Http\Controllers\Documents\DocumentCategoryController;
+use App\Http\Controllers\Documents\DocumentReminderController;
 use App\Http\Controllers\Documents\DocumentTemplateController;
 use App\Http\Controllers\Documents\DocumentTypeController;
+use App\Http\Controllers\Documents\EmployeeDocumentController;
+use App\Http\Controllers\Documents\HrPolicyController;
+use App\Http\Controllers\Documents\LetterRequestController;
 use App\Http\Controllers\Employees\EmployeeController;
 use App\Http\Controllers\IdeaController;
 use App\Http\Controllers\Leave\FestivalController;
@@ -28,9 +32,26 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('employees', EmployeeController::class);
     Route::resource('organisations', OrganisationController::class);
     Route::resource('office-locations', OfficeLocationController::class);
+
+    // Documents CRM & Config
     Route::resource('document-categories', DocumentCategoryController::class);
     Route::resource('document-types', DocumentTypeController::class);
     Route::resource('document-templates', DocumentTemplateController::class);
+
+    Route::resource('employee-documents', EmployeeDocumentController::class);
+    Route::post('employee-documents/{employee_document}/approve', [EmployeeDocumentController::class, 'approve'])->name('employee-documents.approve');
+    Route::post('employee-documents/{employee_document}/reject', [EmployeeDocumentController::class, 'reject'])->name('employee-documents.reject');
+
+    Route::get('letter-requests', [LetterRequestController::class, 'index'])->name('letter-requests.index');
+    Route::get('letter-requests/{letter_request}', [LetterRequestController::class, 'show'])->name('letter-requests.show');
+    Route::post('letter-requests/{letter_request}/approve', [LetterRequestController::class, 'approve'])->name('letter-requests.approve');
+    Route::post('letter-requests/{letter_request}/reject', [LetterRequestController::class, 'reject'])->name('letter-requests.reject');
+
+    Route::get('hr-policies', [HrPolicyController::class, 'index'])->name('hr-policies.index');
+    Route::post('hr-policies', [HrPolicyController::class, 'store'])->name('hr-policies.store');
+
+    Route::get('document-reminders', [DocumentReminderController::class, 'index'])->name('document-reminders.index');
+
     Route::resource('leave-types', LeaveTypeController::class);
     Route::resource('leave-policies', LeavePolicyController::class);
     Route::resource('festivals', FestivalController::class);

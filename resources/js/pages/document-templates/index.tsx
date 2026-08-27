@@ -89,7 +89,9 @@ export default function DocumentTemplatesIndex({
                                             {row.template_name}
                                         </td>
                                         <td className="px-4 py-3">
-                                            {row.template_code}
+                                            <code className="max-w-[200px] truncate block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground" title={row.template_code}>
+                                                {row.template_code.length > 50 ? `${row.template_code.slice(0, 50)}...` : row.template_code}
+                                            </code>
                                         </td>
                                         <td className="hidden px-4 py-3 md:table-cell">
                                             {row.document_type?.name ?? '—'}

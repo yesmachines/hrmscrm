@@ -1,14 +1,18 @@
 import { Link } from '@inertiajs/react';
 import {
+    AlertTriangle,
     Building2,
     CalendarDays,
     ClipboardList,
     FileStack,
+    FileText,
     Files,
     FolderTree,
     LayoutGrid,
     Lightbulb,
+    Mail,
     MapPin,
+    Shield,
     Users,
 } from 'lucide-react';
 import { index as documentCategoriesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentCategoryController';
@@ -73,8 +77,28 @@ const mainNavItems: NavItem[] = [
     {
         title: 'Documents',
         icon: Files,
-        href: documentCategoriesIndex(),
+        href: '/employee-documents',
         items: [
+            {
+                title: 'All Documents',
+                href: '/employee-documents',
+                icon: FileText,
+            },
+            {
+                title: 'Letter Requests',
+                href: '/letter-requests',
+                icon: Mail,
+            },
+            {
+                title: 'HR Policies',
+                href: '/hr-policies',
+                icon: Shield,
+            },
+            {
+                title: 'Expiry Reminders',
+                href: '/document-reminders',
+                icon: AlertTriangle,
+            },
             {
                 title: 'Categories',
                 href: documentCategoriesIndex(),

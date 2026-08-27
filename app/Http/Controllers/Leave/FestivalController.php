@@ -7,9 +7,9 @@ use App\Http\Requests\Leave\StoreFestivalRequest;
 use App\Http\Requests\Leave\UpdateFestivalRequest;
 use App\Models\Festival;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Facades\DB;
 
 class FestivalController extends Controller
 {
@@ -48,8 +48,8 @@ class FestivalController extends Controller
 
         $festival = Festival::query()->create($payload);
 
-        if (!empty($countries)) {
-            $insertData = array_map(fn($countryId) => [
+        if (! empty($countries)) {
+            $insertData = array_map(fn ($countryId) => [
                 'festival_id' => $festival->id,
                 'country_id' => (int) $countryId,
                 'created_at' => now(),
@@ -92,8 +92,8 @@ class FestivalController extends Controller
         $festival->update($payload);
 
         DB::table('festival_nationality')->where('festival_id', $festival->id)->delete();
-        if (!empty($countries)) {
-            $insertData = array_map(fn($countryId) => [
+        if (! empty($countries)) {
+            $insertData = array_map(fn ($countryId) => [
                 'festival_id' => $festival->id,
                 'country_id' => (int) $countryId,
                 'created_at' => now(),

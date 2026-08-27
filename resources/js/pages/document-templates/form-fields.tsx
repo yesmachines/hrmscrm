@@ -99,19 +99,6 @@ export default function DocumentTemplateFormFields({
                     />
                 </Field>
 
-                <Field
-                    label="Template code"
-                    name="template_code"
-                    error={errors.template_code}
-                >
-                    <Input
-                        id="template_code"
-                        name="template_code"
-                        required
-                        defaultValue={defaults.template_code ?? ''}
-                    />
-                </Field>
-
                 <Field label="Status" name="status" error={errors.status}>
                     <select
                         id="status"
@@ -128,6 +115,53 @@ export default function DocumentTemplateFormFields({
                         <option value="0">Inactive</option>
                     </select>
                 </Field>
+
+                <div className="sm:col-span-2">
+                    <Field
+                        label="Template HTML Code"
+                        name="template_code"
+                        error={errors.template_code}
+                    >
+                        <div className="space-y-2">
+                            <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                                <span className="font-medium text-foreground">Available Placeholders:</span>
+                                {[
+                                    '{{company_name}}',
+                                    '{{company_address}}',
+                                    '{{employee_name}}',
+                                    '{{employee_code}}',
+                                    '{{designation}}',
+                                    '{{department}}',
+                                    '{{joining_date}}',
+                                    '{{basic_salary}}',
+                                    '{{gross_salary}}',
+                                    '{{purpose}}',
+                                    '{{to_address}}',
+                                    '{{issue_date}}',
+                                    '{{document_number}}',
+                                ].map((tag) => (
+                                    <code
+                                        key={tag}
+                                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground cursor-pointer hover:bg-muted/80"
+                                        title="Click to copy placeholder"
+                                        onClick={() => navigator.clipboard?.writeText(tag)}
+                                    >
+                                        {tag}
+                                    </code>
+                                ))}
+                            </div>
+                            <textarea
+                                id="template_code"
+                                name="template_code"
+                                required
+                                rows={14}
+                                defaultValue={defaults.template_code ?? ''}
+                                placeholder="<div style='font-family: Arial...'>&#10;  <h2>{{company_name}}</h2>&#10;  <p>This is to certify that {{employee_name}}...</p>&#10;</div>"
+                                className="w-full rounded-xl border border-input bg-slate-950 p-4 font-mono text-xs text-slate-100 shadow-inner outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                            />
+                        </div>
+                    </Field>
+                </div>
             </div>
         </section>
     );

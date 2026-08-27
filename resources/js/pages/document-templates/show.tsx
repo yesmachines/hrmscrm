@@ -77,7 +77,7 @@ export default function DocumentTemplatesShow({
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title={template.template_name}
-                        description={template.template_code}
+                        description={template.document_type ? `Linked to ${template.document_type.name}` : 'Document Template'}
                     />
                     <div className="flex gap-2">
                         <Button variant="outline" asChild>
@@ -107,10 +107,6 @@ export default function DocumentTemplatesShow({
                         value={template.template_name}
                     />
                     <Detail
-                        label="Template code"
-                        value={template.template_code}
-                    />
-                    <Detail
                         label="Document type"
                         value={
                             template.document_type
@@ -123,6 +119,28 @@ export default function DocumentTemplatesShow({
                         value={template.status === 1 ? 'Active' : 'Inactive'}
                     />
                 </Section>
+
+                <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-sm font-semibold tracking-tight">Template Preview</h3>
+                            <p className="text-xs text-muted-foreground">Live rendering of HTML layout with sample placeholders</p>
+                        </div>
+                    </div>
+                    <div
+                        className="rounded-xl border border-slate-200 bg-slate-50/50 p-6 min-h-[250px]"
+                        dangerouslySetInnerHTML={{ __html: template.template_code }}
+                    />
+                </section>
+
+                <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold tracking-tight">HTML Source Code</h3>
+                    </div>
+                    <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 font-mono text-xs text-slate-100 max-h-[350px]">
+                        <code>{template.template_code}</code>
+                    </pre>
+                </section>
             </div>
         </>
     );

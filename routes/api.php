@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\IdeaController;
 use App\Http\Controllers\Api\V1\LeaveController;
 use Illuminate\Support\Facades\Route;
@@ -20,5 +21,17 @@ Route::prefix('v1')->group(function () {
         Route::get('leaves/meta', [LeaveController::class, 'meta'])->name('api.v1.leaves.meta');
         Route::get('leaves/festivals', [LeaveController::class, 'festivals'])->name('api.v1.leaves.festivals');
         Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.leaves.store');
+
+        // Documents Endpoints (Figma Mobile App)
+        Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.documents.categories');
+        Route::get('documents/types', [DocumentController::class, 'types'])->name('api.v1.documents.types');
+        Route::get('documents', [DocumentController::class, 'index'])->name('api.v1.documents.index');
+        Route::post('documents', [DocumentController::class, 'store'])->name('api.v1.documents.store');
+        Route::get('documents/policies', [DocumentController::class, 'policies'])->name('api.v1.documents.policies');
+        Route::get('documents/letters', [DocumentController::class, 'letters'])->name('api.v1.documents.letters');
+        Route::post('documents/letters', [DocumentController::class, 'requestLetter'])->name('api.v1.documents.request-letter');
+        Route::get('documents/letters/{id}', [DocumentController::class, 'letterDetails'])->name('api.v1.documents.letter-details');
+        Route::get('documents/{id}', [DocumentController::class, 'show'])->name('api.v1.documents.show');
+        Route::put('documents/{id}', [DocumentController::class, 'update'])->name('api.v1.documents.update');
     });
 });

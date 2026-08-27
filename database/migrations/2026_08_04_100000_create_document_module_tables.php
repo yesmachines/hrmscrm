@@ -26,7 +26,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('document_type_id')->constrained('document_types')->cascadeOnDelete();
             $table->string('template_name');
-            $table->string('template_code');
+            $table->longText('template_code');
             $table->tinyInteger('status')->default(1);
         });
 
