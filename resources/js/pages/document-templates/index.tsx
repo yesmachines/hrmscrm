@@ -85,28 +85,38 @@ export default function DocumentTemplatesIndex({
                                         key={row.id}
                                         className="border-b border-border last:border-0"
                                     >
-                                        <td className="px-4 py-3 font-medium">
-                                            {row.template_name}
+                                        <td className="px-4 py-3 font-medium text-foreground">
+                                            <Link
+                                                href={DocumentTemplateController.show.url(row.id)}
+                                                className="hover:text-primary hover:underline font-semibold"
+                                            >
+                                                {row.template_name}
+                                            </Link>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <code className="max-w-[200px] truncate block rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground" title={row.template_code}>
-                                                {row.template_code.length > 50 ? `${row.template_code.slice(0, 50)}...` : row.template_code}
-                                            </code>
+                                            <div className="flex items-center gap-2">
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                                    HTML Template
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    ({row.template_code ? `${row.template_code.length} chars` : 'empty'})
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="hidden px-4 py-3 md:table-cell">
-                                            {row.document_type?.name ?? '—'}
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                                {row.document_type?.name ?? '—'}
+                                            </span>
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <span
-                                                className={
+                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                                                     row.status === 1
-                                                        ? 'text-primary'
-                                                        : 'text-muted-foreground'
-                                                }
+                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                        : 'bg-neutral-100 text-neutral-600 border border-neutral-200'
+                                                }`}
                                             >
-                                                {row.status === 1
-                                                    ? 'Active'
-                                                    : 'Inactive'}
+                                                {row.status === 1 ? 'Active' : 'Inactive'}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
