@@ -44,4 +44,9 @@ class DocumentType extends Model
     {
         return $this->hasMany(DocumentTemplate::class);
     }
+
+    public function documentTemplates(): HasMany
+    {
+        return $this->hasMany(DocumentTemplate::class);
+    }
 }

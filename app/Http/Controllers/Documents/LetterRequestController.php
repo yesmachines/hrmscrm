@@ -142,17 +142,18 @@ class LetterRequestController extends Controller
         }
 
         $details = $doc->requestDetails->pluck('field_value', 'field_key')->all();
-        $employee?->loadMissing(['user', 'department', 'organisation', 'profile']);
+        $employee?->loadMissing(['user', 'department', 'organisation']);
+        $profile = $employee?->profile();
 
         $replacements = [
-            '{{company_name}}' => $employee?->organisation?->name ?? config('app.name', 'HRMS'),
-            '{{company_address}}' => $employee?->organisation?->address ?? 'Dubai, United Arab Emirates',
-            '{{company_phone}}' => $employee?->organisation?->phone ?? '+971 4 000 0000',
-            '{{company_email}}' => $employee?->organisation?->email ?? 'hr@company.com',
+            '{{company_name}}' => $employee?->organisation?->org_name ?? config('app.name', 'HRMS'),
+            '{{company_address}}' => 'Dubai, United Arab Emirates',
+            '{{company_phone}}' => '+971 4 000 0000',
+            '{{company_email}}' => 'hr@company.com',
             '{{employee_name}}' => $employee?->user?->name ?? "Employee #{$doc->employee_id}",
             '{{employee_code}}' => $employee?->emp_num ?? "EMP-{$doc->employee_id}",
-            '{{passport_number}}' => $employee?->profile?->passport_number ?? '—',
-            '{{emirates_id}}' => $employee?->profile?->emirates_id ?? '—',
+            '{{passport_number}}' => '—',
+            '{{emirates_id}}' => '—',
             '{{designation}}' => $details['visa_designation'] ?? ($employee?->designation ?? 'Employee'),
             '{{department}}' => $employee?->department?->name ?? 'General',
             '{{joining_date}}' => $employee?->joining_date ? Carbon::parse($employee->joining_date)->format('d M Y') : '—',
