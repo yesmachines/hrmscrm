@@ -35,7 +35,7 @@ class LeaveBalanceController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
+            'employee_id' => 'required|exists:salescrm.employees,id',
             'leave_type_id' => 'required|exists:leave_types,id',
             'year' => 'required|integer|min:2000',
             'allocated' => 'required|numeric|min:0',
@@ -64,7 +64,7 @@ class LeaveBalanceController extends Controller
     public function update(Request $request, LeaveBalance $leave_balance)
     {
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
+            'employee_id' => 'required|exists:salescrm.employees,id',
             'leave_type_id' => 'required|exists:leave_types,id',
             'year' => 'required|integer|min:2000',
             'allocated' => 'required|numeric|min:0',

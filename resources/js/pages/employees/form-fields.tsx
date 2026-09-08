@@ -334,18 +334,6 @@ export default function EmployeeProfileFormFields({
                     </select>
                 </Field>
                 <Field
-                    label="Designation ID"
-                    name="designation_id"
-                    error={errors.designation_id}
-                >
-                    <Input
-                        id="designation_id"
-                        type="number"
-                        name="designation_id"
-                        defaultValue={defaults.designation_id ?? ''}
-                    />
-                </Field>
-                <Field
                     label="Joining date"
                     name="joining_date"
                     error={errors.joining_date}
