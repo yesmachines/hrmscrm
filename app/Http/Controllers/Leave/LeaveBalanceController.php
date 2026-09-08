@@ -14,7 +14,7 @@ class LeaveBalanceController extends Controller
     public function index()
     {
         $balances = LeaveBalance::with([
-            'employee:id,user_id,employee_code',
+            'employee:id,user_id,emp_num,employee_code',
             'employee.user:id,name',
             'leaveType:id,leave_name',
         ])->orderBy('id', 'desc')->paginate(15);
@@ -27,7 +27,7 @@ class LeaveBalanceController extends Controller
     public function create()
     {
         return Inertia::render('leave-balances/create', [
-            'employees' => Employee::with('user:id,name')->select('id', 'user_id', 'employee_code')->get(),
+            'employees' => Employee::with('user:id,name')->select('id', 'user_id', 'emp_num', 'employee_code')->orderBy('id')->get(),
             'leaveTypes' => LeaveType::select('id', 'leave_name')->get(),
         ]);
     }
@@ -56,7 +56,7 @@ class LeaveBalanceController extends Controller
     {
         return Inertia::render('leave-balances/edit', [
             'leave_balance' => $leave_balance,
-            'employees' => Employee::with('user:id,name')->select('id', 'user_id', 'employee_code')->get(),
+            'employees' => Employee::with('user:id,name')->select('id', 'user_id', 'emp_num', 'employee_code')->orderBy('id')->get(),
             'leaveTypes' => LeaveType::select('id', 'leave_name')->get(),
         ]);
     }

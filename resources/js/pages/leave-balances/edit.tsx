@@ -57,7 +57,7 @@ export default function LeaveBalancesEdit({ leave_balance, employees, leaveTypes
                                     <option value="">Select Employee</option>
                                     {employees.map((emp) => (
                                         <option key={emp.id} value={emp.id}>
-                                            {emp.user?.name} ({emp.employee_code})
+                                            {emp.user?.name ?? 'Unknown'}
                                         </option>
                                     ))}
                                 </select>

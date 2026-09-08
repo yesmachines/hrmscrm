@@ -18,6 +18,7 @@ type LeaveBalanceRow = {
     employee: {
         id: number;
         user: { name: string } | null;
+        emp_num?: string | null;
         employee_code: string | null;
     } | null;
     leave_type: {
@@ -92,7 +93,8 @@ export default function LeaveBalancesIndex({ balances }: { balances: PaginatedBa
                                                 {row.employee?.user?.name ?? 'Unknown'}
                                             </div>
                                             <div className="text-xs text-muted-foreground">
-                                                {row.employee?.employee_code}
+                                                {row.employee?.employee_code ||
+                                                    row.employee?.emp_num}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-foreground font-medium">
