@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Designation\DesignationController;
 use App\Http\Controllers\Documents\DocumentCategoryController;
 use App\Http\Controllers\Documents\DocumentReminderController;
 use App\Http\Controllers\Documents\DocumentTemplateController;
@@ -30,6 +31,7 @@ Route::get('/', function () {
 Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::resource('employees', EmployeeController::class);
+    Route::resource('designations', DesignationController::class);
     Route::resource('organisations', OrganisationController::class);
     Route::resource('office-locations', OfficeLocationController::class);
 

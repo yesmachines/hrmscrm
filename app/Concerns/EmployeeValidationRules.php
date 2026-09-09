@@ -2,6 +2,7 @@
 
 namespace App\Concerns;
 
+use App\Models\Designation;
 use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Department;
@@ -172,6 +173,22 @@ trait EmployeeValidationRules
             'has_report',
             'department_id',
         ]));
+
+        if (! empty($crmEmployee['designation_id']) && empty($crmEmployee['designation'])) {
+            $designationModel = Designation::query()->find($crmEmployee['designation_id']);
+            if ($designationModel) {
+                $crmEmployee['designation'] = $designationModel->title;
+            }
+        } elseif (! empty($crmEmployee['designation']) && empty($crmEmployee['designation_id'])) {
+            $matchedDesignation = Designation::query()
+                ->where('title', $crmEmployee['designation'])
+                ->orWhere('shortcode', $crmEmployee['designation'])
+                ->first();
+            if ($matchedDesignation) {
+                $crmEmployee['designation_id'] = $matchedDesignation->id;
+                $crmEmployee['designation'] = $matchedDesignation->title;
+            }
+        }
 
         if ($this->hasFile('image_url')) {
             $crmEmployee['image_url'] = $this->file('image_url')->store('employees', 'public');

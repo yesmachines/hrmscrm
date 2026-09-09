@@ -27,13 +27,13 @@ export default function FestivalCreate({
 
     return (
         <>
-            <Head title="Create festival" />
+            <Head title="Create festival or holiday" />
 
             <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
-                        title="Create festival"
-                        description="Add a new festival to the system"
+                        title="Create festival or holiday"
+                        description="Add a new festival or holiday to the system"
                     />
                     <Button variant="outline" asChild>
                         <Link href={FestivalController.index.url()} prefetch>
@@ -63,7 +63,7 @@ export default function FestivalCreate({
 
                     <div className="flex justify-end">
                         <Button type="submit" disabled={processing}>
-                            Create festival
+                            Create festival or holiday
                         </Button>
                     </div>
                 </form>
@@ -75,7 +75,7 @@ export default function FestivalCreate({
 FestivalCreate.layout = {
     breadcrumbs: [
         { title: 'Dashboard', href: dashboard() },
-        { title: 'Festivals', href: FestivalController.index.url() },
+        { title: 'Festivals & Holidays', href: FestivalController.index.url() },
         { title: 'Create', href: FestivalController.create.url() },
     ],
 };

@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import {
     AlertTriangle,
+    Briefcase,
     Building2,
     CalendarDays,
     ClipboardList,
@@ -15,6 +16,7 @@ import {
     Shield,
     Users,
 } from 'lucide-react';
+import { index as designationsIndex } from '@/actions/App/Http/Controllers/Designation/DesignationController';
 import { index as documentCategoriesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentCategoryController';
 import { index as documentTemplatesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentTemplateController';
 import { index as documentTypesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentTypeController';
@@ -71,6 +73,11 @@ const mainNavItems: NavItem[] = [
                 title: 'Office locations',
                 href: officeLocationsIndex(),
                 icon: MapPin,
+            },
+            {
+                title: 'Designations',
+                href: designationsIndex(),
+                icon: Briefcase,
             },
         ],
     },
@@ -147,7 +154,7 @@ const mainNavItems: NavItem[] = [
                 icon: ClipboardList,
             },
             {
-                title: 'Festivals',
+                title: 'Festivals and holidays',
                 href: festivalsIndex(),
                 icon: CalendarDays,
             },

@@ -17,6 +17,13 @@ type DivisionOption = {
     value: string;
 };
 
+type DesignationOption = {
+    id: number;
+    title: string;
+    shortcode: string;
+    department_id: number;
+};
+
 type OrganisationOption = {
     id: number;
     name: string;
@@ -82,6 +89,7 @@ type Props = {
     defaults?: EmployeeFormValues;
     departments?: DepartmentOption[];
     divisions?: DivisionOption[];
+    designations?: DesignationOption[];
     organisations?: OrganisationOption[];
     officeLocations?: OfficeLocationOption[];
     roles?: RoleOption[];
@@ -160,6 +168,7 @@ export default function EmployeeProfileFormFields({
     defaults = {},
     departments = [],
     divisions = [],
+    designations = [],
     organisations = [],
     officeLocations = [],
     roles = [],
@@ -175,6 +184,19 @@ export default function EmployeeProfileFormFields({
     };
 
     const [joiningDate, setJoiningDate] = useState(defaults.joining_date ?? '');
+
+    const matchedDesignationValue = (() => {
+        if (!defaults.designation) {
+            return '';
+        }
+        const match = designations.find(
+            (d) =>
+                d.title.toLowerCase() === defaults.designation?.toLowerCase() ||
+                d.shortcode.toLowerCase() === defaults.designation?.toLowerCase() ||
+                String(d.id) === String(defaults.designation_id),
+        );
+        return match ? match.title : defaults.designation;
+    })();
 
     const matchedDivisionValue = (() => {
         if (!defaults.division) {
@@ -298,13 +320,32 @@ export default function EmployeeProfileFormFields({
                     error={errors.designation}
                     required
                 >
-                    <Input
+                    <select
                         id="designation"
                         name="designation"
-                        placeholder="e.g. Senior Sales Engineer"
                         required
-                        defaultValue={defaults.designation ?? ''}
-                    />
+                        defaultValue={matchedDesignationValue}
+                        className={fieldClass}
+                    >
+                        <option value="">Select designation</option>
+                        {designations.map((designation) => (
+                            <option key={designation.id} value={designation.title}>
+                                {designation.title} ({designation.shortcode})
+                            </option>
+                        ))}
+                        {defaults.designation &&
+                            !designations.some(
+                                (d) =>
+                                    d.title.toLowerCase() ===
+                                        defaults.designation?.toLowerCase() ||
+                                    d.shortcode.toLowerCase() ===
+                                        defaults.designation?.toLowerCase(),
+                            ) && (
+                                <option value={defaults.designation}>
+                                    {defaults.designation}
+                                </option>
+                            )}
+                    </select>
                 </Field>
                 <Field label="Department" name="division" error={errors.division} required>
                     <select

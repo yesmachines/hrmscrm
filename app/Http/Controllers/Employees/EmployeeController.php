@@ -8,6 +8,7 @@ use App\Actions\UpdateEmployee;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Employees\StoreEmployeeProfileRequest;
 use App\Http\Requests\Employees\UpdateEmployeeProfileRequest;
+use App\Models\Designation;
 use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Department;
@@ -95,6 +96,7 @@ class EmployeeController extends Controller
         return Inertia::render('employees/create', [
             'departments' => $this->departments(),
             'divisions' => $this->divisions(),
+            'designations' => $this->designations(),
             'organisations' => $this->organisations(),
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
@@ -135,6 +137,7 @@ class EmployeeController extends Controller
             'employee' => $this->employeePayload($employee),
             'departments' => $this->departments(),
             'divisions' => $this->divisions(),
+            'designations' => $this->designations(),
             'organisations' => $this->organisations(),
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
@@ -205,6 +208,26 @@ class EmployeeController extends Controller
                 'name' => $division->name,
                 'code' => $division->code,
                 'value' => strtolower($division->code),
+            ])
+            ->all();
+    }
+
+    /**
+     * HRMS designations (`designations`).
+     *
+     * @return list<array{id: int, title: string, shortcode: string, department_id: int}>
+     */
+    private function designations(): array
+    {
+        return Designation::query()
+            ->where('status', 1)
+            ->orderBy('title')
+            ->get(['id', 'title', 'shortcode', 'department_id'])
+            ->map(fn (Designation $designation): array => [
+                'id' => $designation->id,
+                'title' => $designation->title,
+                'shortcode' => $designation->shortcode,
+                'department_id' => $designation->department_id,
             ])
             ->all();
     }

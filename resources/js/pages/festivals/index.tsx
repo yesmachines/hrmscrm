@@ -28,18 +28,18 @@ export default function FestivalsIndex({
 }) {
     return (
         <>
-            <Head title="Festivals" />
+            <Head title="Festivals & Holidays" />
 
             <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
-                        title="Festivals"
-                        description="Manage festivals and their dates"
+                        title="Festivals & Holidays"
+                        description="Manage festivals, holidays, and their dates"
                     />
                     <Button asChild>
                         <Link href={FestivalController.create.url()} prefetch>
                             <Plus className="size-4" />
-                            Add festival
+                            Add festival or holiday
                         </Link>
                     </Button>
                 </div>
@@ -71,12 +71,12 @@ export default function FestivalsIndex({
                                         colSpan={6}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
-                                        No festivals found.{' '}
+                                        No festivals or holidays found.{' '}
                                         <Link
                                             href={FestivalController.create.url()}
-                                            className="font-medium text-primary hover:underline"
+                                            className="underline hover:text-foreground"
                                         >
-                                            Create one
+                                            Add one now
                                         </Link>
                                     </td>
                                 </tr>
@@ -84,33 +84,39 @@ export default function FestivalsIndex({
                                 festivals.data.map((row) => (
                                     <tr
                                         key={row.id}
-                                        className="border-b border-border last:border-0"
+                                        className="border-b border-border/60 transition-colors hover:bg-muted/50"
                                     >
-                                        <td className="px-4 py-3 font-medium">
+                                        <td className="px-4 py-3 font-medium text-foreground">
                                             {row.name}
                                         </td>
-                                        <td className="px-4 py-3 capitalize">
-                                            {row.type}
+                                        <td className="px-4 py-3">
+                                            <span
+                                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
+                                                    row.type === 'festival'
+                                                        ? 'bg-purple-100 text-purple-700'
+                                                        : 'bg-blue-100 text-blue-700'
+                                                }`}
+                                            >
+                                                {row.type}
+                                            </span>
                                         </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell font-mono text-xs">
+                                        <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                                             {row.shortcode}
                                         </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                        <td className="px-4 py-3 text-muted-foreground">
                                             {row.type === 'festival' || row.start_date === row.end_date
-                                                ? (row.start_date ?? 'Not set')
-                                                : (row.start_date ? `${row.start_date} to ${row.end_date}` : 'Not set')}
+                                                ? row.start_date
+                                                : `${row.start_date} to ${row.end_date}`}
                                         </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                        <td className="px-4 py-3">
                                             <span
-                                                className={
-                                                    row.is_active === 1
-                                                        ? 'text-primary'
-                                                        : 'text-muted-foreground'
-                                                }
+                                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                                    row.is_active
+                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                        : 'bg-zinc-100 text-zinc-600'
+                                                }`}
                                             >
-                                                {row.is_active === 1
-                                                    ? 'Active'
-                                                    : 'Inactive'}
+                                                {row.is_active ? 'Active' : 'Inactive'}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
@@ -121,9 +127,9 @@ export default function FestivalsIndex({
                                                 destroyForm={FestivalController.destroy.form(
                                                     row.id,
                                                 )}
-                                                deleteTitle="Delete festival?"
-                                                deleteDescription={`This will permanently delete ${row.name}. This cannot be undone.`}
-                                                deleteConfirmLabel="Delete festival"
+                                                deleteTitle="Delete festival or holiday?"
+                                                deleteDescription={`Are you sure you want to delete ${row.name}?`}
+                                                deleteConfirmLabel="Delete"
                                             />
                                         </td>
                                     </tr>
@@ -134,7 +140,7 @@ export default function FestivalsIndex({
                 </div>
 
                 {festivals.links.length > 3 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2">
                         {festivals.links.map((link, index) =>
                             link.url ? (
                                 <Link
@@ -170,7 +176,7 @@ FestivalsIndex.layout = {
     breadcrumbs: [
         { title: 'Dashboard', href: dashboard() },
         {
-            title: 'Festivals',
+            title: 'Festivals & Holidays',
             href: FestivalController.index.url(),
         },
     ],

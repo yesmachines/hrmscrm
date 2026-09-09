@@ -47,7 +47,7 @@ export default function FestivalEdit({
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title={`Edit ${festival.name}`}
-                        description="Update festival details"
+                        description="Update festival or holiday details"
                     />
                     <Button variant="outline" asChild>
                         <Link href={FestivalController.index.url()} prefetch>
@@ -90,7 +90,7 @@ FestivalEdit.layout = (page: React.ReactElement) => {
     return {
         breadcrumbs: [
             { title: 'Dashboard', href: dashboard() },
-            { title: 'Festivals', href: FestivalController.index.url() },
+            { title: 'Festivals & Holidays', href: FestivalController.index.url() },
             { title: 'Edit', href: '#' },
         ],
     };

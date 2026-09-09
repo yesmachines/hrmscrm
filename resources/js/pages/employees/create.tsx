@@ -18,6 +18,13 @@ type DivisionOption = {
     value: string;
 };
 
+type DesignationOption = {
+    id: number;
+    title: string;
+    shortcode: string;
+    department_id: number;
+};
+
 type OrganisationOption = {
     id: number;
     name: string;
@@ -37,6 +44,7 @@ type RoleOption = {
 export default function EmployeesCreate({
     departments,
     divisions,
+    designations,
     organisations,
     officeLocations,
     roles,
@@ -44,6 +52,7 @@ export default function EmployeesCreate({
 }: {
     departments: DepartmentOption[];
     divisions: DivisionOption[];
+    designations: DesignationOption[];
     organisations: OrganisationOption[];
     officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
@@ -82,6 +91,7 @@ export default function EmployeesCreate({
                                 errors={errors}
                                 departments={departments}
                                 divisions={divisions}
+                                designations={designations}
                                 organisations={organisations}
                                 officeLocations={officeLocations}
                                 roles={roles}

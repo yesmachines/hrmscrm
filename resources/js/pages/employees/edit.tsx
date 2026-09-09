@@ -18,6 +18,13 @@ type DivisionOption = {
     value: string;
 };
 
+type DesignationOption = {
+    id: number;
+    title: string;
+    shortcode: string;
+    department_id: number;
+};
+
 type OrganisationOption = {
     id: number;
     name: string;
@@ -61,6 +68,7 @@ export default function EmployeesEdit({
     employee,
     departments,
     divisions,
+    designations,
     organisations,
     officeLocations,
     roles,
@@ -69,6 +77,7 @@ export default function EmployeesEdit({
     employee: Employee;
     departments: DepartmentOption[];
     divisions: DivisionOption[];
+    designations: DesignationOption[];
     organisations: OrganisationOption[];
     officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
@@ -129,6 +138,7 @@ export default function EmployeesEdit({
                                 errors={errors}
                                 departments={departments}
                                 divisions={divisions}
+                                designations={designations}
                                 organisations={organisations}
                                 officeLocations={officeLocations}
                                 roles={roles}
