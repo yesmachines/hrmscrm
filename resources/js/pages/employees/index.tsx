@@ -80,7 +80,7 @@ export default function EmployeesIndex({
                                     Designation
                                 </th>
                                 <th className="hidden px-4 py-3 font-medium lg:table-cell">
-                                    Division
+                                    Department
                                 </th>
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     Status

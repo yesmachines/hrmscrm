@@ -111,7 +111,9 @@ trait EmployeeValidationRules
             'joining_date' => ['nullable', 'date'],
             'resignation_date' => ['nullable', 'date', 'after_or_equal:joining_date'],
             'division' => ['required', 'string', 'max:255'],
-            'image_url' => ['nullable', 'string', 'max:255'],
+            'image_url' => $this->hasFile('image_url')
+                ? ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120']
+                : ['nullable', 'string', 'max:255'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
             'has_report' => ['nullable', 'boolean'],
             'department_id' => ['nullable', 'integer', Rule::exists(Department::class, 'id')],
@@ -170,6 +172,12 @@ trait EmployeeValidationRules
             'has_report',
             'department_id',
         ]));
+
+        if ($this->hasFile('image_url')) {
+            $crmEmployee['image_url'] = $this->file('image_url')->store('employees', 'public');
+        } elseif (empty($crmEmployee['image_url'])) {
+            unset($crmEmployee['image_url']);
+        }
 
         $profile = array_intersect_key($validated, array_flip([
             'gender',

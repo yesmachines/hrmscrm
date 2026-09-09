@@ -6,6 +6,7 @@ use App\Models\EmployeeProfile;
 use App\Models\SalesCrm\Employee;
 use App\Support\SalesCrmRoles;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class UpdateEmployee
@@ -36,6 +37,10 @@ class UpdateEmployee
 
             if ($employee->user !== null && $crmUser !== []) {
                 $employee->user->update($crmUser);
+            }
+
+            if (isset($crmEmployee['image_url']) && $employee->image_url && Storage::disk('public')->exists($employee->image_url)) {
+                Storage::disk('public')->delete($employee->image_url);
             }
 
             $employee->update($crmEmployee);

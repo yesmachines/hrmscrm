@@ -118,7 +118,20 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
 
             <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading title={name} description={employee.email ?? undefined} />
+                    <div className="flex items-center gap-4">
+                        {employee.image_url ? (
+                            <img
+                                src={employee.image_url}
+                                alt={name}
+                                className="h-14 w-14 rounded-full border border-border object-cover shadow-xs"
+                            />
+                        ) : (
+                            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary">
+                                {name.charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                        <Heading title={name} description={employee.email ?? undefined} />
+                    </div>
                     <div className="flex gap-2">
                         <Button variant="outline" asChild>
                             <Link
@@ -145,15 +158,11 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
                     />
                     <Detail label="ACL / Role" value={employee.roles} />
                     <Detail label="Designation" value={employee.designation} />
-                    <Detail label="Division" value={employee.division} />
+                    <Detail label="Department" value={employee.division} />
                     <Detail label="Phone" value={employee.phone} />
                     <Detail
                         label="Employment status"
                         value={employee.employment_status}
-                    />
-                    <Detail
-                        label="Department"
-                        value={employee.department?.name}
                     />
                     <Detail
                         label="Organisation"
@@ -172,7 +181,6 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
                         label="Status"
                         value={employee.status === 1 ? 'Active' : 'Inactive'}
                     />
-                    <Detail label="Has report" value={employee.has_report} />
                 </Section>
 
                 <Section title="Personal profile">

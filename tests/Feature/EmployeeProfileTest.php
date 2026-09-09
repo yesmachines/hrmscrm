@@ -4,8 +4,10 @@ use App\Models\EmployeeProfile;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use App\Support\SalesCrmRoles;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Never mass-delete Sales CRM tables. Only touch rows created inside each test.
@@ -40,8 +42,9 @@ afterEach(function () {
         'test.employee@example.com',
         'old.employee@example.com',
         'delete.me@example.com',
+        'upload.employee@example.com',
     ];
-    $testEmpNums = ['T-9001', 'T-9002', 'T-9003'];
+    $testEmpNums = ['T-9001', 'T-9002', 'T-9003', 'T-9999'];
 
     $userIds = $sales->table('users')->whereIn('email', $testEmails)->pluck('id');
     $employeeIds = $sales->table('employees')->whereIn('emp_num', $testEmpNums)->pluck('id');
@@ -198,4 +201,40 @@ test('authenticated users can delete an employee from both databases', function 
     $this->assertDatabaseMissing('employee_profiles', [
         'employee_id' => $employeeId,
     ]);
+});
+
+test('authenticated users can create an employee with image upload, highest education, and visa from', function () {
+    Storage::fake('public');
+
+    $admin = createHrmsLoginUser('admin');
+
+    $fakeImage = UploadedFile::fake()->image('avatar.jpg', 200, 200);
+
+    $this->actingAs($admin)
+        ->post(route('employees.store'), [
+            'name' => 'Upload Employee',
+            'email' => 'upload.employee@example.com',
+            'password' => 'Password123!',
+            'roles' => 'salesmanager',
+            'emp_num' => 'T-9999',
+            'designation' => 'Tech Lead',
+            'division' => 'sd',
+            'employment_status' => 'fulltime',
+            'status' => 1,
+            'image_url' => $fakeImage,
+            'highest_education' => 'Bachelors Degree',
+            'visa_from' => 'Yes Machinery',
+        ])
+        ->assertRedirect();
+
+    $employee = Employee::query()->where('emp_num', 'T-9999')->first();
+    expect($employee)->not->toBeNull()
+        ->and($employee->image_url)->not->toBeNull();
+
+    Storage::disk('public')->assertExists($employee->image_url);
+
+    $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
+    expect($profile)->not->toBeNull()
+        ->and($profile->highest_education)->toBe('Bachelors Degree')
+        ->and($profile->visa_from)->toBe('Yes Machinery');
 });

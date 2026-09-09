@@ -10,6 +10,13 @@ type DepartmentOption = {
     name: string;
 };
 
+type DivisionOption = {
+    id: number;
+    name: string;
+    code: string;
+    value: string;
+};
+
 type OrganisationOption = {
     id: number;
     name: string;
@@ -74,6 +81,7 @@ type Props = {
     errors: Errors;
     defaults?: EmployeeFormValues;
     departments?: DepartmentOption[];
+    divisions?: DivisionOption[];
     organisations?: OrganisationOption[];
     officeLocations?: OfficeLocationOption[];
     roles?: RoleOption[];
@@ -82,22 +90,28 @@ type Props = {
 };
 
 const fieldClass =
-    'h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30';
+    'h-10 w-full rounded-lg border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50';
 
 function Field({
     label,
     name,
     error,
+    required = false,
+    className,
     children,
 }: {
     label: string;
     name: string;
     error?: string;
+    required?: boolean;
+    className?: string;
     children: ReactNode;
 }) {
     return (
-        <div className="grid gap-2">
-            <Label htmlFor={name}>{label}</Label>
+        <div className={`flex flex-col gap-1.5 ${className ?? ''}`}>
+            <Label htmlFor={name} className="text-xs font-semibold tracking-wide text-foreground/85">
+                {label} {required && <span className="text-destructive font-bold">*</span>}
+            </Label>
             {children}
             <InputError message={error} />
         </div>
@@ -107,25 +121,36 @@ function Field({
 function Section({
     title,
     description,
+    badge,
     children,
 }: {
     title: string;
     description?: string;
+    badge?: string;
     children: ReactNode;
 }) {
     return (
-        <section className="flex flex-col gap-5 rounded-[1.25rem] border border-border/50 bg-card/80 backdrop-blur-sm p-6 shadow-sm md:p-8">
-            <div>
-                <h3 className="text-base font-semibold tracking-tight text-foreground">
-                    {title}
-                </h3>
-                {description && (
-                    <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                        {description}
-                    </p>
-                )}
+        <section className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs transition-shadow">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-4">
+                <div>
+                    <div className="flex items-center gap-2.5">
+                        <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+                        {badge && (
+                            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                {badge}
+                            </span>
+                        )}
+                    </div>
+                    {description && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {description}
+                        </p>
+                    )}
+                </div>
             </div>
-            <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">{children}</div>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                {children}
+            </div>
         </section>
     );
 }
@@ -134,6 +159,7 @@ export default function EmployeeProfileFormFields({
     errors,
     defaults = {},
     departments = [],
+    divisions = [],
     organisations = [],
     officeLocations = [],
     roles = [],
@@ -150,43 +176,79 @@ export default function EmployeeProfileFormFields({
 
     const [joiningDate, setJoiningDate] = useState(defaults.joining_date ?? '');
 
+    const matchedDivisionValue = (() => {
+        if (!defaults.division) {
+            return '';
+        }
+        const match = divisions.find(
+            (d) =>
+                d.value.toLowerCase() === defaults.division?.toLowerCase() ||
+                d.code.toLowerCase() === defaults.division?.toLowerCase() ||
+                d.name.toLowerCase() === defaults.division?.toLowerCase(),
+        );
+        return match ? match.value : defaults.division;
+    })();
+
+    const matchedVisaFrom = (() => {
+        if (!profileDefaults.visa_from) {
+            return '';
+        }
+        const normalized = profileDefaults.visa_from.toLowerCase().trim();
+        if (normalized === 'yes machinery' || normalized === 'yes machinary') {
+            return 'Yes Machinery';
+        }
+        if (normalized === 'yes automation') {
+            return 'Yes Automation';
+        }
+        return profileDefaults.visa_from;
+    })();
+
     return (
-        <div className="space-y-5">
-            <Section title="Account">
-                <Field label="Full name" name="name" error={errors.name}>
+        <div className="space-y-6">
+            <Section
+                title="Account information"
+                description="Credentials and role access for system authentication"
+                badge="Required"
+            >
+                <Field label="Full name" name="name" error={errors.name} required>
                     <Input
                         id="name"
                         name="name"
+                        placeholder="e.g. John Doe"
                         required
                         defaultValue={defaults.name ?? ''}
                     />
                 </Field>
-                <Field label="Work email" name="email" error={errors.email}>
+                <Field label="Work email" name="email" error={errors.email} required>
                     <Input
                         id="email"
                         type="email"
                         name="email"
+                        placeholder="e.g. john@yesmachinery.ae"
                         required
                         defaultValue={defaults.email ?? ''}
                     />
                 </Field>
                 <Field
-                    label={isEdit ? 'Password (optional)' : 'Password'}
+                    label={isEdit ? 'Password (leave blank to keep current)' : 'Password'}
                     name="password"
                     error={errors.password}
+                    required={!isEdit}
                 >
                     <Input
                         id="password"
                         type="password"
                         name="password"
+                        placeholder={isEdit ? '••••••••' : 'Enter secure password'}
                         required={!isEdit}
                         autoComplete="new-password"
                     />
                 </Field>
                 <Field
-                    label="ACL / Role"
+                    label="ACL / System role"
                     name="roles"
                     error={errors.roles}
+                    required={!isEdit}
                 >
                     <select
                         id="roles"
@@ -195,7 +257,7 @@ export default function EmployeeProfileFormFields({
                         defaultValue={defaults.roles ?? ''}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select system role</option>
                         {roles.map((role) => (
                             <option key={role.name} value={role.name}>
                                 {role.name}
@@ -205,11 +267,15 @@ export default function EmployeeProfileFormFields({
                 </Field>
             </Section>
 
-            <Section title="Employee">
-                <Field label="Employee number" name="emp_num" error={errors.emp_num}>
+            <Section
+                title="Employment details"
+                description="Designation, department, branch, and company placement"
+            >
+                <Field label="Employee number" name="emp_num" error={errors.emp_num} required>
                     <Input
                         id="emp_num"
                         name="emp_num"
+                        placeholder="e.g. EMP-0012"
                         required
                         defaultValue={defaults.emp_num ?? ''}
                     />
@@ -222,6 +288,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="employee_code"
                         name="employee_code"
+                        placeholder="Internal code / badge"
                         defaultValue={defaults.employee_code ?? ''}
                     />
                 </Field>
@@ -229,26 +296,49 @@ export default function EmployeeProfileFormFields({
                     label="Designation"
                     name="designation"
                     error={errors.designation}
+                    required
                 >
                     <Input
                         id="designation"
                         name="designation"
+                        placeholder="e.g. Senior Sales Engineer"
                         required
                         defaultValue={defaults.designation ?? ''}
                     />
                 </Field>
-                <Field label="Division" name="division" error={errors.division}>
-                    <Input
+                <Field label="Department" name="division" error={errors.division} required>
+                    <select
                         id="division"
                         name="division"
                         required
-                        defaultValue={defaults.division ?? ''}
-                    />
+                        defaultValue={matchedDivisionValue}
+                        className={fieldClass}
+                    >
+                        <option value="">Select department</option>
+                        {divisions.map((division) => (
+                            <option key={division.id} value={division.value}>
+                                {division.name} ({division.code})
+                            </option>
+                        ))}
+                        {defaults.division &&
+                            !divisions.some(
+                                (d) =>
+                                    d.value === matchedDivisionValue ||
+                                    d.code.toLowerCase() === defaults.division?.toLowerCase() ||
+                                    d.name.toLowerCase() === defaults.division?.toLowerCase(),
+                            ) && (
+                                <option value={defaults.division}>
+                                    {defaults.division}
+                                </option>
+                            )}
+                    </select>
                 </Field>
-                <Field label="Phone" name="phone" error={errors.phone}>
+                <Field label="Work phone" name="phone" error={errors.phone}>
                     <Input
                         id="phone"
                         name="phone"
+                        type="tel"
+                        placeholder="e.g. +971 4 123 4567"
                         defaultValue={defaults.phone ?? ''}
                     />
                 </Field>
@@ -260,33 +350,14 @@ export default function EmployeeProfileFormFields({
                     <select
                         id="employment_status"
                         name="employment_status"
-                        defaultValue={defaults.employment_status ?? ''}
+                        defaultValue={defaults.employment_status ?? 'fulltime'}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select status</option>
                         <option value="fulltime">Full time</option>
                         <option value="parttime">Part time</option>
                         <option value="contract">Contract</option>
                         <option value="intern">Intern</option>
-                    </select>
-                </Field>
-                <Field
-                    label="Department"
-                    name="department_id"
-                    error={errors.department_id}
-                >
-                    <select
-                        id="department_id"
-                        name="department_id"
-                        defaultValue={defaults.department_id ?? ''}
-                        className={fieldClass}
-                    >
-                        <option value="">Select</option>
-                        {departments.map((department) => (
-                            <option key={department.id} value={department.id}>
-                                {department.name}
-                            </option>
-                        ))}
                     </select>
                 </Field>
                 <Field
@@ -300,7 +371,7 @@ export default function EmployeeProfileFormFields({
                         defaultValue={defaults.organisation_id ?? ''}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select organisation</option>
                         {organisations.map((organisation) => (
                             <option
                                 key={organisation.id}
@@ -325,12 +396,27 @@ export default function EmployeeProfileFormFields({
                         defaultValue={defaults.office_location_id ?? ''}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select location</option>
                         {officeLocations.map((location) => (
                             <option key={location.id} value={location.id}>
                                 {location.name}
                             </option>
                         ))}
+                    </select>
+                </Field>
+                <Field label="Status" name="status" error={errors.status}>
+                    <select
+                        id="status"
+                        name="status"
+                        defaultValue={
+                            defaults.status === null || defaults.status === undefined
+                                ? '1'
+                                : String(defaults.status)
+                        }
+                        className={fieldClass}
+                    >
+                        <option value="1">Active</option>
+                        <option value="0">Inactive</option>
                     </select>
                 </Field>
                 <Field
@@ -359,56 +445,38 @@ export default function EmployeeProfileFormFields({
                         min={joiningDate}
                     />
                 </Field>
-                <Field label="Status" name="status" error={errors.status}>
-                    <select
-                        id="status"
-                        name="status"
-                        defaultValue={
-                            defaults.status === null || defaults.status === undefined
-                                ? '1'
-                                : String(defaults.status)
-                        }
-                        className={fieldClass}
-                    >
-                        <option value="1">Active</option>
-                        <option value="0">Inactive</option>
-                    </select>
-                </Field>
                 <Field
-                    label="Has report"
-                    name="has_report"
-                    error={errors.has_report}
+                    label="Profile photo"
+                    name="image_url"
+                    error={errors.image_url}
+                    className="sm:col-span-2 lg:col-span-1"
                 >
-                    <select
-                        id="has_report"
-                        name="has_report"
-                        defaultValue={
-                            defaults.has_report === false || defaults.has_report === 0
-                                ? '0'
-                                : '1'
-                        }
-                        className={fieldClass}
-                    >
-                        <option value="1">Yes</option>
-                        <option value="0">No</option>
-                    </select>
-                </Field>
-                <div className="sm:col-span-2">
-                    <Field
-                        label="Image URL"
-                        name="image_url"
-                        error={errors.image_url}
-                    >
+                    <div className="flex items-center gap-3">
+                        {defaults.image_url ? (
+                            <img
+                                src={defaults.image_url}
+                                alt="Current photo"
+                                className="h-10 w-10 shrink-0 rounded-full border border-border object-cover bg-muted/40 shadow-xs"
+                            />
+                        ) : null}
                         <Input
                             id="image_url"
                             name="image_url"
-                            defaultValue={defaults.image_url ?? ''}
+                            type="file"
+                            accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
+                            className="h-10 cursor-pointer file:mr-2 file:h-7 file:rounded-md file:border-0 file:bg-muted file:px-2.5 file:text-xs file:font-medium"
                         />
-                    </Field>
-                </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                        JPG, PNG, GIF, or WebP. Max 5MB.
+                    </p>
+                </Field>
             </Section>
 
-            <Section title="Personal profile">
+            <Section
+                title="Personal information"
+                description="Demographic, identification, and personal details"
+            >
                 <Field label="Gender" name="gender" error={errors.gender}>
                     <select
                         id="gender"
@@ -416,13 +484,13 @@ export default function EmployeeProfileFormFields({
                         defaultValue={profileDefaults.gender ?? ''}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select gender</option>
                         <option value="M">Male</option>
                         <option value="F">Female</option>
                     </select>
                 </Field>
                 <Field
-                    label="Date of birth"
+                    label="Date of birth (Personal)"
                     name="dob_personal"
                     error={errors.dob_personal}
                 >
@@ -444,7 +512,7 @@ export default function EmployeeProfileFormFields({
                         defaultValue={profileDefaults.marital_status ?? ''}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select marital status</option>
                         <option value="single">Single</option>
                         <option value="married">Married</option>
                         <option value="divorced">Divorced</option>
@@ -470,7 +538,7 @@ export default function EmployeeProfileFormFields({
                         }
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select country</option>
                         {countries.map((country) => (
                             <option key={country.id} value={country.name}>
                                 {country.name}
@@ -482,6 +550,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="religion"
                         name="religion"
+                        placeholder="e.g. Islam, Christianity"
                         defaultValue={profileDefaults.religion ?? ''}
                     />
                 </Field>
@@ -493,12 +562,16 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="blood_group"
                         name="blood_group"
+                        placeholder="e.g. O+, A+, B+"
                         defaultValue={profileDefaults.blood_group ?? ''}
                     />
                 </Field>
             </Section>
 
-            <Section title="Contact (UAE)">
+            <Section
+                title="Contact (UAE)"
+                description="Residential address and emergency contacts in the UAE"
+            >
                 <Field
                     label="Personal email"
                     name="personal_email"
@@ -508,6 +581,7 @@ export default function EmployeeProfileFormFields({
                         id="personal_email"
                         type="email"
                         name="personal_email"
+                        placeholder="e.g. personal@gmail.com"
                         defaultValue={profileDefaults.personal_email ?? ''}
                     />
                 </Field>
@@ -519,60 +593,68 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="personal_mobile"
                         name="personal_mobile"
+                        type="tel"
+                        placeholder="e.g. +971 50 123 4567"
                         defaultValue={profileDefaults.personal_mobile ?? ''}
                     />
                 </Field>
-                <div className="sm:col-span-2">
-                    <Field
-                        label="Address (UAE)"
-                        name="address_uae"
-                        error={errors.address_uae}
-                    >
-                        <Input
-                            id="address_uae"
-                            name="address_uae"
-                            defaultValue={profileDefaults.address_uae ?? ''}
-                        />
-                    </Field>
-                </div>
                 <Field
-                    label="Emergency contact"
+                    label="Address (UAE)"
+                    name="address_uae"
+                    error={errors.address_uae}
+                >
+                    <Input
+                        id="address_uae"
+                        name="address_uae"
+                        placeholder="Apartment, Street, City / Emirate"
+                        defaultValue={profileDefaults.address_uae ?? ''}
+                    />
+                </Field>
+                <Field
+                    label="Emergency contact name"
                     name="emergency_contact_name"
                     error={errors.emergency_contact_name}
                 >
                     <Input
                         id="emergency_contact_name"
                         name="emergency_contact_name"
+                        placeholder="Contact person name"
                         defaultValue={
                             profileDefaults.emergency_contact_name ?? ''
                         }
                     />
                 </Field>
                 <Field
-                    label="Emergency relation"
+                    label="Emergency contact relation"
                     name="emergency_relation"
                     error={errors.emergency_relation}
                 >
                     <Input
                         id="emergency_relation"
                         name="emergency_relation"
+                        placeholder="e.g. Spouse, Brother, Friend"
                         defaultValue={profileDefaults.emergency_relation ?? ''}
                     />
                 </Field>
                 <Field
-                    label="Emergency mobile"
+                    label="Emergency contact mobile"
                     name="emergency_mobile"
                     error={errors.emergency_mobile}
                 >
                     <Input
                         id="emergency_mobile"
                         name="emergency_mobile"
+                        type="tel"
+                        placeholder="e.g. +971 55 987 6543"
                         defaultValue={profileDefaults.emergency_mobile ?? ''}
                     />
                 </Field>
             </Section>
 
-            <Section title="Home country">
+            <Section
+                title="Home country contacts"
+                description="Permanent address and emergency reach in home country"
+            >
                 <Field
                     label="Home country"
                     name="home_country"
@@ -584,7 +666,7 @@ export default function EmployeeProfileFormFields({
                         defaultValue={profileDefaults.home_country ?? ''}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select country</option>
                         {countries.map((country) => (
                             <option key={country.id} value={country.id}>
                                 {country.name}
@@ -593,29 +675,30 @@ export default function EmployeeProfileFormFields({
                     </select>
                 </Field>
                 <Field
-                    label="Home mobile"
+                    label="Home country mobile"
                     name="home_mobile"
                     error={errors.home_mobile}
                 >
                     <Input
                         id="home_mobile"
                         name="home_mobile"
+                        type="tel"
+                        placeholder="Country code & number"
                         defaultValue={profileDefaults.home_mobile ?? ''}
                     />
                 </Field>
-                <div className="sm:col-span-2">
-                    <Field
-                        label="Home address"
+                <Field
+                    label="Home country address"
+                    name="address_home"
+                    error={errors.address_home}
+                >
+                    <Input
+                        id="address_home"
                         name="address_home"
-                        error={errors.address_home}
-                    >
-                        <Input
-                            id="address_home"
-                            name="address_home"
-                            defaultValue={profileDefaults.address_home ?? ''}
-                        />
-                    </Field>
-                </div>
+                        placeholder="Permanent home address"
+                        defaultValue={profileDefaults.address_home ?? ''}
+                    />
+                </Field>
                 <Field
                     label="Home emergency name"
                     name="home_emergency_name"
@@ -624,6 +707,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="home_emergency_name"
                         name="home_emergency_name"
+                        placeholder="Emergency contact name"
                         defaultValue={
                             profileDefaults.home_emergency_name ?? ''
                         }
@@ -637,6 +721,7 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="home_emergency_relation"
                         name="home_emergency_relation"
+                        placeholder="e.g. Father, Mother, Relative"
                         defaultValue={
                             profileDefaults.home_emergency_relation ?? ''
                         }
@@ -650,6 +735,8 @@ export default function EmployeeProfileFormFields({
                     <Input
                         id="home_emergency_mobile"
                         name="home_emergency_mobile"
+                        type="tel"
+                        placeholder="Emergency phone number"
                         defaultValue={
                             profileDefaults.home_emergency_mobile ?? ''
                         }
@@ -657,7 +744,10 @@ export default function EmployeeProfileFormFields({
                 </Field>
             </Section>
 
-            <Section title="Visa & education">
+            <Section
+                title="Visa & education"
+                description="Visa sponsorship, passport details, experience, and academic qualifications"
+            >
                 <Field
                     label="Visa type"
                     name="visa_type"
@@ -669,7 +759,7 @@ export default function EmployeeProfileFormFields({
                         defaultValue={profileDefaults.visa_type ?? ''}
                         className={fieldClass}
                     >
-                        <option value="">Select</option>
+                        <option value="">Select visa type</option>
                         <option value="visa">Visa</option>
                         <option value="workpermit">Work permit</option>
                     </select>
@@ -679,11 +769,24 @@ export default function EmployeeProfileFormFields({
                     name="visa_from"
                     error={errors.visa_from}
                 >
-                    <Input
+                    <select
                         id="visa_from"
                         name="visa_from"
-                        defaultValue={profileDefaults.visa_from ?? ''}
-                    />
+                        defaultValue={matchedVisaFrom}
+                        className={fieldClass}
+                    >
+                        <option value="">Select visa company</option>
+                        <option value="Yes Machinery">Yes Machinery</option>
+                        <option value="Yes Automation">Yes Automation</option>
+                        {profileDefaults.visa_from &&
+                            !['Yes Machinery', 'Yes Automation'].includes(
+                                matchedVisaFrom,
+                            ) && (
+                                <option value={profileDefaults.visa_from}>
+                                    {profileDefaults.visa_from}
+                                </option>
+                            )}
+                    </select>
                 </Field>
                 <Field
                     label="Passport DOB"
@@ -708,6 +811,7 @@ export default function EmployeeProfileFormFields({
                         step="0.1"
                         min="0"
                         max="80"
+                        placeholder="e.g. 5.5"
                         name="total_experience"
                         defaultValue={profileDefaults.total_experience ?? ''}
                     />
@@ -717,11 +821,33 @@ export default function EmployeeProfileFormFields({
                     name="highest_education"
                     error={errors.highest_education}
                 >
-                    <Input
+                    <select
                         id="highest_education"
                         name="highest_education"
                         defaultValue={profileDefaults.highest_education ?? ''}
-                    />
+                        className={fieldClass}
+                    >
+                        <option value="">Select highest education</option>
+                        <option value="Less than High School">Less than High School</option>
+                        <option value="High School/Diploma">High School/Diploma</option>
+                        <option value="Technical/Vocational Certificate">Technical/Vocational Certificate</option>
+                        <option value="Bachelors Degree">Bachelors Degree</option>
+                        <option value="Masters Degree">Masters Degree</option>
+                        <option value="Doctorate">Doctorate</option>
+                        {profileDefaults.highest_education &&
+                            ![
+                                'Less than High School',
+                                'High School/Diploma',
+                                'Technical/Vocational Certificate',
+                                'Bachelors Degree',
+                                'Masters Degree',
+                                'Doctorate',
+                            ].includes(profileDefaults.highest_education) && (
+                                <option value={profileDefaults.highest_education}>
+                                    {profileDefaults.highest_education}
+                                </option>
+                            )}
+                    </select>
                 </Field>
             </Section>
         </div>

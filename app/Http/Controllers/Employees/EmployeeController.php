@@ -11,6 +11,7 @@ use App\Http\Requests\Employees\UpdateEmployeeProfileRequest;
 use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Department;
+use App\Models\SalesCrm\Division;
 use App\Models\SalesCrm\Employee;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\RedirectResponse;
@@ -93,6 +94,7 @@ class EmployeeController extends Controller
     {
         return Inertia::render('employees/create', [
             'departments' => $this->departments(),
+            'divisions' => $this->divisions(),
             'organisations' => $this->organisations(),
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
@@ -132,6 +134,7 @@ class EmployeeController extends Controller
         return Inertia::render('employees/edit', [
             'employee' => $this->employeePayload($employee),
             'departments' => $this->departments(),
+            'divisions' => $this->divisions(),
             'organisations' => $this->organisations(),
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
@@ -182,6 +185,26 @@ class EmployeeController extends Controller
             ->map(fn (Department $department): array => [
                 'id' => $department->id,
                 'name' => $department->name,
+            ])
+            ->all();
+    }
+
+    /**
+     * Sales CRM divisions (`cm_divisions`).
+     *
+     * @return list<array{id: int, name: string, code: string, value: string}>
+     */
+    private function divisions(): array
+    {
+        return Division::query()
+            ->where('status', 1)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->map(fn (Division $division): array => [
+                'id' => $division->id,
+                'name' => $division->name,
+                'code' => $division->code,
+                'value' => strtolower($division->code),
             ])
             ->all();
     }
@@ -312,7 +335,12 @@ class EmployeeController extends Controller
             'joining_date' => $employee->joining_date?->format('Y-m-d'),
             'resignation_date' => $employee->resignation_date?->format('Y-m-d'),
             'division' => $employee->division,
-            'image_url' => $employee->image_url,
+            'image_url' => $employee->image_url
+                ? (str_starts_with($employee->image_url, 'http://') || str_starts_with($employee->image_url, 'https://')
+                    ? $employee->image_url
+                    : asset('storage/'.ltrim($employee->image_url, '/')))
+                : null,
+            'image_path' => $employee->image_url,
             'status' => $employee->status,
             'has_report' => $employee->has_report,
             'department_id' => $employee->department_id,
