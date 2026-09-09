@@ -27,6 +27,7 @@ Route::prefix('v1')->group(function () {
         Route::get('leaves/meta', [LeaveController::class, 'meta'])->name('api.v1.leaves.meta');
         Route::get('leaves/festivals', [LeaveController::class, 'festivals'])->name('api.v1.leaves.festivals');
         Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.leaves.store');
+        Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.leaves.show');
 
         // Documents Endpoints (Figma Mobile App)
         Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.documents.categories');

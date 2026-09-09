@@ -443,4 +443,108 @@ class LeaveController extends Controller
 
         return $this->successPaginatedResponse($leaveRequests, 'leave_requests');
     }
+
+    /**
+     * Get details of a single leave request for the authenticated employee.
+     */
+    public function show(Request $request, int|string $id)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        $employee = Employee::where('user_id', $user->id)->first();
+        if (! $employee) {
+            return $this->errorResponse('Employee record not found.', 404);
+        }
+
+        $leaveRequest = LeaveRequest::with([
+            'leaveType:id,leave_name,code,is_paid,requires_attachment,requires_approval,requires_handover',
+            'files',
+            'details',
+            'histories' => function ($query) {
+                $query->orderBy('action_on', 'asc');
+            },
+            'histories.doneBy:id,name,email',
+            'approvals' => function ($query) {
+                $query->orderBy('approved_date', 'asc');
+            },
+            'approvals.approver:id,name,email',
+        ])
+            ->where('employee_id', $employee->id)
+            ->find($id);
+
+        if (! $leaveRequest) {
+            return $this->errorResponse('Leave request not found.', 404);
+        }
+
+        $files = $leaveRequest->files->map(function ($file) {
+            return [
+                'id' => $file->id,
+                'file_path' => $file->file_path,
+                'file_url' => asset('storage/'.$file->file_path),
+                'original_name' => $file->original_name ?? basename($file->file_path),
+                'mime_type' => $file->mime_type ?? null,
+                'size' => $file->size ?? null,
+                'uploaded_date' => $file->uploaded_date?->toIso8601String(),
+            ];
+        });
+
+        $details = $leaveRequest->details->map(function ($detail) {
+            return [
+                'id' => $detail->id,
+                'field_name' => $detail->field_name,
+                'field_key' => $detail->field_key,
+                'field_value' => $detail->field_value,
+            ];
+        });
+
+        $histories = $leaveRequest->histories->map(function ($history) {
+            return [
+                'id' => $history->id,
+                'action_type' => $history->action_type,
+                'remarks' => $history->remarks,
+                'action_on' => $history->action_on?->toIso8601String(),
+                'done_by' => $history->doneBy ? [
+                    'id' => $history->doneBy->id,
+                    'name' => $history->doneBy->name,
+                    'email' => $history->doneBy->email,
+                ] : null,
+            ];
+        });
+
+        $approvals = $leaveRequest->approvals->map(function ($approval) {
+            return [
+                'id' => $approval->id,
+                'approval_level' => $approval->approval_level,
+                'approver_id' => $approval->approver_id,
+                'remarks' => $approval->remarks,
+                'approved_date' => $approval->approved_date?->toIso8601String(),
+                'approver' => $approval->approver ? [
+                    'id' => $approval->approver->id,
+                    'name' => $approval->approver->name,
+                    'email' => $approval->approver->email,
+                ] : null,
+            ];
+        });
+
+        return $this->successResponse([
+            'id' => $leaveRequest->id,
+            'employee_id' => $leaveRequest->employee_id,
+            'leave_type_id' => $leaveRequest->leave_type_id,
+            'leave_type' => $leaveRequest->leaveType,
+            'start_date' => $leaveRequest->start_date?->format('Y-m-d'),
+            'end_date' => $leaveRequest->end_date?->format('Y-m-d'),
+            'total_days' => $leaveRequest->total_days,
+            'remarks' => $leaveRequest->remarks,
+            'status' => $leaveRequest->status,
+            'created_at' => $leaveRequest->created_at?->toIso8601String(),
+            'updated_at' => $leaveRequest->updated_at?->toIso8601String(),
+            'files' => $files,
+            'details' => $details,
+            'histories' => $histories,
+            'approvals' => $approvals,
+        ], 'Leave request details retrieved successfully.');
+    }
 }
