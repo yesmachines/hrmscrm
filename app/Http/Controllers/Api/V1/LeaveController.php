@@ -13,6 +13,7 @@ use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class LeaveController extends Controller
@@ -79,7 +80,7 @@ class LeaveController extends Controller
     }
 
     /**
-     * Get eligible festivals for the employee.
+     * Get eligible festivals and holidays for the employee, optionally filtered by month and year.
      */
     public function festivals(Request $request)
     {
@@ -93,64 +94,14 @@ class LeaveController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
-        if (! $profile) {
-            return $this->successResponse(['festivals' => [], 'holidays' => [], 'limit_reached' => false]);
-        }
+        [$month, $year] = $this->parseMonthAndYear(
+            $request->query('month') ?? $request->input('month'),
+            $request->query('year') ?? $request->input('year')
+        );
 
-        $countryIds = [];
+        $data = $this->getFestivalsAndHolidaysForEmployee($employee, $month, $year);
 
-        if (! empty($profile->home_country)) {
-            $countryIds[] = (int) $profile->home_country;
-        }
-
-        if (! empty($profile->nationality)) {
-            if (is_numeric($profile->nationality)) {
-                $countryIds[] = (int) $profile->nationality;
-            } else {
-                $matchedCountryId = DB::connection('salescrm')
-                    ->table('countries')
-                    ->where('name', 'like', $profile->nationality)
-                    ->value('id');
-                if ($matchedCountryId) {
-                    $countryIds[] = (int) $matchedCountryId;
-                }
-            }
-        }
-
-        $countryIds = array_values(array_unique($countryIds));
-
-        if (empty($countryIds)) {
-            return $this->successResponse(['festivals' => [], 'holidays' => [], 'limit_reached' => false]);
-        }
-
-        $festivals = DB::table('festivals')
-            ->join('festival_nationality', 'festivals.id', '=', 'festival_nationality.festival_id')
-            ->whereIn('festival_nationality.country_id', $countryIds)
-            ->whereNull('festivals.deleted_at')
-            ->where('festivals.is_active', true)
-            ->select('festivals.id', 'festivals.name', 'festivals.type', 'festivals.shortcode', 'festivals.start_date', 'festivals.end_date')
-            ->distinct()
-            ->get();
-
-        $festivalLeaveType = LeaveType::where('leave_name', 'like', '%Festival%')->first();
-        $limitReached = false;
-
-        if ($festivalLeaveType) {
-            $limitReached = LeaveRequest::where('employee_id', $employee->id)
-                ->where('leave_type_id', $festivalLeaveType->id)
-                ->whereYear('start_date', date('Y'))
-                ->whereIn('status', ['applied', 'approved'])
-                ->exists();
-        }
-
-        $grouped = $festivals->groupBy('type');
-
-        return $this->successResponse([
-            'festivals' => $grouped->get('festival', []),
-            'holidays' => $grouped->get('holiday', []),
-            'limit_reached' => $limitReached,
-        ]);
+        return $this->successResponse($data);
     }
 
     /**
@@ -427,12 +378,17 @@ class LeaveController extends Controller
             $query->where('leave_type_id', $request->leave_type_id);
         }
 
-        if ($request->filled('year')) {
-            $query->whereYear('created_at', $request->year);
+        [$filterMonth, $filterYear] = $this->parseMonthAndYear(
+            $request->query('month') ?? $request->input('month'),
+            $request->query('year') ?? $request->input('year')
+        );
+
+        if ($filterYear) {
+            $query->whereYear('created_at', $filterYear);
         }
 
-        if ($request->filled('month')) {
-            $query->whereMonth('created_at', $request->month);
+        if ($filterMonth) {
+            $query->whereMonth('created_at', $filterMonth);
         }
 
         if ($request->filled('start_date') && $request->filled('end_date')) {
@@ -441,7 +397,14 @@ class LeaveController extends Controller
 
         $leaveRequests = $query->paginate(15);
 
-        return $this->successPaginatedResponse($leaveRequests, 'leave_requests');
+        $extra = [];
+        if ($request->filled('month') || $request->boolean('include_festivals') || $request->boolean('include_holidays')) {
+            $festivalData = $this->getFestivalsAndHolidaysForEmployee($employee, $filterMonth, $filterYear);
+            $extra['festivals'] = $festivalData['festivals'];
+            $extra['holidays'] = $festivalData['holidays'];
+        }
+
+        return $this->successPaginatedResponse($leaveRequests, 'leave_requests', 'Success', 200, $extra);
     }
 
     /**
@@ -546,5 +509,154 @@ class LeaveController extends Controller
             'histories' => $histories,
             'approvals' => $approvals,
         ], 'Leave request details retrieved successfully.');
+    }
+
+    /**
+     * Get eligible festivals and holidays for an employee, optionally filtered by month and year.
+     *
+     * @return array{festivals: Collection<int, mixed>, holidays: Collection<int, mixed>, limit_reached: bool}
+     */
+    protected function getFestivalsAndHolidaysForEmployee(Employee $employee, ?int $month = null, ?int $year = null): array
+    {
+        $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
+        if (! $profile) {
+            return [
+                'festivals' => collect(),
+                'holidays' => collect(),
+                'limit_reached' => false,
+            ];
+        }
+
+        $countryIds = [];
+
+        if (! empty($profile->home_country)) {
+            $countryIds[] = (int) $profile->home_country;
+        }
+
+        if (! empty($profile->nationality)) {
+            if (is_numeric($profile->nationality)) {
+                $countryIds[] = (int) $profile->nationality;
+            } else {
+                $matchedCountryId = DB::connection('salescrm')
+                    ->table('countries')
+                    ->where('name', 'like', $profile->nationality)
+                    ->value('id');
+                if ($matchedCountryId) {
+                    $countryIds[] = (int) $matchedCountryId;
+                }
+            }
+        }
+
+        $countryIds = array_values(array_unique($countryIds));
+
+        $query = DB::table('festivals')
+            ->leftJoin('festival_nationality', 'festivals.id', '=', 'festival_nationality.festival_id')
+            ->whereNull('festivals.deleted_at')
+            ->where('festivals.is_active', true);
+
+        if (! empty($countryIds)) {
+            $query->where(function ($q) use ($countryIds) {
+                $q->whereIn('festival_nationality.country_id', $countryIds)
+                    ->orWhereNull('festival_nationality.country_id');
+            });
+        } else {
+            $query->whereNull('festival_nationality.country_id');
+        }
+
+        if ($month && $year) {
+            $startOfMonth = Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
+            $endOfMonth = Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
+
+            $query->where(function ($q) use ($startOfMonth, $endOfMonth) {
+                $q->where(function ($sub) use ($startOfMonth, $endOfMonth) {
+                    $sub->whereNotNull('festivals.start_date')
+                        ->where('festivals.start_date', '<=', $endOfMonth)
+                        ->where(function ($inner) use ($startOfMonth) {
+                            $inner->where('festivals.end_date', '>=', $startOfMonth)
+                                ->orWhere(function ($nullEnd) use ($startOfMonth) {
+                                    $nullEnd->whereNull('festivals.end_date')
+                                        ->where('festivals.start_date', '>=', $startOfMonth);
+                                });
+                        });
+                })->orWhere(function ($sub) use ($startOfMonth, $endOfMonth) {
+                    $sub->whereNull('festivals.start_date')
+                        ->whereNotNull('festivals.end_date')
+                        ->whereBetween('festivals.end_date', [$startOfMonth, $endOfMonth]);
+                });
+            });
+        } elseif ($month) {
+            $query->where(function ($q) use ($month) {
+                $q->whereMonth('festivals.start_date', $month)
+                    ->orWhereMonth('festivals.end_date', $month);
+            });
+        } elseif ($year) {
+            $query->where(function ($q) use ($year) {
+                $q->whereYear('festivals.start_date', $year)
+                    ->orWhereYear('festivals.end_date', $year);
+            });
+        }
+
+        $festivals = $query
+            ->select('festivals.id', 'festivals.name', 'festivals.type', 'festivals.shortcode', 'festivals.start_date', 'festivals.end_date')
+            ->distinct()
+            ->orderBy('festivals.start_date', 'asc')
+            ->get();
+
+        $festivalLeaveType = LeaveType::where('leave_name', 'like', '%Festival%')->first();
+        $limitReached = false;
+
+        if ($festivalLeaveType) {
+            $checkYear = $year ?? (int) date('Y');
+            $limitReached = LeaveRequest::where('employee_id', $employee->id)
+                ->where('leave_type_id', $festivalLeaveType->id)
+                ->whereYear('start_date', $checkYear)
+                ->whereIn('status', ['applied', 'approved'])
+                ->exists();
+        }
+
+        $grouped = $festivals->groupBy('type');
+
+        return [
+            'festivals' => $grouped->get('festival', collect())->values(),
+            'holidays' => $grouped->get('holiday', collect())->values(),
+            'limit_reached' => $limitReached,
+        ];
+    }
+
+    /**
+     * Parse month and year from request input.
+     *
+     * @return array{0: int|null, 1: int|null}
+     */
+    protected function parseMonthAndYear(?string $monthInput, ?string $yearInput = null): array
+    {
+        $month = null;
+        $year = $yearInput ? (int) $yearInput : null;
+
+        if (! empty($monthInput)) {
+            $monthInput = trim((string) $monthInput);
+
+            if (preg_match('/^(\d{4})[-\/](\d{1,2})$/', $monthInput, $matches)) {
+                $year = (int) $matches[1];
+                $month = (int) $matches[2];
+            } elseif (preg_match('/^(\d{1,2})[-\/](\d{4})$/', $monthInput, $matches)) {
+                $month = (int) $matches[1];
+                $year = (int) $matches[2];
+            } elseif (is_numeric($monthInput) && (int) $monthInput >= 1 && (int) $monthInput <= 12) {
+                $month = (int) $monthInput;
+            } else {
+                try {
+                    $parsed = Carbon::parse($monthInput);
+                    $month = $parsed->month;
+                    if (preg_match('/\b\d{4}\b/', $monthInput)) {
+                        $year = $parsed->year;
+                    }
+                } catch (\Throwable $e) {
+                    // Ignore invalid strings
+                }
+            }
+        }
+
+        return [$month, $year];
     }
 }

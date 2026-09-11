@@ -62,20 +62,26 @@ trait ApiResponse
      * @param  int  $code
      * @return JsonResponse
      */
-    public function successPaginatedResponse($paginator, $itemsKey = 'items', $message = 'Success', $code = 200)
+    public function successPaginatedResponse($paginator, $itemsKey = 'items', $message = 'Success', $code = 200, array $extra = [])
     {
+        $data = [
+            $itemsKey => $paginator->items(),
+            'pagination' => [
+                'total' => $paginator->total(),
+                'per_page' => $paginator->perPage(),
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+            ],
+        ];
+
+        if (! empty($extra)) {
+            $data = array_merge($data, $extra);
+        }
+
         $response = [
             'statusCode' => $code,
             'message' => $message,
-            'data' => [
-                $itemsKey => $paginator->items(),
-                'pagination' => [
-                    'total' => $paginator->total(),
-                    'per_page' => $paginator->perPage(),
-                    'current_page' => $paginator->currentPage(),
-                    'last_page' => $paginator->lastPage(),
-                ],
-            ],
+            'data' => $data,
         ];
 
         return response()->json($response, $code);

@@ -4,16 +4,20 @@ import {
     Briefcase,
     Building2,
     CalendarDays,
+    CalendarPlus,
     ClipboardList,
     FileStack,
     FileText,
     Files,
     FolderTree,
+    Inbox,
+    Laptop,
     LayoutGrid,
     Lightbulb,
     Mail,
     MapPin,
     Shield,
+    UserCheck,
     Users,
 } from 'lucide-react';
 import { index as designationsIndex } from '@/actions/App/Http/Controllers/Designation/DesignationController';
@@ -129,6 +133,11 @@ const mainNavItems: NavItem[] = [
         href: leaveTypesIndex(),
         items: [
             {
+                title: 'Apply leave',
+                href: '/leave-requests/create',
+                icon: CalendarPlus,
+            },
+            {
                 title: 'Leave requests',
                 href: leaveRequestsIndex(),
                 icon: CalendarDays,
@@ -157,6 +166,33 @@ const mainNavItems: NavItem[] = [
                 title: 'Festivals and holidays',
                 href: festivalsIndex(),
                 icon: CalendarDays,
+            },
+        ],
+    },
+    {
+        title: 'Visits',
+        icon: UserCheck,
+        href: '/visits',
+    },
+    {
+        title: 'Assets',
+        icon: Laptop,
+        href: '/assets',
+        items: [
+            {
+                title: 'Assets Inventory',
+                href: '/assets',
+                icon: Laptop,
+            },
+            {
+                title: 'Asset Requests',
+                href: '/asset-requests',
+                icon: Inbox,
+            },
+            {
+                title: 'Asset Categories',
+                href: '/asset-categories',
+                icon: FolderTree,
             },
         ],
     },

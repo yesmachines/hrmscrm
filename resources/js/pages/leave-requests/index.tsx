@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Check, X } from 'lucide-react';
+import { Check, Plus, X } from 'lucide-react';
 import { index, update, show } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,12 @@ export default function LeaveRequestsIndex({ requests }: { requests: PaginatedRe
                         title="Leave Requests"
                         description="Track and manage employee leave requests"
                     />
+                    <Button asChild>
+                        <Link href="/leave-requests/create">
+                            <Plus className="mr-2 size-4" />
+                            Apply Leave
+                        </Link>
+                    </Button>
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
