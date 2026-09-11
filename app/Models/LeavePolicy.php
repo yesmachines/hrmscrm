@@ -14,7 +14,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'no_pay_days',
     'requires_document_after_days',
     'requires_weekend_document',
-    'allocation_days',
     'carry_forward',
     'encashment',
     'remarks',

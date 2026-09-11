@@ -45,7 +45,7 @@ class VisitController extends Controller
             $query->where('status', $request->input('status'));
         }
 
-        // Filter by date (e.g. today / current_day, tomorrow, day_after_tomorrow, or specific date YYYY-MM-DD)
+        // Filter by date (e.g. today / current_day, tomorrow, day_after_tomorrow, before_today, after_today, or specific date YYYY-MM-DD)
         $dateFilter = $request->query('date_filter')
             ?? $request->query('day')
             ?? $request->query('date')
@@ -59,32 +59,48 @@ class VisitController extends Controller
             $normalized = strtolower(trim(str_replace(['_', '-'], ' ', (string) $dateFilter)));
             $normalized = preg_replace('/\s+/', ' ', $normalized);
 
-            $targetDate = null;
-            if (in_array($normalized, ['today', 'current day', 'current'])) {
-                $targetDate = now()->toDateString();
-            } elseif (in_array($normalized, ['tomorrow', 'tomorow'])) {
-                $targetDate = now()->addDay()->toDateString();
-            } elseif (in_array($normalized, ['day after tomorrow', 'day after tommarow'])) {
-                $targetDate = now()->addDays(2)->toDateString();
-            } elseif ($normalized === 'yesterday') {
-                $targetDate = now()->subDay()->toDateString();
-            } else {
-                try {
-                    $targetDate = Carbon::parse($dateFilter)->toDateString();
-                } catch (\Throwable) {
-                    $targetDate = null;
-                }
-            }
-
-            if ($targetDate) {
-                $query->where(function ($q) use ($targetDate) {
-                    $q->whereDate('expected_start_date', $targetDate)
-                        ->orWhere(function ($sub) use ($targetDate) {
-                            $sub->whereNotNull('expected_end_date')
-                                ->whereDate('expected_start_date', '<=', $targetDate)
-                                ->whereDate('expected_end_date', '>=', $targetDate);
-                        });
+            if (in_array($normalized, ['before today', 'before', 'past'])) {
+                $today = now()->toDateString();
+                $query->where(function ($q) use ($today) {
+                    $q->where(function ($sub) use ($today) {
+                        $sub->whereNotNull('expected_end_date')
+                            ->whereDate('expected_end_date', '<', $today);
+                    })->orWhere(function ($sub) use ($today) {
+                        $sub->whereNull('expected_end_date')
+                            ->whereDate('expected_start_date', '<', $today);
+                    });
                 });
+            } elseif (in_array($normalized, ['after today', 'after', 'future', 'upcoming'])) {
+                $today = now()->toDateString();
+                $query->whereDate('expected_start_date', '>', $today);
+            } else {
+                $targetDate = null;
+                if (in_array($normalized, ['today', 'current day', 'current'])) {
+                    $targetDate = now()->toDateString();
+                } elseif (in_array($normalized, ['tomorrow', 'tomorow'])) {
+                    $targetDate = now()->addDay()->toDateString();
+                } elseif (in_array($normalized, ['day after tomorrow', 'day after tommarow'])) {
+                    $targetDate = now()->addDays(2)->toDateString();
+                } elseif ($normalized === 'yesterday') {
+                    $targetDate = now()->subDay()->toDateString();
+                } else {
+                    try {
+                        $targetDate = Carbon::parse($dateFilter)->toDateString();
+                    } catch (\Throwable) {
+                        $targetDate = null;
+                    }
+                }
+
+                if ($targetDate) {
+                    $query->where(function ($q) use ($targetDate) {
+                        $q->whereDate('expected_start_date', $targetDate)
+                            ->orWhere(function ($sub) use ($targetDate) {
+                                $sub->whereNotNull('expected_end_date')
+                                    ->whereDate('expected_start_date', '<=', $targetDate)
+                                    ->whereDate('expected_end_date', '>=', $targetDate);
+                            });
+                    });
+                }
             }
         }
 

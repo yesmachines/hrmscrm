@@ -33,7 +33,6 @@ return new class extends Migration
             $table->integer('no_pay_days')->nullable();
             $table->integer('requires_document_after_days')->nullable();
             $table->boolean('requires_weekend_document')->default(false);
-            $table->integer('allocation_days')->nullable();
             $table->boolean('carry_forward')->default(false);
             $table->boolean('encashment')->default(false);
             $table->text('remarks')->nullable();

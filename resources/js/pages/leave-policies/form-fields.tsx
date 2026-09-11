@@ -18,7 +18,6 @@ type LeavePolicyFormValues = {
     no_pay_days?: number | string | null;
     requires_document_after_days?: number | string | null;
     requires_weekend_document?: number | string | null;
-    allocation_days?: number | string | null;
     carry_forward?: number | string | null;
     encashment?: number | string | null;
     remarks?: string | null;
@@ -146,20 +145,6 @@ export default function LeavePolicyFormFields({
                             </option>
                         ))}
                     </select>
-                </Field>
-
-                <Field
-                    label="Allocation days"
-                    name="allocation_days"
-                    error={errors.allocation_days}
-                >
-                    <Input
-                        id="allocation_days"
-                        name="allocation_days"
-                        type="number"
-                        min={0}
-                        defaultValue={defaults.allocation_days ?? ''}
-                    />
                 </Field>
 
                 <Field

@@ -151,7 +151,6 @@ class LeavePolicyController extends Controller
             'no_pay_days' => $policy->no_pay_days,
             'requires_document_after_days' => $policy->requires_document_after_days,
             'requires_weekend_document' => (int) $policy->requires_weekend_document,
-            'allocation_days' => $policy->allocation_days,
             'carry_forward' => (int) $policy->carry_forward,
             'encashment' => (int) $policy->encashment,
             'remarks' => $policy->remarks,

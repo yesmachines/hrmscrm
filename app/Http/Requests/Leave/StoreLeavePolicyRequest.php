@@ -34,7 +34,6 @@ class StoreLeavePolicyRequest extends FormRequest
             'half_pay_days',
             'no_pay_days',
             'requires_document_after_days',
-            'allocation_days',
             'remarks',
             'minimum_service_months',
         ] as $field) {
@@ -57,7 +56,6 @@ class StoreLeavePolicyRequest extends FormRequest
             'no_pay_days' => ['nullable', 'integer', 'min:0'],
             'requires_document_after_days' => ['nullable', 'integer', 'min:0'],
             'requires_weekend_document' => ['nullable', 'boolean'],
-            'allocation_days' => ['nullable', 'integer', 'min:0'],
             'carry_forward' => ['nullable', 'boolean'],
             'encashment' => ['nullable', 'boolean'],
             'remarks' => ['nullable', 'string'],
@@ -82,7 +80,6 @@ class StoreLeavePolicyRequest extends FormRequest
             'no_pay_days' => $validated['no_pay_days'] ?? null,
             'requires_document_after_days' => $validated['requires_document_after_days'] ?? null,
             'requires_weekend_document' => (bool) ($validated['requires_weekend_document'] ?? false),
-            'allocation_days' => $validated['allocation_days'] ?? null,
             'carry_forward' => (bool) ($validated['carry_forward'] ?? false),
             'encashment' => (bool) ($validated['encashment'] ?? false),
             'remarks' => $validated['remarks'] ?? null,

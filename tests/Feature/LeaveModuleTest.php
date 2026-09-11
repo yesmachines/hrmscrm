@@ -54,7 +54,6 @@ test('authenticated users can manage leave types and leave policies', function (
             'no_pay_days' => 1,
             'requires_document_after_days' => 3,
             'requires_weekend_document' => 0,
-            'allocation_days' => 21,
             'carry_forward' => 1,
             'encashment' => 0,
             'remarks' => 'Standard annual leave policy',
@@ -70,7 +69,6 @@ test('authenticated users can manage leave types and leave policies', function (
         ->first();
 
     expect($policy)->not->toBeNull()
-        ->and($policy->allocation_days)->toBe(21)
         ->and($policy->carry_forward)->toBeTrue();
 
     $this->actingAs($admin)

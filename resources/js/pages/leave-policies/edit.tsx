@@ -20,7 +20,6 @@ type LeavePolicy = {
     no_pay_days: number | null;
     requires_document_after_days: number | null;
     requires_weekend_document: number;
-    allocation_days: number | null;
     carry_forward: number;
     encashment: number;
     remarks: string | null;

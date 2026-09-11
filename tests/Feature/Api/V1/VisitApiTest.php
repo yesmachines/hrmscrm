@@ -300,3 +300,74 @@ test('employee or hr can filter visits by today, tomorrow, and day after tomorro
         ->assertJsonCount(1, 'data.visits')
         ->assertJsonFragment(['company' => 'DayAfterTomorrow Co']);
 });
+
+test('employee or hr can filter visits by before_today and after_today', function () {
+    $hrUser = createHrmsLoginUser('hr');
+
+    $salesUser = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Operations Lead',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    // Past visit (3 days ago)
+    Visit::query()->create([
+        'total_visitors' => 1,
+        'visitor_details' => [['name' => 'Past Visitor', 'designation' => 'Vendor']],
+        'company' => 'Past Corp',
+        'contact_no' => '+4444444444',
+        'email' => 'past@corp.com',
+        'purpose' => 'Past meeting',
+        'location' => 'Room Past',
+        'expected_start_date' => now()->subDays(3)->setTime(10, 0, 0)->toDateTimeString(),
+        'expected_end_date' => now()->subDays(3)->setTime(12, 0, 0)->toDateTimeString(),
+        'created_by' => $employee->id,
+        'status' => 'completed',
+    ]);
+
+    // Today visit
+    Visit::query()->create([
+        'total_visitors' => 1,
+        'visitor_details' => [['name' => 'Today Visitor', 'designation' => 'Consultant']],
+        'company' => 'Today Corp',
+        'contact_no' => '+1111111111',
+        'email' => 'today@corp.com',
+        'purpose' => 'Meeting today',
+        'location' => 'Room 1',
+        'expected_start_date' => now()->setTime(10, 0, 0)->toDateTimeString(),
+        'created_by' => $employee->id,
+        'status' => 'pending',
+    ]);
+
+    // Future visit (starts tomorrow)
+    Visit::query()->create([
+        'total_visitors' => 1,
+        'visitor_details' => [['name' => 'Future Visitor', 'designation' => 'Auditor']],
+        'company' => 'Future Corp',
+        'contact_no' => '+5555555555',
+        'email' => 'future@corp.com',
+        'purpose' => 'Future audit',
+        'location' => 'Room Future',
+        'expected_start_date' => now()->addDays(5)->setTime(14, 0, 0)->toDateTimeString(),
+        'created_by' => $employee->id,
+        'status' => 'pending',
+    ]);
+
+    Sanctum::actingAs($hrUser);
+
+    // 1. Filter by before_today
+    $responseBefore = $this->getJson(route('api.v1.visits.index', ['all' => 'true', 'date_filter' => 'before_today']));
+    $responseBefore->assertOk()
+        ->assertJsonCount(1, 'data.visits')
+        ->assertJsonFragment(['company' => 'Past Corp']);
+
+    // 2. Filter by after_today
+    $responseAfter = $this->getJson(route('api.v1.visits.index', ['all' => 'true', 'date_filter' => 'after_today']));
+    $responseAfter->assertOk()
+        ->assertJsonCount(1, 'data.visits')
+        ->assertJsonFragment(['company' => 'Future Corp']);
+});

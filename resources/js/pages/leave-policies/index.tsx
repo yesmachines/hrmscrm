@@ -8,7 +8,6 @@ import { dashboard } from '@/routes';
 
 type LeavePolicyRow = {
     id: number;
-    allocation_days: number | null;
     carry_forward: number;
     encashment: number;
     leave_type: { id: number; name: string; code: string } | null;
@@ -56,9 +55,6 @@ export default function LeavePoliciesIndex({
                                 <th className="px-4 py-3 font-medium">
                                     Organisation
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
-                                    Allocation
-                                </th>
                                 <th className="hidden px-4 py-3 font-medium md:table-cell">
                                     Carry forward
                                 </th>
@@ -71,7 +67,7 @@ export default function LeavePoliciesIndex({
                             {leavePolicies.data.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={5}
+                                        colSpan={4}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
                                         No leave policies found.{' '}
@@ -96,9 +92,6 @@ export default function LeavePoliciesIndex({
                                         </td>
                                         <td className="px-4 py-3">
                                             {row.organisation?.name ?? '—'}
-                                        </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
-                                            {row.allocation_days ?? '—'}
                                         </td>
                                         <td className="hidden px-4 py-3 md:table-cell">
                                             {row.carry_forward === 1
