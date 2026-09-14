@@ -7,6 +7,7 @@ use App\Models\EmployeeProfile;
 use App\Models\SalesCrm\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class EmployeeController extends Controller
@@ -115,9 +116,16 @@ class EmployeeController extends Controller
             return $this->errorResponse('Unauthenticated.', 401);
         }
 
-        $employee = Employee::query()
-            ->with(['user:id,name,email', 'department:id,name', 'organisation:id,name'])
-            ->find($id);
+        if ($id === 'me') {
+            $employee = Employee::query()
+                ->with(['user:id,name,email', 'department:id,name', 'organisation:id,name'])
+                ->where('user_id', $user->id)
+                ->first();
+        } else {
+            $employee = Employee::query()
+                ->with(['user:id,name,email', 'department:id,name', 'organisation:id,name'])
+                ->find($id);
+        }
 
         if (! $employee) {
             return $this->errorResponse('Employee not found.', 404);
@@ -160,7 +168,26 @@ class EmployeeController extends Controller
             $data['profile']['home_country_name'] = $homeCountryName;
         }
 
-        return $this->successResponse(['employee' => $data]);
+        // Fetch hierarchy levels via cm_employee_managers
+        $managers = $employee->managers()
+            ->with(['user:id,name,email', 'department:id,name'])
+            ->get();
+
+        $subordinates = $employee->subordinates()
+            ->with(['user:id,name,email', 'department:id,name'])
+            ->get();
+
+        $topLevel = $this->formatHierarchyList($managers);
+        $lowLevel = $this->formatHierarchyList($subordinates);
+
+        $data['top_level'] = $topLevel;
+        $data['low_level'] = $lowLevel;
+
+        return $this->successResponse([
+            'employee' => $data,
+            'top_level' => $topLevel,
+            'low_level' => $lowLevel,
+        ]);
     }
 
     /**
@@ -216,5 +243,35 @@ class EmployeeController extends Controller
         return $employees->map(function (Employee $emp) use ($profiles, $withProfile) {
             return $this->formatEmployee($emp, $withProfile ? $profiles->get($emp->id) : null);
         })->all();
+    }
+
+    /**
+     * Format a collection of employees for hierarchy levels (top_level / low_level).
+     *
+     * @param  Collection<int, Employee>  $employees
+     * @return list<array<string, mixed>>
+     */
+    private function formatHierarchyList($employees): array
+    {
+        return $employees->map(function (Employee $emp) {
+            return [
+                'id' => $emp->id,
+                'user_id' => $emp->user_id,
+                'name' => $emp->user?->name,
+                'email' => $emp->user?->email,
+                'emp_num' => $emp->emp_num,
+                'employee_code' => $emp->employee_code,
+                'designation' => $emp->designation,
+                'division' => $emp->division,
+                'phone' => $emp->phone,
+                'image_url' => $emp->image_url,
+                'status' => $emp->status,
+                'employment_status' => $emp->employment_status,
+                'department' => $emp->department ? [
+                    'id' => $emp->department->id,
+                    'name' => $emp->department->name,
+                ] : null,
+            ];
+        })->values()->all();
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Organisation;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -89,6 +90,32 @@ class Employee extends Model
     public function organisation(): BelongsTo
     {
         return $this->belongsTo(Organisation::class, 'organisation_id');
+    }
+
+    /**
+     * Immediate reporting managers for this employee (Top Level).
+     */
+    public function managers(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            self::class,
+            'employee_managers',
+            'employee_id',
+            'manager_id'
+        );
+    }
+
+    /**
+     * Direct subordinate reportees for this employee (Low Level).
+     */
+    public function subordinates(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            self::class,
+            'employee_managers',
+            'manager_id',
+            'employee_id'
+        );
     }
 
     public function profile(): ?EmployeeProfile
