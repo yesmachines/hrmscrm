@@ -1,10 +1,8 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
-    ArrowUpDown,
     Building2,
     CheckCircle2,
     Filter,
-    FolderTree,
     Pencil,
     Plus,
     Search,
@@ -12,6 +10,7 @@ import {
     Trash2,
     UserCheck,
     UserMinus,
+    UserPlus,
     Users,
     X,
 } from 'lucide-react';
@@ -24,7 +23,6 @@ import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
-    CardDescription,
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
@@ -56,26 +54,12 @@ type DepartmentOption = {
     code?: string | null;
 };
 
-type ManagerAssignment = {
+type ReportingManagerMapping = {
     id: number;
     employee_id: number;
     manager_id: number;
     department_id: number | null;
     priority: number;
-    employee?: {
-        id: number;
-        user_id: number;
-        emp_num: string;
-        employee_code?: string | null;
-        designation: string;
-        division?: string | null;
-        image_url?: string | null;
-        user?: {
-            id: number;
-            name: string;
-            email: string;
-        } | null;
-    } | null;
     manager?: {
         id: number;
         user_id: number;
@@ -97,8 +81,29 @@ type ManagerAssignment = {
     } | null;
 };
 
-type PaginatedAssignments = {
-    data: ManagerAssignment[];
+type EmployeeRow = {
+    id: number;
+    user_id: number;
+    emp_num: string;
+    employee_code?: string | null;
+    designation: string;
+    division?: string | null;
+    image_url?: string | null;
+    user?: {
+        id: number;
+        name: string;
+        email: string;
+    } | null;
+    department?: {
+        id: number;
+        name: string;
+        code?: string | null;
+    } | null;
+    reporting_managers: ReportingManagerMapping[];
+};
+
+type PaginatedEmployees = {
+    data: EmployeeRow[];
     links: { url: string | null; label: string; active: boolean }[];
     total: number;
     from: number | null;
@@ -106,20 +111,22 @@ type PaginatedAssignments = {
 };
 
 type PageProps = {
-    assignments: PaginatedAssignments;
-    employees: EmployeeSummary[];
+    employees: PaginatedEmployees;
+    allEmployees: EmployeeSummary[];
     departments: DepartmentOption[];
     filters: {
         search: string;
         department_id: string;
         manager_id: string;
         priority: string;
+        tab: string;
     };
     stats: {
         total_assignments: number;
         assigned_employees: number;
         active_managers: number;
         total_employees: number;
+        unassigned_employees: number;
     };
 };
 
@@ -131,8 +138,8 @@ function getInitials(name?: string | null): string {
 }
 
 export default function EmployeeManagersIndex({
-    assignments,
-    employees = [],
+    employees,
+    allEmployees = [],
     departments = [],
     filters,
     stats,
@@ -143,13 +150,19 @@ export default function EmployeeManagersIndex({
     );
     const [managerFilter, setManagerFilter] = useState(filters.manager_id || '');
     const [priorityFilter, setPriorityFilter] = useState(filters.priority || '');
+    const currentTab = filters.tab || 'all';
 
-    const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [editingAssignment, setEditingAssignment] =
-        useState<ManagerAssignment | null>(null);
+    const [isAssignOpen, setIsAssignOpen] = useState(false);
+    const [selectedEmployeeForAssign, setSelectedEmployeeForAssign] =
+        useState<EmployeeRow | null>(null);
 
-    // Create Form
-    const createForm = useForm({
+    const [editingMapping, setEditingMapping] =
+        useState<{ mapping: ReportingManagerMapping; employeeName: string } | null>(
+            null,
+        );
+
+    // Assign Form
+    const assignForm = useForm({
         employee_id: '',
         manager_id: '',
         department_id: '',
@@ -172,6 +185,21 @@ export default function EmployeeManagersIndex({
                 department_id: departmentFilter,
                 manager_id: managerFilter,
                 priority: priorityFilter,
+                tab: currentTab,
+            },
+            { preserveState: true },
+        );
+    };
+
+    const handleTabChange = (newTab: string) => {
+        router.get(
+            EmployeeManagerController.index.url(),
+            {
+                search,
+                department_id: departmentFilter,
+                manager_id: managerFilter,
+                priority: priorityFilter,
+                tab: newTab,
             },
             { preserveState: true },
         );
@@ -184,7 +212,7 @@ export default function EmployeeManagersIndex({
         setPriorityFilter('');
         router.get(
             EmployeeManagerController.index.url(),
-            {},
+            { tab: currentTab },
             { preserveState: true },
         );
     };
@@ -195,56 +223,87 @@ export default function EmployeeManagersIndex({
         Boolean(managerFilter) ||
         Boolean(priorityFilter);
 
-    const openEditModal = (assignment: ManagerAssignment) => {
-        setEditingAssignment(assignment);
+    const openAssignForEmployee = (employee?: EmployeeRow) => {
+        if (employee) {
+            setSelectedEmployeeForAssign(employee);
+            // Default priority: if employee already has managers, default to next priority
+            const nextPriority = (employee.reporting_managers?.length ?? 0) + 1;
+            assignForm.setData({
+                employee_id: String(employee.id),
+                manager_id: '',
+                department_id: employee.department?.id
+                    ? String(employee.department.id)
+                    : '',
+                priority: nextPriority,
+            });
+        } else {
+            setSelectedEmployeeForAssign(null);
+            assignForm.setData({
+                employee_id: '',
+                manager_id: '',
+                department_id: '',
+                priority: 1,
+            });
+        }
+        setIsAssignOpen(true);
+    };
+
+    const openEditModal = (
+        mapping: ReportingManagerMapping,
+        employeeName: string,
+    ) => {
+        setEditingMapping({ mapping, employeeName });
         editForm.setData({
-            manager_id: String(assignment.manager_id),
-            department_id: assignment.department_id
-                ? String(assignment.department_id)
+            manager_id: String(mapping.manager_id),
+            department_id: mapping.department_id
+                ? String(mapping.department_id)
                 : '',
-            priority: assignment.priority || 1,
+            priority: mapping.priority || 1,
         });
     };
 
-    const submitCreate = (e: FormEvent) => {
+    const submitAssign = (e: FormEvent) => {
         e.preventDefault();
-        createForm.post(EmployeeManagerController.store.url(), {
+        assignForm.post(EmployeeManagerController.store.url(), {
             preserveScroll: true,
             onSuccess: () => {
-                setIsCreateOpen(false);
-                createForm.reset();
+                setIsAssignOpen(false);
+                assignForm.reset();
+                setSelectedEmployeeForAssign(null);
             },
         });
     };
 
     const submitEdit = (e: FormEvent) => {
         e.preventDefault();
-        if (!editingAssignment) return;
+        if (!editingMapping) return;
         editForm.put(
-            EmployeeManagerController.update.url(editingAssignment.id),
+            EmployeeManagerController.update.url(editingMapping.mapping.id),
             {
                 preserveScroll: true,
                 onSuccess: () => {
-                    setEditingAssignment(null);
+                    setEditingMapping(null);
                 },
             },
         );
     };
 
-    // Filter managers for Create modal so employee cannot select themselves
-    const availableManagersForCreate = useMemo(() => {
-        if (!createForm.data.employee_id) return employees;
-        const empId = Number(createForm.data.employee_id);
-        return employees.filter((e) => e.id !== empId);
-    }, [employees, createForm.data.employee_id]);
+    // Filter available managers so an employee cannot report to themselves
+    const availableManagersForAssign = useMemo(() => {
+        const empId = Number(assignForm.data.employee_id);
+        if (!empId) return allEmployees;
+        return allEmployees.filter((e) => e.id !== empId);
+    }, [allEmployees, assignForm.data.employee_id]);
 
     const availableManagersForEdit = useMemo(() => {
-        if (!editingAssignment) return employees;
-        return employees.filter((e) => e.id !== editingAssignment.employee_id);
-    }, [employees, editingAssignment]);
+        if (!editingMapping) return allEmployees;
+        return allEmployees.filter(
+            (e) => e.id !== editingMapping.mapping.employee_id,
+        );
+    }, [allEmployees, editingMapping]);
 
-    const assignmentList = assignments?.data ?? [];
-    const assignmentLinks = assignments?.links ?? [];
+    const employeeList = employees?.data ?? [];
+    const paginationLinks = employees?.links ?? [];
 
     return (
         <>
@@ -263,7 +322,7 @@ export default function EmployeeManagersIndex({
                                     Assign Employees to Manager
                                 </h1>
                                 <p className="text-sm text-muted-foreground">
-                                    Configure reporting lines, department hierarchies, and manager priority levels.
+                                    Assign employees to reporting managers, select department hierarchies, and define priority levels.
                                 </p>
                             </div>
                         </div>
@@ -271,7 +330,7 @@ export default function EmployeeManagersIndex({
 
                     <div className="flex items-center gap-3">
                         <Button
-                            onClick={() => setIsCreateOpen(true)}
+                            onClick={() => openAssignForEmployee()}
                             className="shadow-sm"
                         >
                             <Plus className="mr-1.5 h-4 w-4" />
@@ -282,36 +341,74 @@ export default function EmployeeManagersIndex({
 
                 {/* KPI Metrics */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card className="border-border/80 shadow-xs">
+                    <Card
+                        onClick={() => handleTabChange('all')}
+                        className={`cursor-pointer transition-all border-border/80 shadow-xs hover:border-primary/50 ${
+                            currentTab === 'all'
+                                ? 'ring-2 ring-primary/20 bg-primary/5'
+                                : ''
+                        }`}
+                    >
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Total Mappings
+                                Total Employees
                             </CardTitle>
-                            <UserCheck className="h-4 w-4 text-primary" />
+                            <Users className="h-4 w-4 text-primary" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {stats.total_assignments}
+                                {stats.total_employees}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Active reporting connections
+                                {stats.total_assignments} active reporting connections
                             </p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-border/80 shadow-xs">
+                    <Card
+                        onClick={() => handleTabChange('assigned')}
+                        className={`cursor-pointer transition-all border-border/80 shadow-xs hover:border-emerald-500/50 ${
+                            currentTab === 'assigned'
+                                ? 'ring-2 ring-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/20'
+                                : ''
+                        }`}
+                    >
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                 Assigned Employees
                             </CardTitle>
-                            <Users className="h-4 w-4 text-emerald-600" />
+                            <UserCheck className="h-4 w-4 text-emerald-600" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">
+                            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                                 {stats.assigned_employees}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Out of {stats.total_employees} active employees
+                                Reporting to {stats.active_managers} managers
+                            </p>
+                        </CardContent>
+                    </Card>
+
+                    <Card
+                        onClick={() => handleTabChange('unassigned')}
+                        className={`cursor-pointer transition-all border-border/80 shadow-xs hover:border-amber-500/50 ${
+                            currentTab === 'unassigned'
+                                ? 'ring-2 ring-amber-500/20 bg-amber-50/20 dark:bg-amber-950/20'
+                                : ''
+                        }`}
+                    >
+                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Unassigned Employees
+                            </CardTitle>
+                            <UserMinus className="h-4 w-4 text-amber-600" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                                {stats.unassigned_employees}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Awaiting manager assignment
                             </p>
                         </CardContent>
                     </Card>
@@ -328,96 +425,125 @@ export default function EmployeeManagersIndex({
                                 {stats.active_managers}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Leading teams & departments
+                                Leading reporting departments
                             </p>
                         </CardContent>
                     </Card>
+                </div>
 
-                    <Card className="border-border/80 shadow-xs">
-                        <CardHeader className="flex flex-row items-center justify-between pb-2">
-                            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Unassigned
-                            </CardTitle>
-                            <UserMinus className="h-4 w-4 text-amber-600" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">
-                                {Math.max(
-                                    0,
-                                    stats.total_employees - stats.assigned_employees,
+                {/* Tabs & Filter Bar */}
+                <div className="space-y-3">
+                    {/* View Tabs */}
+                    <div className="flex items-center gap-2 border-b border-border/80 pb-2">
+                        <button
+                            type="button"
+                            onClick={() => handleTabChange('all')}
+                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                                currentTab === 'all'
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'text-muted-foreground hover:bg-muted'
+                            }`}
+                        >
+                            <Users className="h-3.5 w-3.5" />
+                            All Employees ({stats.total_employees})
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => handleTabChange('assigned')}
+                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                                currentTab === 'assigned'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'text-muted-foreground hover:bg-muted'
+                            }`}
+                        >
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+                            Assigned ({stats.assigned_employees})
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => handleTabChange('unassigned')}
+                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                                currentTab === 'unassigned'
+                                    ? 'bg-amber-600 text-white'
+                                    : 'text-muted-foreground hover:bg-muted'
+                            }`}
+                        >
+                            <UserMinus className="h-3.5 w-3.5 text-amber-300" />
+                            Unassigned ({stats.unassigned_employees})
+                        </button>
+                    </div>
+
+                    {/* Filter and Search Bar */}
+                    <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
+                        <form
+                            onSubmit={handleFilterSubmit}
+                            className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+                        >
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    type="text"
+                                    placeholder="Search by employee name, manager name, designation, or department..."
+                                    className="pl-9 bg-background"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <select
+                                    value={departmentFilter}
+                                    onChange={(e) =>
+                                        setDepartmentFilter(e.target.value)
+                                    }
+                                    className="h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                                >
+                                    <option value="">All Departments</option>
+                                    {departments.map((d) => (
+                                        <option key={d.id} value={d.id}>
+                                            {d.name} {d.code ? `(${d.code})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                <select
+                                    value={priorityFilter}
+                                    onChange={(e) =>
+                                        setPriorityFilter(e.target.value)
+                                    }
+                                    className="h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                                >
+                                    <option value="">All Priorities</option>
+                                    <option value="1">Priority 1 (Primary)</option>
+                                    <option value="2">Priority 2 (Secondary)</option>
+                                    <option value="3">Priority 3</option>
+                                </select>
+
+                                <Button type="submit" size="sm" variant="secondary">
+                                    <Filter className="mr-1.5 h-3.5 w-3.5" />
+                                    Filter
+                                </Button>
+
+                                {hasActiveFilters && (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={handleClearFilters}
+                                        className="text-muted-foreground"
+                                    >
+                                        <X className="mr-1 h-3.5 w-3.5" />
+                                        Clear
+                                    </Button>
                                 )}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Awaiting manager assignment
-                            </p>
-                        </CardContent>
-                    </Card>
+                        </form>
+                    </div>
                 </div>
 
-                {/* Filter and Search Bar */}
-                <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
-                    <form
-                        onSubmit={handleFilterSubmit}
-                        className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
-                    >
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                type="text"
-                                placeholder="Search by employee, manager, designation, or department..."
-                                className="pl-9 bg-background"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            <select
-                                value={departmentFilter}
-                                onChange={(e) => setDepartmentFilter(e.target.value)}
-                                className="h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
-                            >
-                                <option value="">All Departments</option>
-                                {departments.map((d) => (
-                                    <option key={d.id} value={d.id}>
-                                        {d.name} {d.code ? `(${d.code})` : ''}
-                                    </option>
-                                ))}
-                            </select>
-
-                            <select
-                                value={priorityFilter}
-                                onChange={(e) => setPriorityFilter(e.target.value)}
-                                className="h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
-                            >
-                                <option value="">All Priorities</option>
-                                <option value="1">Priority 1 (Primary)</option>
-                                <option value="2">Priority 2 (Secondary)</option>
-                                <option value="3">Priority 3</option>
-                            </select>
-
-                            <Button type="submit" size="sm" variant="secondary">
-                                <Filter className="mr-1.5 h-3.5 w-3.5" />
-                                Filter
-                            </Button>
-
-                            {hasActiveFilters && (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={handleClearFilters}
-                                    className="text-muted-foreground"
-                                >
-                                    <X className="mr-1 h-3.5 w-3.5" />
-                                    Clear
-                                </Button>
-                            )}
-                        </div>
-                    </form>
-                </div>
-
-                {/* Assignments Table */}
+                {/* Employees & Manager Assignments Table */}
                 <div className="rounded-2xl border border-border/80 bg-card shadow-xs overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
@@ -425,46 +551,44 @@ export default function EmployeeManagersIndex({
                                 <tr>
                                     <th className="px-6 py-3.5">Employee</th>
                                     <th className="px-6 py-3.5">Reporting Manager</th>
-                                    <th className="px-6 py-3.5">Department</th>
+                                    <th className="px-6 py-3.5">Reporting Department</th>
                                     <th className="px-6 py-3.5">Priority</th>
                                     <th className="px-6 py-3.5 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y border-border/60">
-                                {assignmentList.length === 0 ? (
+                                {employeeList.length === 0 ? (
                                     <tr>
                                         <td
                                             colSpan={5}
                                             className="px-6 py-12 text-center text-sm text-muted-foreground"
                                         >
                                             <div className="flex flex-col items-center justify-center gap-2">
-                                                <UserCheck className="h-8 w-8 text-muted-foreground/50" />
+                                                <Users className="h-8 w-8 text-muted-foreground/50" />
                                                 <p className="font-medium text-foreground">
-                                                    No manager assignments found
+                                                    No employees found
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
                                                     {hasActiveFilters
                                                         ? 'Try clearing search filters or broadening criteria.'
-                                                        : 'Click "Assign Manager" to set up your first employee reporting structure.'}
+                                                        : 'No employees matched the selected view.'}
                                                 </p>
                                             </div>
                                         </td>
                                     </tr>
                                 ) : (
-                                    assignmentList.map((assignment) => {
+                                    employeeList.map((emp) => {
                                         const empName =
-                                            assignment.employee?.user?.name ??
-                                            `Emp #${assignment.employee?.emp_num ?? assignment.employee_id}`;
-                                        const mgrName =
-                                            assignment.manager?.user?.name ??
-                                            `Emp #${assignment.manager?.emp_num ?? assignment.manager_id}`;
+                                            emp.user?.name ?? `Emp #${emp.emp_num}`;
+                                        const mappings = emp.reporting_managers ?? [];
+                                        const isAssigned = mappings.length > 0;
 
                                         return (
                                             <tr
-                                                key={assignment.id}
+                                                key={emp.id}
                                                 className="transition-colors hover:bg-muted/30"
                                             >
-                                                {/* Employee Column */}
+                                                {/* Employee Info */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
@@ -473,7 +597,7 @@ export default function EmployeeManagersIndex({
                                                         <div>
                                                             <Link
                                                                 href={EmployeeController.show.url(
-                                                                    assignment.employee_id,
+                                                                    emp.id,
                                                                 )}
                                                                 className="font-medium text-foreground hover:underline"
                                                             >
@@ -481,125 +605,224 @@ export default function EmployeeManagersIndex({
                                                             </Link>
                                                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                                 <span>
-                                                                    {assignment.employee
-                                                                        ?.designation ??
+                                                                    {emp.designation ||
                                                                         'Employee'}
                                                                 </span>
                                                                 <span>•</span>
                                                                 <span>
-                                                                    #
-                                                                    {assignment.employee
-                                                                        ?.emp_num ??
-                                                                        assignment.employee_id}
+                                                                    #{emp.emp_num}
                                                                 </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                {/* Manager Column */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-xs font-bold text-blue-600 dark:text-blue-400">
-                                                            {getInitials(mgrName)}
-                                                        </div>
-                                                        <div>
-                                                            <Link
-                                                                href={EmployeeController.show.url(
-                                                                    assignment.manager_id,
+                                                                {emp.department && (
+                                                                    <>
+                                                                        <span>•</span>
+                                                                        <span className="text-foreground/80 font-medium">
+                                                                            {
+                                                                                emp
+                                                                                    .department
+                                                                                    .name
+                                                                            }
+                                                                        </span>
+                                                                    </>
                                                                 )}
-                                                                className="font-medium text-foreground hover:underline"
-                                                            >
-                                                                {mgrName}
-                                                            </Link>
-                                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                                <span>
-                                                                    {assignment.manager
-                                                                        ?.designation ??
-                                                                        'Manager'}
-                                                                </span>
-                                                                <span>•</span>
-                                                                <span>
-                                                                    #
-                                                                    {assignment.manager
-                                                                        ?.emp_num ??
-                                                                        assignment.manager_id}
-                                                                </span>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </td>
 
-                                                {/* Department Column */}
+                                                {/* Reporting Manager(s) */}
                                                 <td className="px-6 py-4">
-                                                    {assignment.department ? (
-                                                        <span className="inline-flex items-center gap-1.5 rounded-md bg-secondary/80 px-2.5 py-1 text-xs font-medium text-secondary-foreground">
-                                                            <Building2 className="h-3 w-3 text-muted-foreground" />
-                                                            {assignment.department.name}
-                                                            {assignment.department.code && (
-                                                                <span className="text-muted-foreground">
-                                                                    ({assignment.department.code})
-                                                                </span>
-                                                            )}
+                                                    {!isAssigned ? (
+                                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                                                            <UserMinus className="h-3 w-3" />
+                                                            Not Assigned
                                                         </span>
                                                     ) : (
+                                                        <div className="space-y-2">
+                                                            {mappings.map((m) => {
+                                                                const mgrName =
+                                                                    m.manager?.user
+                                                                        ?.name ??
+                                                                    `Emp #${m.manager?.emp_num ?? m.manager_id}`;
+                                                                return (
+                                                                    <div
+                                                                        key={m.id}
+                                                                        className="flex items-center gap-2"
+                                                                    >
+                                                                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/10 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                                                            {getInitials(
+                                                                                mgrName,
+                                                                            )}
+                                                                        </div>
+                                                                        <div>
+                                                                            <Link
+                                                                                href={EmployeeController.show.url(
+                                                                                    m.manager_id,
+                                                                                )}
+                                                                                className="font-medium text-foreground hover:underline text-xs"
+                                                                            >
+                                                                                {mgrName}
+                                                                            </Link>
+                                                                            <span className="text-[11px] text-muted-foreground block">
+                                                                                {m.manager
+                                                                                    ?.designation ??
+                                                                                    'Manager'}{' '}
+                                                                                (#{m.manager?.emp_num})
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </td>
+
+                                                {/* Reporting Department */}
+                                                <td className="px-6 py-4">
+                                                    {!isAssigned ? (
                                                         <span className="text-xs text-muted-foreground italic">
-                                                            Default / Direct
-                                                        </span>
-                                                    )}
-                                                </td>
-
-                                                {/* Priority Column */}
-                                                <td className="px-6 py-4">
-                                                    {assignment.priority === 1 ? (
-                                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                                                            <CheckCircle2 className="h-3 w-3" />
-                                                            Priority 1 (Primary)
-                                                        </span>
-                                                    ) : assignment.priority === 2 ? (
-                                                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
-                                                            Priority 2 (Secondary)
+                                                            -
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                                                            Priority {assignment.priority}
-                                                        </span>
+                                                        <div className="space-y-1.5">
+                                                            {mappings.map((m) => (
+                                                                <div key={m.id}>
+                                                                    {m.department ? (
+                                                                        <span className="inline-flex items-center gap-1.5 rounded-md bg-secondary/80 px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                                                                            <Building2 className="h-3 w-3 text-muted-foreground" />
+                                                                            {
+                                                                                m
+                                                                                    .department
+                                                                                    .name
+                                                                            }
+                                                                            {m
+                                                                                .department
+                                                                                .code && (
+                                                                                <span className="text-muted-foreground">
+                                                                                    (
+                                                                                    {
+                                                                                        m
+                                                                                            .department
+                                                                                            .code
+                                                                                    }
+                                                                                    )
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-xs text-muted-foreground italic">
+                                                                            Default / Direct
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
                                                     )}
                                                 </td>
 
-                                                {/* Actions Column */}
+                                                {/* Priority */}
+                                                <td className="px-6 py-4">
+                                                    {!isAssigned ? (
+                                                        <span className="text-xs text-muted-foreground italic">
+                                                            -
+                                                        </span>
+                                                    ) : (
+                                                        <div className="space-y-1.5">
+                                                            {mappings.map((m) => (
+                                                                <div key={m.id}>
+                                                                    {m.priority === 1 ? (
+                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                                                                            <CheckCircle2 className="h-3 w-3" />
+                                                                            Priority 1 (Primary)
+                                                                        </span>
+                                                                    ) : m.priority === 2 ? (
+                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">
+                                                                            Priority 2 (Secondary)
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                                                                            Priority {m.priority}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </td>
+
+                                                {/* Actions */}
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-1.5">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                                            onClick={() => openEditModal(assignment)}
-                                                            title="Edit assignment"
-                                                        >
-                                                            <Pencil className="h-3.5 w-3.5" />
-                                                        </Button>
-
-                                                        <DeleteConfirmDialog
-                                                            title="Remove Manager Assignment?"
-                                                            description={`Are you sure you want to remove ${mgrName} as the reporting manager for ${empName}?`}
-                                                            confirmLabel="Remove Assignment"
-                                                            form={{
-                                                                action: EmployeeManagerController.destroy.url(
-                                                                    assignment.id,
-                                                                ),
-                                                                method: 'delete',
-                                                            }}
-                                                        >
+                                                        {!isAssigned ? (
                                                             <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                                                title="Delete assignment"
+                                                                size="sm"
+                                                                variant="default"
+                                                                onClick={() =>
+                                                                    openAssignForEmployee(
+                                                                        emp,
+                                                                    )
+                                                                }
+                                                                className="h-8 gap-1 text-xs"
                                                             >
-                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                <Plus className="h-3.5 w-3.5" />
+                                                                Assign Manager
                                                             </Button>
-                                                        </DeleteConfirmDialog>
+                                                        ) : (
+                                                            <>
+                                                                {/* Edit primary manager */}
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                                                    onClick={() =>
+                                                                        openEditModal(
+                                                                            mappings[0],
+                                                                            empName,
+                                                                        )
+                                                                    }
+                                                                    title="Edit manager, department or priority"
+                                                                >
+                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                </Button>
+
+                                                                {/* Add another manager (e.g. secondary) */}
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                                                    onClick={() =>
+                                                                        openAssignForEmployee(
+                                                                            emp,
+                                                                        )
+                                                                    }
+                                                                    title="Add secondary manager"
+                                                                >
+                                                                    <UserPlus className="h-3.5 w-3.5" />
+                                                                </Button>
+
+                                                                {/* Remove mapping */}
+                                                                <DeleteConfirmDialog
+                                                                    title="Remove Manager Assignment?"
+                                                                    description={`Are you sure you want to remove the reporting manager assignment for ${empName}?`}
+                                                                    confirmLabel="Remove Assignment"
+                                                                    form={{
+                                                                        action: EmployeeManagerController.destroy.url(
+                                                                            mappings[0]
+                                                                                .id,
+                                                                        ),
+                                                                        method: 'delete',
+                                                                    }}
+                                                                >
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                                        title="Delete assignment"
+                                                                    >
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </Button>
+                                                                </DeleteConfirmDialog>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -611,19 +834,19 @@ export default function EmployeeManagersIndex({
                     </div>
 
                     {/* Pagination */}
-                    {assignmentLinks.length > 3 && (
+                    {paginationLinks.length > 3 && (
                         <div className="flex items-center justify-between border-t border-border/70 px-6 py-3.5">
                             <p className="text-xs text-muted-foreground">
-                                Showing {assignments.from ?? 0} to {assignments.to ?? 0} of{' '}
-                                {assignments.total} assignments
+                                Showing {employees.from ?? 0} to{' '}
+                                {employees.to ?? 0} of {employees.total} employees
                             </p>
                             <div className="flex items-center gap-1">
-                                {assignmentLinks.map((link, index) => (
+                                {paginationLinks.map((link, index) => (
                                     <Link
                                         key={index}
                                         href={link.url || '#'}
                                         dangerouslySetInnerHTML={{ __html: link.label }}
-                                        className={`rounded-md px-3 py-1.5 text-xs font-medium ${
+                                        className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
                                             link.active
                                                 ? 'bg-primary text-primary-foreground'
                                                 : link.url
@@ -638,128 +861,172 @@ export default function EmployeeManagersIndex({
                 </div>
             </div>
 
-            {/* Create Assignment Dialog */}
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogContent className="sm:max-w-[480px]">
+            {/* Assign Manager Modal */}
+            <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
+                <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <UserCheck className="h-5 w-5 text-primary" />
-                            Assign Employee to Manager
+                            {selectedEmployeeForAssign
+                                ? `Assign Manager to ${selectedEmployeeForAssign.user?.name ?? `Emp #${selectedEmployeeForAssign.emp_num}`}`
+                                : 'Assign Employee to Manager'}
                         </DialogTitle>
                         <DialogDescription>
-                            Select an employee, designate their reporting manager, department, and priority level.
+                            Select the reporting manager, department, and priority level.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={submitCreate} className="space-y-4 py-2">
-                        {/* Employee Select */}
+                    <form onSubmit={submitAssign} className="space-y-4 py-2">
+                        {/* Employee Selector (Locked if opened from row, or dropdown) */}
                         <div className="space-y-1.5">
-                            <Label htmlFor="create-employee">
+                            <Label htmlFor="assign-employee">
                                 Employee <span className="text-destructive">*</span>
                             </Label>
-                            <select
-                                id="create-employee"
-                                required
-                                value={createForm.data.employee_id}
-                                onChange={(e) =>
-                                    createForm.setData('employee_id', e.target.value)
-                                }
-                                className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
-                            >
-                                <option value="">Select an Employee...</option>
-                                {employees.map((e) => (
-                                    <option key={e.id} value={e.id}>
-                                        {e.name} ({e.designation} - #{e.emp_num})
-                                    </option>
-                                ))}
-                            </select>
-                            {createForm.errors.employee_id && (
+                            {selectedEmployeeForAssign ? (
+                                <div className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+                                    <div>
+                                        <span className="font-semibold text-foreground">
+                                            {selectedEmployeeForAssign.user?.name}
+                                        </span>
+                                        <span className="text-muted-foreground ml-2">
+                                            (
+                                            {selectedEmployeeForAssign.designation} - #
+                                            {selectedEmployeeForAssign.emp_num})
+                                        </span>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 text-[11px] text-muted-foreground"
+                                        onClick={() =>
+                                            setSelectedEmployeeForAssign(null)
+                                        }
+                                    >
+                                        Change
+                                    </Button>
+                                </div>
+                            ) : (
+                                <select
+                                    id="assign-employee"
+                                    required
+                                    value={assignForm.data.employee_id}
+                                    onChange={(e) =>
+                                        assignForm.setData(
+                                            'employee_id',
+                                            e.target.value,
+                                        )
+                                    }
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                                >
+                                    <option value="">Select an Employee...</option>
+                                    {allEmployees.map((e) => (
+                                        <option key={e.id} value={e.id}>
+                                            {e.name} ({e.designation} - #{e.emp_num})
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {assignForm.errors.employee_id && (
                                 <p className="text-xs text-destructive">
-                                    {createForm.errors.employee_id}
+                                    {assignForm.errors.employee_id}
                                 </p>
                             )}
                         </div>
 
                         {/* Manager Select */}
                         <div className="space-y-1.5">
-                            <Label htmlFor="create-manager">
+                            <Label htmlFor="assign-manager">
                                 Reporting Manager <span className="text-destructive">*</span>
                             </Label>
                             <select
-                                id="create-manager"
+                                id="assign-manager"
                                 required
-                                value={createForm.data.manager_id}
+                                value={assignForm.data.manager_id}
                                 onChange={(e) =>
-                                    createForm.setData('manager_id', e.target.value)
+                                    assignForm.setData(
+                                        'manager_id',
+                                        e.target.value,
+                                    )
                                 }
                                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
                             >
                                 <option value="">Select a Manager...</option>
-                                {availableManagersForCreate.map((m) => (
+                                {availableManagersForAssign.map((m) => (
                                     <option key={m.id} value={m.id}>
                                         {m.name} ({m.designation} - #{m.emp_num})
                                     </option>
                                 ))}
                             </select>
-                            {createForm.errors.manager_id && (
+                            {assignForm.errors.manager_id && (
                                 <p className="text-xs text-destructive">
-                                    {createForm.errors.manager_id}
+                                    {assignForm.errors.manager_id}
                                 </p>
                             )}
                         </div>
 
                         {/* Department Select */}
                         <div className="space-y-1.5">
-                            <Label htmlFor="create-department">
-                                Department <span className="text-xs text-muted-foreground">(Optional)</span>
+                            <Label htmlFor="assign-department">
+                                Reporting Department{' '}
+                                <span className="text-xs text-muted-foreground">
+                                    (Optional)
+                                </span>
                             </Label>
                             <select
-                                id="create-department"
-                                value={createForm.data.department_id}
+                                id="assign-department"
+                                value={assignForm.data.department_id}
                                 onChange={(e) =>
-                                    createForm.setData('department_id', e.target.value)
+                                    assignForm.setData(
+                                        'department_id',
+                                        e.target.value,
+                                    )
                                 }
                                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
                             >
-                                <option value="">Default / Not Specified</option>
+                                <option value="">Default / Same as Employee</option>
                                 {departments.map((d) => (
                                     <option key={d.id} value={d.id}>
                                         {d.name} {d.code ? `(${d.code})` : ''}
                                     </option>
                                 ))}
                             </select>
-                            {createForm.errors.department_id && (
+                            {assignForm.errors.department_id && (
                                 <p className="text-xs text-destructive">
-                                    {createForm.errors.department_id}
+                                    {assignForm.errors.department_id}
                                 </p>
                             )}
                         </div>
 
                         {/* Priority Select */}
                         <div className="space-y-1.5">
-                            <Label htmlFor="create-priority">
-                                Priority Level
-                            </Label>
+                            <Label htmlFor="assign-priority">Priority Level</Label>
                             <select
-                                id="create-priority"
-                                value={createForm.data.priority}
+                                id="assign-priority"
+                                value={assignForm.data.priority}
                                 onChange={(e) =>
-                                    createForm.setData(
+                                    assignForm.setData(
                                         'priority',
                                         Number(e.target.value),
                                     )
                                 }
                                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
                             >
-                                <option value={1}>Priority 1 - Primary Manager (Direct Report)</option>
-                                <option value={2}>Priority 2 - Secondary Manager (Functional / Co-report)</option>
-                                <option value={3}>Priority 3 - Tertiary / Project Lead</option>
+                                <option value={1}>
+                                    Priority 1 - Primary Manager (Direct Report)
+                                </option>
+                                <option value={2}>
+                                    Priority 2 - Secondary Manager (Functional / Co-report)
+                                </option>
+                                <option value={3}>
+                                    Priority 3 - Tertiary / Project Lead
+                                </option>
                                 <option value={4}>Priority 4</option>
                                 <option value={5}>Priority 5</option>
                             </select>
-                            {createForm.errors.priority && (
+                            {assignForm.errors.priority && (
                                 <p className="text-xs text-destructive">
-                                    {createForm.errors.priority}
+                                    {assignForm.errors.priority}
                                 </p>
                             )}
                         </div>
@@ -768,26 +1035,28 @@ export default function EmployeeManagersIndex({
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => setIsCreateOpen(false)}
+                                onClick={() => setIsAssignOpen(false)}
                             >
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={createForm.processing}>
-                                {createForm.processing ? 'Assigning...' : 'Assign Manager'}
+                            <Button type="submit" disabled={assignForm.processing}>
+                                {assignForm.processing
+                                    ? 'Assigning...'
+                                    : 'Assign Manager'}
                             </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
 
-            {/* Edit Assignment Dialog */}
+            {/* Edit Assignment Modal */}
             <Dialog
-                open={Boolean(editingAssignment)}
+                open={Boolean(editingMapping)}
                 onOpenChange={(open) => {
-                    if (!open) setEditingAssignment(null);
+                    if (!open) setEditingMapping(null);
                 }}
             >
-                <DialogContent className="sm:max-w-[480px]">
+                <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Pencil className="h-5 w-5 text-primary" />
@@ -796,8 +1065,7 @@ export default function EmployeeManagersIndex({
                         <DialogDescription>
                             Update reporting manager, department, or priority for{' '}
                             <span className="font-semibold text-foreground">
-                                {editingAssignment?.employee?.user?.name ??
-                                    `Emp #${editingAssignment?.employee?.emp_num}`}
+                                {editingMapping?.employeeName}
                             </span>
                             .
                         </DialogDescription>
@@ -814,7 +1082,10 @@ export default function EmployeeManagersIndex({
                                 required
                                 value={editForm.data.manager_id}
                                 onChange={(e) =>
-                                    editForm.setData('manager_id', e.target.value)
+                                    editForm.setData(
+                                        'manager_id',
+                                        e.target.value,
+                                    )
                                 }
                                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
                             >
@@ -835,17 +1106,23 @@ export default function EmployeeManagersIndex({
                         {/* Department Select */}
                         <div className="space-y-1.5">
                             <Label htmlFor="edit-department">
-                                Department <span className="text-xs text-muted-foreground">(Optional)</span>
+                                Reporting Department{' '}
+                                <span className="text-xs text-muted-foreground">
+                                    (Optional)
+                                </span>
                             </Label>
                             <select
                                 id="edit-department"
                                 value={editForm.data.department_id}
                                 onChange={(e) =>
-                                    editForm.setData('department_id', e.target.value)
+                                    editForm.setData(
+                                        'department_id',
+                                        e.target.value,
+                                    )
                                 }
                                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
                             >
-                                <option value="">Default / Not Specified</option>
+                                <option value="">Default / Same as Employee</option>
                                 {departments.map((d) => (
                                     <option key={d.id} value={d.id}>
                                         {d.name} {d.code ? `(${d.code})` : ''}
@@ -873,9 +1150,15 @@ export default function EmployeeManagersIndex({
                                 }
                                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
                             >
-                                <option value={1}>Priority 1 - Primary Manager (Direct Report)</option>
-                                <option value={2}>Priority 2 - Secondary Manager (Functional / Co-report)</option>
-                                <option value={3}>Priority 3 - Tertiary / Project Lead</option>
+                                <option value={1}>
+                                    Priority 1 - Primary Manager (Direct Report)
+                                </option>
+                                <option value={2}>
+                                    Priority 2 - Secondary Manager (Functional / Co-report)
+                                </option>
+                                <option value={3}>
+                                    Priority 3 - Tertiary / Project Lead
+                                </option>
                                 <option value={4}>Priority 4</option>
                                 <option value={5}>Priority 5</option>
                             </select>
@@ -890,7 +1173,7 @@ export default function EmployeeManagersIndex({
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => setEditingAssignment(null)}
+                                onClick={() => setEditingMapping(null)}
                             >
                                 Cancel
                             </Button>

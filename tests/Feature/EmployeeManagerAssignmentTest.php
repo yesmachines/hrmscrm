@@ -60,12 +60,11 @@ test('authenticated users can view employee managers index with assignments and 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('employees/managers/index')
-            ->has('assignments.data', 1)
-            ->where('assignments.data.0.priority', 1)
-            ->where('assignments.data.0.department.name', 'Engineering')
+            ->has('employees.data', 2)
             ->where('stats.total_assignments', 1)
             ->where('stats.assigned_employees', 1)
             ->where('stats.active_managers', 1)
+            ->where('stats.unassigned_employees', 1)
         );
 });
 

@@ -25,37 +25,42 @@ class EmployeeManagerController extends Controller
         $departmentId = $request->input('department_id');
         $managerId = $request->input('manager_id');
         $priority = $request->input('priority');
+        $tab = $request->input('tab', 'all'); // 'all', 'assigned', 'unassigned'
 
-        $query = EmployeeManager::query()
+        $query = Employee::query()
+            ->where('status', 1)
             ->with([
-                'employee:id,user_id,emp_num,employee_code,designation,division,image_url',
-                'employee.user:id,name,email',
-                'manager:id,user_id,emp_num,employee_code,designation,division,image_url',
-                'manager.user:id,name,email',
+                'user:id,name,email',
                 'department:id,name,code',
+                'reportingManagers' => function ($q) {
+                    $q->with([
+                        'manager:id,user_id,emp_num,employee_code,designation,division,image_url',
+                        'manager.user:id,name,email',
+                        'department:id,name,code',
+                    ])->orderBy('priority');
+                },
             ]);
+
+        if ($tab === 'assigned') {
+            $query->has('reportingManagers');
+        } elseif ($tab === 'unassigned') {
+            $query->doesntHave('reportingManagers');
+        }
 
         if ($search) {
             $query->where(function (Builder $q) use ($search) {
-                $q->whereHas('employee', function (Builder $eq) use ($search) {
-                    $eq->where('emp_num', 'like', "%{$search}%")
-                        ->orWhere('employee_code', 'like', "%{$search}%")
-                        ->orWhere('designation', 'like', "%{$search}%")
-                        ->orWhereHas('user', function (Builder $uq) use ($search) {
-                            $uq->where('name', 'like', "%{$search}%")
-                                ->orWhere('email', 'like', "%{$search}%");
-                        });
-                })
-                    ->orWhereHas('manager', function (Builder $mq) use ($search) {
-                        $mq->where('emp_num', 'like', "%{$search}%")
-                            ->orWhere('employee_code', 'like', "%{$search}%")
-                            ->orWhere('designation', 'like', "%{$search}%")
-                            ->orWhereHas('user', function (Builder $uq) use ($search) {
-                                $uq->where('name', 'like', "%{$search}%")
-                                    ->orWhere('email', 'like', "%{$search}%");
-                            });
+                $q->where('emp_num', 'like', "%{$search}%")
+                    ->orWhere('employee_code', 'like', "%{$search}%")
+                    ->orWhere('designation', 'like', "%{$search}%")
+                    ->orWhereHas('user', function (Builder $uq) use ($search) {
+                        $uq->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
                     })
-                    ->orWhereHas('department', function (Builder $dq) use ($search) {
+                    ->orWhereHas('reportingManagers.manager.user', function (Builder $mq) use ($search) {
+                        $mq->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('reportingManagers.department', function (Builder $dq) use ($search) {
                         $dq->where('name', 'like', "%{$search}%")
                             ->orWhere('code', 'like', "%{$search}%");
                     });
@@ -63,24 +68,32 @@ class EmployeeManagerController extends Controller
         }
 
         if ($departmentId !== null && $departmentId !== '') {
-            $query->where('department_id', (int) $departmentId);
+            $query->where(function (Builder $q) use ($departmentId) {
+                $q->where('department_id', (int) $departmentId)
+                    ->orWhereHas('reportingManagers', function (Builder $rq) use ($departmentId) {
+                        $rq->where('department_id', (int) $departmentId);
+                    });
+            });
         }
 
         if ($managerId !== null && $managerId !== '') {
-            $query->where('manager_id', (int) $managerId);
+            $query->whereHas('reportingManagers', function (Builder $rq) use ($managerId) {
+                $rq->where('manager_id', (int) $managerId);
+            });
         }
 
         if ($priority !== null && $priority !== '') {
-            $query->where('priority', (int) $priority);
+            $query->whereHas('reportingManagers', function (Builder $rq) use ($priority) {
+                $rq->where('priority', (int) $priority);
+            });
         }
 
-        $assignments = $query
-            ->orderBy('priority')
-            ->orderByDesc('id')
+        $employees = $query
+            ->orderBy('id', 'desc')
             ->paginate(15)
             ->withQueryString();
 
-        $employees = Employee::query()
+        $allEmployees = Employee::query()
             ->where('status', 1)
             ->with('user:id,name,email')
             ->orderBy('id')
@@ -102,22 +115,25 @@ class EmployeeManagerController extends Controller
         $assignedEmployeesCount = EmployeeManager::query()->distinct('employee_id')->count('employee_id');
         $activeManagersCount = EmployeeManager::query()->distinct('manager_id')->count('manager_id');
         $totalEmployeesCount = Employee::query()->where('status', 1)->count();
+        $unassignedCount = max(0, $totalEmployeesCount - $assignedEmployeesCount);
 
         return Inertia::render('employees/managers/index', [
-            'assignments' => $assignments,
             'employees' => $employees,
+            'allEmployees' => $allEmployees,
             'departments' => $departments,
             'filters' => [
                 'search' => $search ?? '',
                 'department_id' => $departmentId ?? '',
                 'manager_id' => $managerId ?? '',
                 'priority' => $priority ?? '',
+                'tab' => $tab,
             ],
             'stats' => [
                 'total_assignments' => $totalAssignments,
                 'assigned_employees' => $assignedEmployeesCount,
                 'active_managers' => $activeManagersCount,
                 'total_employees' => $totalEmployeesCount,
+                'unassigned_employees' => $unassignedCount,
             ],
         ]);
     }
