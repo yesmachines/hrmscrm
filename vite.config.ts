@@ -6,6 +6,12 @@ import laravel from 'laravel-vite-plugin';
 import { bunny } from 'laravel-vite-plugin/fonts';
 import { defineConfig } from 'vite';
 
+const phpBinary =
+    process.env.PHP_BINARY ||
+    (process.platform === 'win32'
+        ? '"C:/laragon/bin/php/php-8.5/php.exe"'
+        : 'php');
+
 export default defineConfig({
     plugins: [
         laravel({
@@ -26,7 +32,7 @@ export default defineConfig({
         tailwindcss(),
         wayfinder({
             formVariants: true,
-            command: '"C:/laragon/bin/php/php-8.5/php.exe" artisan wayfinder:generate',
+            command: `${phpBinary} artisan wayfinder:generate`,
         }),
     ],
 });
