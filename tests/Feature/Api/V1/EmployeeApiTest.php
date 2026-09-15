@@ -9,6 +9,7 @@ beforeEach(function () {
     DB::connection('salescrm')->table('personal_access_tokens')->delete();
     DB::connection('salescrm')->table('employee_managers')->delete();
     DB::connection('salescrm')->table('employees')->delete();
+    DB::connection('salescrm')->table('departments')->delete();
     DB::connection('salescrm')->table('users')->delete();
 });
 
@@ -242,4 +243,155 @@ test('non existent employee id returns 404', function () {
     $response = $this->withToken($token)->getJson('/api/v1/employees/999999');
 
     $response->assertNotFound();
+});
+
+test('reporting relations return explicit department assigned against the relationship', function () {
+    $salesDeptId = DB::connection('salescrm')->table('departments')->insertGetId([
+        'name' => 'Sales & Business',
+        'code' => 'SALES',
+        'status' => 1,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $mgrUser = SalesCrmUser::query()->create([
+        'name' => 'Sales Head',
+        'email' => 'sales.head@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $manager = Employee::query()->create([
+        'user_id' => $mgrUser->id,
+        'emp_num' => 'EMP-S01',
+        'designation' => 'Sales Director',
+        'division' => 'sd',
+        'status' => 1,
+        'has_report' => true,
+    ]);
+
+    $empUser = SalesCrmUser::query()->create([
+        'name' => 'Sales Executive',
+        'email' => 'sales.exec@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $empUser->id,
+        'emp_num' => 'EMP-S02',
+        'designation' => 'Sales Executive',
+        'division' => 'sd',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    // Assign reporting relation with explicit department_id
+    DB::connection('salescrm')->table('employee_managers')->insert([
+        'employee_id' => $employee->id,
+        'manager_id' => $manager->id,
+        'department_id' => $salesDeptId,
+    ]);
+
+    $token = $empUser->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->getJson("/api/v1/employees/{$employee->id}");
+
+    $response->assertOk()
+        ->assertJsonPath('data.employee.top_level.0.id', $manager->id)
+        ->assertJsonPath('data.employee.top_level.0.department_id', $salesDeptId)
+        ->assertJsonPath('data.employee.top_level.0.department.id', $salesDeptId)
+        ->assertJsonPath('data.employee.top_level.0.department.name', 'Sales & Business')
+        ->assertJsonPath('data.employee.top_level.0.department.code', 'SALES');
+});
+
+test('employee with reporting relations in different departments returns respective departments', function () {
+    $salesDeptId = DB::connection('salescrm')->table('departments')->insertGetId([
+        'name' => 'Sales',
+        'code' => 'SLS',
+        'status' => 1,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $opsDeptId = DB::connection('salescrm')->table('departments')->insertGetId([
+        'name' => 'Operations',
+        'code' => 'OPS',
+        'status' => 1,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $salesMgrUser = SalesCrmUser::query()->create([
+        'name' => 'Sales Manager',
+        'email' => 'sales.mgr@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $salesMgr = Employee::query()->create([
+        'user_id' => $salesMgrUser->id,
+        'emp_num' => 'EMP-SM1',
+        'designation' => 'Sales Manager',
+        'division' => 'sd',
+        'status' => 1,
+        'has_report' => true,
+    ]);
+
+    $opsMgrUser = SalesCrmUser::query()->create([
+        'name' => 'Operations Manager',
+        'email' => 'ops.mgr@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $opsMgr = Employee::query()->create([
+        'user_id' => $opsMgrUser->id,
+        'emp_num' => 'EMP-OM1',
+        'designation' => 'Operations Head',
+        'division' => 'ops',
+        'status' => 1,
+        'has_report' => true,
+    ]);
+
+    $empUser = SalesCrmUser::query()->create([
+        'name' => 'Cross Functional Employee',
+        'email' => 'cross@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $empUser->id,
+        'emp_num' => 'EMP-CF1',
+        'designation' => 'Operations & Sales Coordinator',
+        'division' => 'sd',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    // Reports to Sales Manager for Sales, and Operations Manager for Operations
+    DB::connection('salescrm')->table('employee_managers')->insert([
+        ['employee_id' => $employee->id, 'manager_id' => $salesMgr->id, 'department_id' => $salesDeptId],
+        ['employee_id' => $employee->id, 'manager_id' => $opsMgr->id, 'department_id' => $opsDeptId],
+    ]);
+
+    $token = $empUser->createToken('test')->plainTextToken;
+
+    // 1. Fetch all managers
+    $response = $this->withToken($token)->getJson("/api/v1/employees/{$employee->id}");
+
+    $response->assertOk()
+        ->assertJsonCount(2, 'data.employee.top_level');
+
+    $topLevel = collect($response->json('data.employee.top_level'))->keyBy('id');
+    expect($topLevel->get($salesMgr->id)['department']['name'])->toBe('Sales');
+    expect($topLevel->get($opsMgr->id)['department']['name'])->toBe('Operations');
+
+    // 2. Filter by sales department only
+    $salesFiltered = $this->withToken($token)->getJson("/api/v1/employees/{$employee->id}?department_id={$salesDeptId}");
+    $salesFiltered->assertOk()
+        ->assertJsonCount(1, 'data.employee.top_level')
+        ->assertJsonPath('data.employee.top_level.0.id', $salesMgr->id);
+
+    // 3. Filter by operations department only
+    $opsFiltered = $this->withToken($token)->getJson("/api/v1/employees/{$employee->id}?department_id={$opsDeptId}");
+    $opsFiltered->assertOk()
+        ->assertJsonCount(1, 'data.employee.top_level')
+        ->assertJsonPath('data.employee.top_level.0.id', $opsMgr->id);
 });

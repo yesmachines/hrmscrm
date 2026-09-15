@@ -1,5 +1,7 @@
-import type { ReactNode } from 'react';
-import { Head, Link, setLayoutProps } from '@inertiajs/react';
+import type { FormEvent, ReactNode } from 'react';
+import { useState } from 'react';
+import { Head, Link, router, setLayoutProps } from '@inertiajs/react';
+import { UserCheck, Users, Trash2, PlusCircle, Building2 } from 'lucide-react';
 import EmployeeController from '@/actions/App/Http/Controllers/Employees/EmployeeController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
@@ -57,6 +59,29 @@ type Employee = {
     profile: Profile | null;
 };
 
+type ReportingRelation = {
+    id: number;
+    name: string | null;
+    email: string | null;
+    emp_num: string;
+    designation: string;
+    division: string;
+    department_id: number | null;
+    department: { id: number; name: string; code: string | null } | null;
+};
+
+type DepartmentOption = {
+    id: number;
+    name: string;
+    code?: string | null;
+};
+
+type AvailableManager = {
+    id: number;
+    name: string;
+    designation: string;
+};
+
 function Detail({
     label,
     value,
@@ -97,7 +122,19 @@ function Section({
     );
 }
 
-export default function EmployeesShow({ employee }: { employee: Employee }) {
+export default function EmployeesShow({
+    employee,
+    reportingManagers = [],
+    reportingSubordinates = [],
+    availableManagers = [],
+    departments = [],
+}: {
+    employee: Employee;
+    reportingManagers?: ReportingRelation[];
+    reportingSubordinates?: ReportingRelation[];
+    availableManagers?: AvailableManager[];
+    departments?: DepartmentOption[];
+}) {
     const name = employee.name ?? 'Employee';
     const profile = employee.profile;
 
@@ -268,6 +305,189 @@ export default function EmployeesShow({ employee }: { employee: Employee }) {
                         value={profile?.highest_education}
                     />
                 </Section>
+
+                {/* Reporting Hierarchy & Departments Section */}
+                <section className="space-y-6 rounded-2xl border border-border bg-white p-6 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/70 pb-4">
+                        <div>
+                            <h3 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+                                <UserCheck className="h-5 w-5 text-primary" />
+                                Reporting Hierarchy & Departments
+                            </h3>
+                            <p className="text-xs text-muted-foreground">
+                                Manage reporting managers and their assigned departments for {name}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Reporting Managers (Top Level) */}
+                    <div className="space-y-3">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Reporting Managers (Top Level)
+                        </h4>
+
+                        {reportingManagers.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-border/80 p-4 text-center text-xs text-muted-foreground">
+                                No reporting manager assigned yet. Use the form below to assign a manager and department.
+                            </div>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {reportingManagers.map((mgr) => (
+                                    <div
+                                        key={mgr.id}
+                                        className="flex flex-col justify-between gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 shadow-2xs"
+                                    >
+                                        <div className="space-y-1">
+                                            <div className="flex items-start justify-between gap-2">
+                                                <Link
+                                                    href={`/employees/${mgr.id}`}
+                                                    className="text-sm font-semibold text-foreground hover:underline"
+                                                >
+                                                    {mgr.name}
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (confirm(`Remove ${mgr.name} as reporting manager?`)) {
+                                                            router.delete(
+                                                                `/employees/${employee.id}/managers/${mgr.id}`,
+                                                                { preserveScroll: true },
+                                                            );
+                                                        }
+                                                    }}
+                                                    className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                                                    title="Remove manager"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                {mgr.designation} (Emp #{mgr.emp_num})
+                                            </p>
+                                        </div>
+
+                                        <div className="pt-2 border-t border-border/60 flex items-center justify-between">
+                                            <span className="text-xs text-muted-foreground font-medium">
+                                                Department:
+                                            </span>
+                                            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                                                {mgr.department?.name ?? 'Sales / Division'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Direct Subordinates (Low Level) */}
+                    <div className="space-y-3 pt-2">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <Users className="h-4 w-4" />
+                            Direct Subordinates (Team Members) ({reportingSubordinates.length})
+                        </h4>
+
+                        {reportingSubordinates.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-border/80 p-4 text-center text-xs text-muted-foreground">
+                                No subordinates reporting to this employee.
+                            </div>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {reportingSubordinates.map((sub) => (
+                                    <div
+                                        key={sub.id}
+                                        className="flex flex-col justify-between gap-2 rounded-xl border border-border/80 bg-muted/20 p-4 shadow-2xs"
+                                    >
+                                        <div>
+                                            <Link
+                                                href={`/employees/${sub.id}`}
+                                                className="text-sm font-semibold text-foreground hover:underline"
+                                            >
+                                                {sub.name}
+                                            </Link>
+                                            <p className="text-xs text-muted-foreground">
+                                                {sub.designation} (Emp #{sub.emp_num})
+                                            </p>
+                                        </div>
+                                        <div className="pt-2 border-t border-border/60 flex items-center justify-between">
+                                            <span className="text-xs text-muted-foreground">Department</span>
+                                            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                                                {sub.department?.name ?? 'Sales / Division'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Assign Manager Form */}
+                    {availableManagers.length > 0 && (
+                        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5 mt-4 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <PlusCircle className="h-4 w-4 text-primary" />
+                                <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                                    Assign Reporting Manager & Department
+                                </h4>
+                            </div>
+
+                            <form
+                                onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                                    e.preventDefault();
+                                    const fd = new FormData(e.currentTarget);
+                                    router.post(
+                                        `/employees/${employee.id}/managers`,
+                                        {
+                                            manager_id: Number(fd.get('manager_id')),
+                                            department_id: fd.get('department_id') ? Number(fd.get('department_id')) : null,
+                                        },
+                                        { preserveScroll: true },
+                                    );
+                                }}
+                                className="grid gap-3 sm:grid-cols-3 items-end"
+                            >
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-foreground">
+                                        Select Manager <span className="text-destructive">*</span>
+                                    </label>
+                                    <select
+                                        name="manager_id"
+                                        required
+                                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs"
+                                    >
+                                        <option value="">Choose Manager...</option>
+                                        {availableManagers.map((m) => (
+                                            <option key={m.id} value={m.id}>
+                                                {m.name} ({m.designation})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-medium text-foreground">
+                                        Select Department
+                                    </label>
+                                    <select
+                                        name="department_id"
+                                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs"
+                                    >
+                                        <option value="">Default / Sales</option>
+                                        {departments.map((d) => (
+                                            <option key={d.id} value={d.id}>
+                                                {d.name} {d.code ? `(${d.code})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <Button type="submit" size="sm">
+                                    Assign Manager
+                                </Button>
+                            </form>
+                        </div>
+                    )}
+                </section>
             </div>
         </>
     );

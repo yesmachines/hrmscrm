@@ -27,7 +27,7 @@ type Props = {
     onOpenChange?: (open: boolean) => void;
 };
 
-export default function DeleteConfirmDialog({
+export function DeleteConfirmDialog({
     form,
     title = 'Are you sure?',
     description = 'This action cannot be undone. This will permanently delete the record.',
@@ -54,9 +54,9 @@ export default function DeleteConfirmDialog({
                 <DialogDescription>{description}</DialogDescription>
 
                 <Form
-                    action={form.action}
+                    action={form?.action ?? ''}
                     method={
-                        form.method as
+                        (form?.method ?? 'delete') as
                             | 'get'
                             | 'post'
                             | 'put'
@@ -92,3 +92,5 @@ export default function DeleteConfirmDialog({
         </Dialog>
     );
 }
+
+export default DeleteConfirmDialog;

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -102,7 +103,7 @@ class Employee extends Model
             'employee_managers',
             'employee_id',
             'manager_id'
-        );
+        )->withPivot(['id', 'department_id', 'priority']);
     }
 
     /**
@@ -115,7 +116,23 @@ class Employee extends Model
             'employee_managers',
             'manager_id',
             'employee_id'
-        );
+        )->withPivot(['id', 'department_id', 'priority']);
+    }
+
+    /**
+     * Reporting manager mappings where this employee reports to someone.
+     */
+    public function reportingManagers(): HasMany
+    {
+        return $this->hasMany(EmployeeManager::class, 'employee_id');
+    }
+
+    /**
+     * Reporting subordinate mappings where this employee is the manager.
+     */
+    public function reportingSubordinates(): HasMany
+    {
+        return $this->hasMany(EmployeeManager::class, 'manager_id');
     }
 
     public function profile(): ?EmployeeProfile

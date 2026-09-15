@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeProfile;
+use App\Models\SalesCrm\Department;
+use App\Models\SalesCrm\Division;
 use App\Models\SalesCrm\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -169,13 +171,20 @@ class EmployeeController extends Controller
         }
 
         // Fetch hierarchy levels via cm_employee_managers
-        $managers = $employee->managers()
-            ->with(['user:id,name,email', 'department:id,name'])
-            ->get();
+        $managersQuery = $employee->managers()
+            ->with(['user:id,name,email', 'department:id,name,code']);
 
-        $subordinates = $employee->subordinates()
-            ->with(['user:id,name,email', 'department:id,name'])
-            ->get();
+        $subordinatesQuery = $employee->subordinates()
+            ->with(['user:id,name,email', 'department:id,name,code']);
+
+        if ($request->filled('department_id')) {
+            $filterDeptId = (int) $request->input('department_id');
+            $managersQuery->wherePivot('department_id', $filterDeptId);
+            $subordinatesQuery->wherePivot('department_id', $filterDeptId);
+        }
+
+        $managers = $managersQuery->get();
+        $subordinates = $subordinatesQuery->get();
 
         $topLevel = $this->formatHierarchyList($managers);
         $lowLevel = $this->formatHierarchyList($subordinates);
@@ -246,14 +255,63 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Format a collection of employees for hierarchy levels (top_level / low_level).
+     * Format a collection of employees for hierarchy levels (top_level / low_level) with department details.
      *
      * @param  Collection<int, Employee>  $employees
      * @return list<array<string, mixed>>
      */
-    private function formatHierarchyList($employees): array
+    private function formatHierarchyList(Collection $employees): array
     {
-        return $employees->map(function (Employee $emp) {
+        $pivotDeptIds = $employees->pluck('pivot.department_id')->filter()->unique()->all();
+
+        $departmentsMap = ! empty($pivotDeptIds)
+            ? Department::query()->whereIn('id', $pivotDeptIds)->get(['id', 'name', 'code'])->keyBy('id')
+            : collect();
+
+        $missingDeptIds = array_diff($pivotDeptIds, $departmentsMap->keys()->all());
+        if (! empty($missingDeptIds)) {
+            $divisions = Division::query()->whereIn('id', $missingDeptIds)->get(['id', 'name', 'code'])->keyBy('id');
+            foreach ($divisions as $divId => $div) {
+                $departmentsMap->put($divId, $div);
+            }
+        }
+
+        return $employees->map(function (Employee $emp) use ($departmentsMap) {
+            $pivotDeptId = $emp->pivot?->department_id;
+            $deptPayload = null;
+
+            if ($pivotDeptId && $departmentsMap->has($pivotDeptId)) {
+                $dept = $departmentsMap->get($pivotDeptId);
+                $deptPayload = [
+                    'id' => $dept->id,
+                    'name' => $dept->name,
+                    'code' => $dept->code ?? null,
+                ];
+            } elseif ($emp->department) {
+                $deptPayload = [
+                    'id' => $emp->department->id,
+                    'name' => $emp->department->name,
+                    'code' => $emp->department->code ?? null,
+                ];
+            } elseif ($emp->division) {
+                $divisionMap = [
+                    'sd' => ['id' => 1, 'name' => 'Steel Division', 'code' => 'SD'],
+                    'is' => ['id' => 2, 'name' => 'Industrial Solutions', 'code' => 'IS'],
+                    'ct' => ['id' => 3, 'name' => 'Cleaning Technology', 'code' => 'YC'],
+                    'rf' => ['id' => 4, 'name' => 'Flooring Solutions', 'code' => 'RF'],
+                    'stg' => ['id' => 5, 'name' => 'Van Tracking', 'code' => 'STG'],
+                    'serv' => ['id' => 6, 'name' => 'Service And Spare Parts', 'code' => 'SS'],
+                    'ss' => ['id' => 6, 'name' => 'Service And Spare Parts', 'code' => 'SS'],
+                    'ops' => ['id' => null, 'name' => 'Operations', 'code' => 'OPS'],
+                ];
+                $divKey = strtolower($emp->division);
+                $deptPayload = $divisionMap[$divKey] ?? [
+                    'id' => null,
+                    'name' => ucfirst($emp->division),
+                    'code' => strtoupper($emp->division),
+                ];
+            }
+
             return [
                 'id' => $emp->id,
                 'user_id' => $emp->user_id,
@@ -267,10 +325,8 @@ class EmployeeController extends Controller
                 'image_url' => $emp->image_url,
                 'status' => $emp->status,
                 'employment_status' => $emp->employment_status,
-                'department' => $emp->department ? [
-                    'id' => $emp->department->id,
-                    'name' => $emp->department->name,
-                ] : null,
+                'department_id' => $deptPayload['id'] ?? null,
+                'department' => $deptPayload,
             ];
         })->values()->all();
     }

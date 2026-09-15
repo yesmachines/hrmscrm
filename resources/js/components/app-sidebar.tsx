@@ -25,6 +25,7 @@ import { index as documentCategoriesIndex } from '@/actions/App/Http/Controllers
 import { index as documentTemplatesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentTemplateController';
 import { index as documentTypesIndex } from '@/actions/App/Http/Controllers/Documents/DocumentTypeController';
 import { index as employeesIndex } from '@/actions/App/Http/Controllers/Employees/EmployeeController';
+import { index as employeeManagersIndex } from '@/actions/App/Http/Controllers/Employees/EmployeeManagerController';
 import { index as ideasIndex } from '@/actions/App/Http/Controllers/IdeaController';
 import { index as leavePoliciesIndex } from '@/actions/App/Http/Controllers/Leave/LeavePolicyController';
 import { index as leaveBalancesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveBalanceController';
@@ -33,6 +34,7 @@ import { index as leaveRequestsIndex } from '@/actions/App/Http/Controllers/Leav
 import { index as leaveTypesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveTypeController';
 import { index as officeLocationsIndex } from '@/actions/App/Http/Controllers/Organisation/OfficeLocationController';
 import { index as organisationsIndex } from '@/actions/App/Http/Controllers/Organisation/OrganisationController';
+import { index as departmentsIndex } from '@/actions/App/Http/Controllers/Organisation/DepartmentController';
 import { index as festivalsIndex } from '@/actions/App/Http/Controllers/Leave/FestivalController';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -57,6 +59,18 @@ const mainNavItems: NavItem[] = [
         title: 'Employees',
         href: employeesIndex(),
         icon: Users,
+        items: [
+            {
+                title: 'Employees',
+                href: employeesIndex(),
+                icon: Users,
+            },
+            {
+                title: 'Assign to Manager',
+                href: employeeManagersIndex(),
+                icon: UserCheck,
+            },
+        ],
     },
     {
         title: 'Ideas',
@@ -77,6 +91,11 @@ const mainNavItems: NavItem[] = [
                 title: 'Office locations',
                 href: officeLocationsIndex(),
                 icon: MapPin,
+            },
+            {
+                title: 'Departments',
+                href: departmentsIndex(),
+                icon: FolderTree,
             },
             {
                 title: 'Designations',

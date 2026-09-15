@@ -14,8 +14,10 @@ use App\Models\Organisation;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Division;
 use App\Models\SalesCrm\Employee;
+use App\Models\SalesCrm\EmployeeManager;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -124,9 +126,106 @@ class EmployeeController extends Controller
     {
         $employee->load(['user:id,name,email', 'department:id,name']);
 
+        $managers = $employee->managers()
+            ->with(['user:id,name,email', 'department:id,name'])
+            ->get()
+            ->map(function (Employee $mgr) {
+                $pivotDeptId = $mgr->pivot?->department_id;
+                $dept = $pivotDeptId ? Department::find($pivotDeptId) ?? Division::find($pivotDeptId) : null;
+
+                return [
+                    'id' => $mgr->id,
+                    'name' => $mgr->user?->name ?? "Employee #{$mgr->id}",
+                    'email' => $mgr->user?->email,
+                    'emp_num' => $mgr->emp_num,
+                    'designation' => $mgr->designation,
+                    'division' => $mgr->division,
+                    'department_id' => $pivotDeptId,
+                    'department' => $dept ? ['id' => $dept->id, 'name' => $dept->name, 'code' => $dept->code ?? null] : null,
+                ];
+            });
+
+        $subordinates = $employee->subordinates()
+            ->with(['user:id,name,email', 'department:id,name'])
+            ->get()
+            ->map(function (Employee $sub) {
+                $pivotDeptId = $sub->pivot?->department_id;
+                $dept = $pivotDeptId ? Department::find($pivotDeptId) ?? Division::find($pivotDeptId) : null;
+
+                return [
+                    'id' => $sub->id,
+                    'name' => $sub->user?->name ?? "Employee #{$sub->id}",
+                    'email' => $sub->user?->email,
+                    'emp_num' => $sub->emp_num,
+                    'designation' => $sub->designation,
+                    'division' => $sub->division,
+                    'department_id' => $pivotDeptId,
+                    'department' => $dept ? ['id' => $dept->id, 'name' => $dept->name, 'code' => $dept->code ?? null] : null,
+                ];
+            });
+
+        $assignedManagerIds = $managers->pluck('id')->all();
+
+        $availableManagers = Employee::query()
+            ->with('user:id,name')
+            ->where('status', 1)
+            ->where('id', '!=', $employee->id)
+            ->whereNotIn('id', $assignedManagerIds)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Employee $e): array => [
+                'id' => $e->id,
+                'name' => $e->user?->name ?? "Employee #{$e->id}",
+                'designation' => $e->designation,
+            ]);
+
         return Inertia::render('employees/show', [
             'employee' => $this->employeePayload($employee),
+            'reportingManagers' => $managers,
+            'reportingSubordinates' => $subordinates,
+            'availableManagers' => $availableManagers,
+            'departments' => $this->departmentOptions(),
         ]);
+    }
+
+    public function storeManager(Request $request, Employee $employee): RedirectResponse
+    {
+        $validated = $request->validate([
+            'manager_id' => ['required', 'integer', 'different:employee', 'exists:salescrm.employees,id'],
+            'department_id' => ['nullable', 'integer'],
+        ]);
+
+        EmployeeManager::query()->updateOrCreate(
+            [
+                'employee_id' => $employee->id,
+                'manager_id' => (int) $validated['manager_id'],
+            ],
+            [
+                'department_id' => ! empty($validated['department_id']) ? (int) $validated['department_id'] : null,
+            ]
+        );
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Reporting manager assigned successfully.'),
+        ]);
+
+        return back();
+    }
+
+    public function destroyManager(Employee $employee, int $managerId): RedirectResponse
+    {
+        EmployeeManager::query()
+            ->where('employee_id', $employee->id)
+            ->where('manager_id', $managerId)
+            ->delete();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Reporting manager removed.'),
+        ]);
+
+        return back();
     }
 
     public function edit(Employee $employee): Response
@@ -190,6 +289,36 @@ class EmployeeController extends Controller
                 'name' => $department->name,
             ])
             ->all();
+    }
+
+    /**
+     * All department options for selection in HRMS (combines HRMS departments and divisions).
+     *
+     * @return list<array{id: int, name: string, code: ?string}>
+     */
+    private function departmentOptions(): array
+    {
+        $depts = Department::query()
+            ->where('status', 1)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->map(fn (Department $d): array => [
+                'id' => $d->id,
+                'name' => $d->name,
+                'code' => $d->code,
+            ]);
+
+        $divs = Division::query()
+            ->where('status', 1)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->map(fn (Division $d): array => [
+                'id' => $d->id,
+                'name' => $d->name,
+                'code' => $d->code,
+            ]);
+
+        return $depts->concat($divs)->unique('name')->values()->all();
     }
 
     /**

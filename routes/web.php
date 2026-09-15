@@ -12,6 +12,7 @@ use App\Http\Controllers\Documents\EmployeeDocumentController;
 use App\Http\Controllers\Documents\HrPolicyController;
 use App\Http\Controllers\Documents\LetterRequestController;
 use App\Http\Controllers\Employees\EmployeeController;
+use App\Http\Controllers\Employees\EmployeeManagerController;
 use App\Http\Controllers\IdeaController;
 use App\Http\Controllers\Leave\FestivalController;
 use App\Http\Controllers\Leave\LeaveBalanceController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Leave\LeaveHistoryController;
 use App\Http\Controllers\Leave\LeavePolicyController;
 use App\Http\Controllers\Leave\LeaveRequestController;
 use App\Http\Controllers\Leave\LeaveTypeController;
+use App\Http\Controllers\Organisation\DepartmentController;
 use App\Http\Controllers\Organisation\OfficeLocationController;
 use App\Http\Controllers\Organisation\OrganisationController;
 use App\Http\Controllers\Visits\VisitController as VisitWebController;
@@ -35,6 +37,10 @@ Route::get('/', function () {
 Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::resource('employees', EmployeeController::class);
+    Route::resource('employee-managers', EmployeeManagerController::class)->only(['index', 'store', 'update', 'destroy']);
+    Route::post('employees/{employee}/managers', [EmployeeController::class, 'storeManager'])->name('employees.managers.store');
+    Route::delete('employees/{employee}/managers/{manager}', [EmployeeController::class, 'destroyManager'])->name('employees.managers.destroy');
+    Route::resource('departments', DepartmentController::class);
     Route::resource('designations', DesignationController::class);
     Route::resource('organisations', OrganisationController::class);
     Route::resource('office-locations', OfficeLocationController::class);
