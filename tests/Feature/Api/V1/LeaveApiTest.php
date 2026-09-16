@@ -11,6 +11,7 @@ use App\Models\LeaveType;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -333,4 +334,181 @@ test('apply leave fails when leave type max days is exceeded', function () {
 
     $response->assertStatus(422)
         ->assertJsonValidationErrors(['total_days']);
+});
+
+test('sick leave for single mid-week day does not require certificate', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Sick Single User',
+        'email' => 'sick.single@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-SS-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $sickType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SICK',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => true,
+        'status' => 1,
+    ]);
+
+    LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $sickType->id,
+        'year' => 2026,
+        'allocated' => 15,
+        'used' => 0,
+        'balance' => 15,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    // Single day on Wednesday (2026-11-04 is Wednesday)
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $sickType->id,
+        'start_date' => '2026-11-04',
+        'end_date' => '2026-11-04',
+        'total_days' => 1,
+        'remarks' => 'Mild cold',
+    ]);
+
+    $response->assertCreated()
+        ->assertJsonPath('statusCode', 201)
+        ->assertJsonPath('message', 'Leave request submitted successfully.');
+});
+
+test('sick leave for 2 consecutive days requires certificate', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Sick Consecutive User',
+        'email' => 'sick.consec@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-SC-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $sickType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SICK',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => true,
+        'status' => 1,
+    ]);
+
+    LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $sickType->id,
+        'year' => 2026,
+        'allocated' => 15,
+        'used' => 0,
+        'balance' => 15,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    // 2 consecutive days: Tuesday to Wednesday (2026-11-03 to 2026-11-04) without certificate
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $sickType->id,
+        'start_date' => '2026-11-03',
+        'end_date' => '2026-11-04',
+        'total_days' => 2,
+        'remarks' => 'High fever',
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['certificate']);
+
+    // Now submit WITH certificate
+    $file = UploadedFile::fake()->create('medical_cert.pdf', 200, 'application/pdf');
+    $responseWithFile = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $sickType->id,
+        'start_date' => '2026-11-03',
+        'end_date' => '2026-11-04',
+        'total_days' => 2,
+        'remarks' => 'High fever',
+        'certificate' => $file,
+    ]);
+
+    $responseWithFile->assertCreated()
+        ->assertJsonPath('statusCode', 201);
+});
+
+test('sick leave combined with weekend requires certificate', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Sick Weekend User',
+        'email' => 'sick.wknd@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-SW-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $sickType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SICK',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => true,
+        'status' => 1,
+    ]);
+
+    LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $sickType->id,
+        'year' => 2026,
+        'allocated' => 15,
+        'used' => 0,
+        'balance' => 15,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    // 1 day on Friday (2026-11-06 is Friday) without certificate -> should fail
+    $responseFriday = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $sickType->id,
+        'start_date' => '2026-11-06',
+        'end_date' => '2026-11-06',
+        'total_days' => 1,
+        'remarks' => 'Migraine',
+    ]);
+
+    $responseFriday->assertStatus(422)
+        ->assertJsonValidationErrors(['certificate']);
+
+    // 1 day on Monday (2026-11-09 is Monday) without certificate -> should fail
+    $responseMonday = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $sickType->id,
+        'start_date' => '2026-11-09',
+        'end_date' => '2026-11-09',
+        'total_days' => 1,
+        'remarks' => 'Stomach flu',
+    ]);
+
+    $responseMonday->assertStatus(422)
+        ->assertJsonValidationErrors(['certificate']);
 });

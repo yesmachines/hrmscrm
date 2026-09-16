@@ -242,39 +242,102 @@ class LeaveValidationService
         $attachmentRequired = false;
         $attachmentMessage = null;
 
-        // Condition A: Leave Type mandates attachment
-        if ($leaveType->requires_attachment) {
-            $attachmentRequired = true;
-            $attachmentMessage = "A supporting document/certificate is mandatory for {$leaveType->leave_name}.";
-        }
+        $isSickLeave = $leaveType->code === 'SICK' || stripos($leaveType->leave_name, 'Sick') !== false;
 
-        // Condition B: Policy mandates attachment
-        if ($policy && $policy->requires_attachment) {
-            $attachmentRequired = true;
-            $attachmentMessage = $attachmentMessage ?? "Company policy requires a supporting document for {$leaveType->leave_name}.";
-        }
+        if ($isSickLeave) {
+            // Sick Leave specific rules:
+            // 1. 2 or more consecutive days applied (in this application or adjacent to existing sick leave)
+            $isConsecutiveTwoDays = $totalDays >= 2;
 
-        // Condition C: Policy document threshold exceeded (requires_document_after_days)
-        if ($policy && $policy->requires_document_after_days !== null && $totalDays > $policy->requires_document_after_days) {
-            $attachmentRequired = true;
-            $attachmentMessage = "Supporting medical certificate is mandatory for leaves exceeding {$policy->requires_document_after_days} days.";
-        }
+            if (! $isConsecutiveTwoDays) {
+                $previousDay = $startDate->copy()->subDay();
+                if ($startDate->dayOfWeek === Carbon::MONDAY) {
+                    $previousDay = $startDate->copy()->subDays(3); // Friday before weekend
+                }
+                $nextDay = $endDate->copy()->addDay();
+                if ($endDate->dayOfWeek === Carbon::FRIDAY) {
+                    $nextDay = $endDate->copy()->addDays(3); // Monday after weekend
+                }
 
-        // Condition D: Policy weekend document requirement (requires_weekend_document)
-        if ($policy && $policy->requires_weekend_document) {
-            $hasWeekend = false;
+                $hasAdjacentSickLeave = LeaveRequest::query()
+                    ->where('employee_id', $employee->id)
+                    ->where('leave_type_id', $leaveType->id)
+                    ->whereIn('status', ['applied', 'approved'])
+                    ->where(function ($q) use ($previousDay, $nextDay) {
+                        $q->whereDate('end_date', $previousDay->toDateString())
+                            ->orWhereDate('start_date', $nextDay->toDateString());
+                    })
+                    ->exists();
+
+                if ($hasAdjacentSickLeave) {
+                    $isConsecutiveTwoDays = true;
+                }
+            }
+
+            // 2. Combined with the weekend (touches Friday, Saturday, Sunday, or Monday)
+            $isCombinedWithWeekend = false;
             $cursor = $startDate->copy();
             while ($cursor->lte($endDate)) {
-                if ($cursor->isWeekend() || $cursor->dayOfWeek === Carbon::FRIDAY) {
-                    $hasWeekend = true;
+                if (
+                    $cursor->isWeekend()
+                    || $cursor->dayOfWeek === Carbon::FRIDAY
+                    || $cursor->dayOfWeek === Carbon::MONDAY
+                ) {
+                    $isCombinedWithWeekend = true;
                     break;
                 }
                 $cursor->addDay();
             }
 
-            if ($hasWeekend) {
+            if ($policy && $policy->requires_attachment) {
                 $attachmentRequired = true;
-                $attachmentMessage = $attachmentMessage ?? 'A medical certificate is required for leaves spanning across weekends.';
+                $attachmentMessage = 'Company policy requires a supporting medical certificate for Sick Leave.';
+            } elseif ($isConsecutiveTwoDays) {
+                $attachmentRequired = true;
+                $attachmentMessage = 'A medical certificate is mandatory when applying for 2 or more consecutive days of Sick Leave.';
+            } elseif ($isCombinedWithWeekend) {
+                $attachmentRequired = true;
+                $attachmentMessage = 'A medical certificate is mandatory for Sick Leave combined with or adjacent to a weekend.';
+            } elseif ($policy && $policy->requires_document_after_days !== null && $totalDays > $policy->requires_document_after_days) {
+                $attachmentRequired = true;
+                $attachmentMessage = "Supporting medical certificate is mandatory for leaves exceeding {$policy->requires_document_after_days} days.";
+            }
+        } else {
+            // General Leave Types:
+            // Condition A: Leave Type mandates attachment
+            if ($leaveType->requires_attachment) {
+                $attachmentRequired = true;
+                $attachmentMessage = "A supporting document/certificate is mandatory for {$leaveType->leave_name}.";
+            }
+
+            // Condition B: Policy mandates attachment
+            if ($policy && $policy->requires_attachment) {
+                $attachmentRequired = true;
+                $attachmentMessage = $attachmentMessage ?? "Company policy requires a supporting document for {$leaveType->leave_name}.";
+            }
+
+            // Condition C: Policy document threshold exceeded (requires_document_after_days)
+            if ($policy && $policy->requires_document_after_days !== null && $totalDays > $policy->requires_document_after_days) {
+                $attachmentRequired = true;
+                $attachmentMessage = "Supporting medical certificate is mandatory for leaves exceeding {$policy->requires_document_after_days} days.";
+            }
+
+            // Condition D: Policy weekend document requirement (requires_weekend_document)
+            if ($policy && $policy->requires_weekend_document) {
+                $hasWeekend = false;
+                $cursor = $startDate->copy();
+                while ($cursor->lte($endDate)) {
+                    if ($cursor->isWeekend() || $cursor->dayOfWeek === Carbon::FRIDAY) {
+                        $hasWeekend = true;
+                        break;
+                    }
+                    $cursor->addDay();
+                }
+
+                if ($hasWeekend) {
+                    $attachmentRequired = true;
+                    $attachmentMessage = $attachmentMessage ?? 'A medical certificate is required for leaves spanning across weekends.';
+                }
             }
         }
 

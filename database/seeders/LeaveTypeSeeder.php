@@ -31,7 +31,7 @@ class LeaveTypeSeeder extends Seeder
                 'leave_name' => 'Sick Leave',
                 'code' => 'SICK',
                 'is_paid' => true, // partially paid, handled in logic
-                'requires_attachment' => true, // if > 2 days
+                'requires_attachment' => false, // Conditional: required if >= 2 consecutive days or combined with weekend
                 'requires_approval' => true,
                 'max_days' => 90,
                 'annual_limit' => 90,
