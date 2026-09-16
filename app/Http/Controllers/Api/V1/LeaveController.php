@@ -121,9 +121,10 @@ class LeaveController extends Controller
 
         $data = $this->getFestivalsAndHolidaysForEmployee($employee, $month, $year);
 
-        // Fetch leaves applied by this employee for this month/year
+        // Fetch leaves applied by this employee for this month/year (excluding rejected leaves)
         $leavesQuery = LeaveRequest::with('leaveType:id,leave_name,code,is_paid')
-            ->where('employee_id', $employee->id);
+            ->where('employee_id', $employee->id)
+            ->where('status', '!=', 'rejected');
 
         if ($month && $year) {
             $startOfMonth = Carbon::create($year, $month, 1)->startOfMonth()->toDateTimeString();
@@ -175,7 +176,6 @@ class LeaveController extends Controller
         $data['month'] = $month;
         $data['year'] = $year;
         $data['leaves'] = $appliedLeaves;
-        
 
         return $this->successResponse($data);
     }

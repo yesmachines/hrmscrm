@@ -317,6 +317,17 @@ test('leaves holidays endpoint with month parameter returns holidays and employe
         'remarks' => 'Summer vacation',
     ]);
 
+    // August rejected leave (should be excluded)
+    LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-08-20',
+        'end_date' => '2026-08-21',
+        'total_days' => 2,
+        'status' => 'rejected',
+        'remarks' => 'Rejected leave request',
+    ]);
+
     // October leave (should be excluded)
     LeaveRequest::query()->create([
         'employee_id' => $employee->id,
