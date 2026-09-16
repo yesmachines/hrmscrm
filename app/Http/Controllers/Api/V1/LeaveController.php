@@ -175,7 +175,7 @@ class LeaveController extends Controller
         $data['month'] = $month;
         $data['year'] = $year;
         $data['leaves'] = $appliedLeaves;
-        $data['applied_leaves'] = $appliedLeaves;
+        
 
         return $this->successResponse($data);
     }
