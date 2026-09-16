@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Leave;
 
+use App\Models\LeavePolicy;
 use App\Models\LeaveType;
 use App\Models\Organisation;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -48,8 +49,17 @@ class UpdateLeavePolicyRequest extends FormRequest
      */
     public function rules(): array
     {
+        $policyId = $this->route('leave_policy') instanceof LeavePolicy
+            ? $this->route('leave_policy')->id
+            : $this->route('leave_policy');
+
         return [
-            'leave_type_id' => ['required', 'integer', Rule::exists(LeaveType::class, 'id')],
+            'leave_type_id' => [
+                'required',
+                'integer',
+                Rule::exists(LeaveType::class, 'id'),
+                Rule::unique(LeavePolicy::class, 'leave_type_id')->ignore($policyId),
+            ],
             'organisation_id' => ['required', 'integer', Rule::exists(Organisation::class, 'id')],
             'full_pay_days' => ['nullable', 'integer', 'min:0'],
             'half_pay_days' => ['nullable', 'integer', 'min:0'],

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'leave_name',
@@ -35,6 +36,11 @@ class LeaveType extends Model
             'requires_handover' => 'boolean',
             'status' => 'integer',
         ];
+    }
+
+    public function policy(): HasOne
+    {
+        return $this->hasOne(LeavePolicy::class);
     }
 
     public function policies(): HasMany

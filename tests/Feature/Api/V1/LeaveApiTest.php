@@ -1,11 +1,14 @@
 <?php
 
+use App\Models\LeaveBalance;
 use App\Models\LeaveHistory;
+use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestApproval;
 use App\Models\LeaveRequestDetail;
 use App\Models\LeaveRequestFile;
 use App\Models\LeaveType;
+use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +26,7 @@ beforeEach(function () {
     DB::table('leave_policies')->delete();
     DB::table('leave_balances')->delete();
     DB::table('leave_types')->delete();
+    Organisation::query()->firstOrCreate(['id' => 1], ['org_name' => 'Default Org', 'short_name' => 'DEF', 'status' => 1]);
 });
 
 test('get leave detail returns full leave request with attachments, history, details, and approvals', function () {
@@ -173,4 +177,160 @@ test('get leave detail returns 404 if leave belongs to another employee', functi
 
     $response->assertNotFound()
         ->assertJsonPath('statusCode', 404);
+});
+
+test('leave meta returns single policy for each leave type with combined requires_attachment', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Meta User',
+        'email' => 'meta.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-META-01',
+        'designation' => 'Tester',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SICK',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'requires_approval' => true,
+        'max_days' => 90,
+        'status' => 1,
+    ]);
+
+    $org = Organisation::query()->first();
+
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $org->id,
+        'full_pay_days' => 15,
+        'half_pay_days' => 30,
+        'no_pay_days' => 45,
+        'requires_document_after_days' => 2,
+        'requires_weekend_document' => true,
+        'requires_attachment' => true,
+        'carry_forward' => false,
+        'encashment' => false,
+        'probation_applicable' => true,
+        'minimum_service_months' => 0,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->getJson('/api/v1/leaves/meta');
+
+    $response->assertOk()
+        ->assertJsonPath('data.leave_types.0.id', $leaveType->id)
+        ->assertJsonPath('data.leave_types.0.requires_attachment', true)
+        ->assertJsonPath('data.leave_types.0.policy.requires_document_after_days', 2)
+        ->assertJsonPath('data.leave_types.0.policy.full_pay_days', 15);
+});
+
+test('apply leave fails when policy requires document after days and attachment is omitted', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Doc User',
+        'email' => 'doc.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-DOC-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SICK',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => true,
+        'status' => 1,
+    ]);
+
+    LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 15,
+        'used' => 0,
+        'balance' => 15,
+    ]);
+
+    $org = Organisation::query()->first();
+
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $org->id,
+        'full_pay_days' => 15,
+        'half_pay_days' => 30,
+        'no_pay_days' => 45,
+        'requires_document_after_days' => 2,
+        'requires_attachment' => false,
+        'probation_applicable' => true,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    // 3 days (> 2 days threshold) without certificate
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-02', // Monday
+        'end_date' => '2026-11-04',   // Wednesday (3 days)
+        'total_days' => 3,
+        'remarks' => 'Fever',
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['certificate']);
+});
+
+test('apply leave fails when leave type max days is exceeded', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Max User',
+        'email' => 'max.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-MAX-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Casual Leave',
+        'code' => 'CASUAL',
+        'is_paid' => true,
+        'max_days' => 3,
+        'status' => 1,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-02',
+        'end_date' => '2026-11-06',
+        'total_days' => 5,
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['total_days']);
 });

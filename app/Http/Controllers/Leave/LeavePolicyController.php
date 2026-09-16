@@ -72,7 +72,7 @@ class LeavePolicyController extends Controller
 
         return Inertia::render('leave-policies/edit', [
             'leavePolicy' => $this->payload($leave_policy),
-            'leaveTypes' => $this->leaveTypes(),
+            'leaveTypes' => $this->leaveTypes($leave_policy->leave_type_id),
             'organisations' => $this->organisations(),
         ]);
     }
@@ -106,10 +106,16 @@ class LeavePolicyController extends Controller
     /**
      * @return list<array{id: int, name: string}>
      */
-    private function leaveTypes(): array
+    private function leaveTypes(?int $currentLeaveTypeId = null): array
     {
         return LeaveType::query()
             ->where('status', 1)
+            ->where(function ($query) use ($currentLeaveTypeId) {
+                $query->whereDoesntHave('policy');
+                if ($currentLeaveTypeId) {
+                    $query->orWhere('id', $currentLeaveTypeId);
+                }
+            })
             ->orderBy('leave_name')
             ->get(['id', 'leave_name', 'code'])
             ->map(fn (LeaveType $leaveType): array => [

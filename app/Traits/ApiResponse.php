@@ -48,6 +48,9 @@ trait ApiResponse
 
         if (! is_null($data)) {
             $response['data'] = $data;
+            if (is_array($data)) {
+                $response['errors'] = $data;
+            }
         }
 
         return response()->json($response, $code);
