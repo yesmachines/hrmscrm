@@ -7,18 +7,15 @@ import { dashboard } from '@/routes';
 import DepartmentFormFields from './form-fields';
 
 export default function DepartmentsCreate() {
-    const { post, processing, errors } = useForm();
+    const { data, setData, post, processing, errors } = useForm({
+        name: '',
+        code: '',
+        status: 1,
+    });
 
     function handleSubmit(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        post(DepartmentController.store.url(), {
-            data: {
-                name: formData.get('name') as string,
-                code: formData.get('code') as string,
-                status: Number(formData.get('status')),
-            },
-        });
+        post(DepartmentController.store.url());
     }
 
     return (
@@ -45,7 +42,11 @@ export default function DepartmentsCreate() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <DepartmentFormFields errors={errors} />
+                    <DepartmentFormFields
+                        data={data}
+                        setData={setData}
+                        errors={errors}
+                    />
 
                     <div className="flex items-center justify-end gap-3">
                         <Button variant="outline" asChild>

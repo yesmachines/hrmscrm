@@ -14,18 +14,15 @@ type Department = {
 };
 
 export default function DepartmentsEdit({ department }: { department: Department }) {
-    const { put, processing, errors } = useForm();
+    const { data, setData, put, processing, errors } = useForm({
+        name: department.name ?? '',
+        code: department.code ?? '',
+        status: department.status ?? 1,
+    });
 
     function handleSubmit(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        put(DepartmentController.update.url(department.id), {
-            data: {
-                name: formData.get('name') as string,
-                code: formData.get('code') as string,
-                status: Number(formData.get('status')),
-            },
-        });
+        put(DepartmentController.update.url(department.id));
     }
 
     return (
@@ -60,12 +57,9 @@ export default function DepartmentsEdit({ department }: { department: Department
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <DepartmentFormFields
+                        data={data}
+                        setData={setData}
                         errors={errors}
-                        defaults={{
-                            name: department.name,
-                            code: department.code,
-                            status: department.status,
-                        }}
                     />
 
                     <div className="flex items-center justify-end gap-3">

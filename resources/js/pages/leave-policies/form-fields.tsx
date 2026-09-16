@@ -8,6 +8,7 @@ type Errors = Record<string, string>;
 type Option = {
     id: number;
     name: string;
+    disabled?: boolean;
 };
 
 type LeavePolicyFormValues = {
@@ -116,7 +117,11 @@ export default function LeavePolicyFormFields({
                     >
                         <option value="">Select</option>
                         {leaveTypes.map((leaveType) => (
-                            <option key={leaveType.id} value={leaveType.id}>
+                            <option
+                                key={leaveType.id}
+                                value={leaveType.id}
+                                disabled={leaveType.disabled}
+                            >
                                 {leaveType.name}
                             </option>
                         ))}

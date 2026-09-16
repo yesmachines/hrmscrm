@@ -9,6 +9,7 @@ import LeavePolicyFormFields from './form-fields';
 type Option = {
     id: number;
     name: string;
+    disabled?: boolean;
 };
 
 export default function LeavePoliciesCreate({

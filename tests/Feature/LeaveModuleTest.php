@@ -87,3 +87,41 @@ test('authenticated users can manage leave types and leave policies', function (
 
     expect(LeaveType::query()->find($leaveType->id))->toBeNull();
 });
+
+test('leave policy create page marks leave types as disabled only if they already have a policy', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $org = Organisation::query()->create([
+        'org_name' => 'Acme Test Org',
+        'short_name' => 'ATO',
+        'status' => 1,
+    ]);
+
+    $typeWithPolicy = LeaveType::query()->create([
+        'leave_name' => 'Type With Policy',
+        'code' => 'TWP',
+        'status' => 1,
+    ]);
+
+    LeavePolicy::query()->create([
+        'leave_type_id' => $typeWithPolicy->id,
+        'organisation_id' => $org->id,
+    ]);
+
+    $typeWithoutPolicy = LeaveType::query()->create([
+        'leave_name' => 'Type Without Policy',
+        'code' => 'TWOP',
+        'status' => 1,
+    ]);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('leave-policies.create'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-policies/create')
+            ->where('leaveTypes', fn ($types) => collect($types)->firstWhere('id', $typeWithPolicy->id)['disabled'] === true
+                && collect($types)->firstWhere('id', $typeWithoutPolicy->id)['disabled'] === false
+            )
+        );
+});

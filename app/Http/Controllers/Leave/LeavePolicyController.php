@@ -104,24 +104,24 @@ class LeavePolicyController extends Controller
     }
 
     /**
-     * @return list<array{id: int, name: string}>
+     * @return list<array{id: int, name: string, disabled: bool}>
      */
     private function leaveTypes(?int $currentLeaveTypeId = null): array
     {
         return LeaveType::query()
+            ->withExists('policy')
             ->where('status', 1)
-            ->where(function ($query) use ($currentLeaveTypeId) {
-                $query->whereDoesntHave('policy');
-                if ($currentLeaveTypeId) {
-                    $query->orWhere('id', $currentLeaveTypeId);
-                }
-            })
             ->orderBy('leave_name')
             ->get(['id', 'leave_name', 'code'])
-            ->map(fn (LeaveType $leaveType): array => [
-                'id' => $leaveType->id,
-                'name' => $leaveType->leave_name.' ('.$leaveType->code.')',
-            ])
+            ->map(function (LeaveType $leaveType) use ($currentLeaveTypeId): array {
+                $hasOtherPolicy = (bool) $leaveType->policy_exists && ($currentLeaveTypeId === null || $leaveType->id !== $currentLeaveTypeId);
+
+                return [
+                    'id' => $leaveType->id,
+                    'name' => $leaveType->leave_name.' ('.$leaveType->code.')'.($hasOtherPolicy ? ' — (Already configured)' : ''),
+                    'disabled' => $hasOtherPolicy,
+                ];
+            })
             ->all();
     }
 

@@ -5,15 +5,16 @@ import { Label } from '@/components/ui/label';
 
 type Errors = Record<string, string>;
 
-type DepartmentFormValues = {
-    name?: string | null;
-    code?: string | null;
-    status?: number | string | null;
+export type DepartmentFormValues = {
+    name: string;
+    code: string;
+    status: number | string;
 };
 
 type Props = {
+    data: DepartmentFormValues;
+    setData: (key: keyof DepartmentFormValues, value: any) => void;
     errors: Errors;
-    defaults?: DepartmentFormValues;
 };
 
 const fieldClass =
@@ -44,8 +45,9 @@ function Field({
 }
 
 export default function DepartmentFormFields({
+    data,
+    setData,
     errors,
-    defaults = {},
 }: Props) {
     return (
         <section className="space-y-6 rounded-2xl border border-border/80 bg-card p-6 shadow-xs">
@@ -68,7 +70,8 @@ export default function DepartmentFormFields({
                     <Input
                         id="name"
                         name="name"
-                        defaultValue={defaults.name ?? ''}
+                        value={data.name}
+                        onChange={(e) => setData('name', e.target.value)}
                         placeholder="e.g. Human Resources, Operations, Finance"
                         required
                     />
@@ -82,7 +85,8 @@ export default function DepartmentFormFields({
                     <Input
                         id="code"
                         name="code"
-                        defaultValue={defaults.code ?? ''}
+                        value={data.code}
+                        onChange={(e) => setData('code', e.target.value)}
                         placeholder="e.g. HR, OPS, FIN, IT"
                     />
                 </Field>
@@ -98,7 +102,8 @@ export default function DepartmentFormFields({
                     <select
                         id="status"
                         name="status"
-                        defaultValue={defaults.status ?? 1}
+                        value={String(data.status)}
+                        onChange={(e) => setData('status', Number(e.target.value))}
                         className={fieldClass}
                     >
                         <option value="1">Active</option>

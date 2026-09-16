@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AssetController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\IdeaController;
@@ -17,6 +18,10 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('me', [AuthController::class, 'me'])->name('api.v1.me');
         Route::post('logout', [AuthController::class, 'logout'])->name('api.v1.logout');
+
+        // Departments Endpoints
+        Route::get('departments', [DepartmentController::class, 'index'])->name('api.v1.departments.index');
+        Route::get('departments/{id}', [DepartmentController::class, 'show'])->name('api.v1.departments.show');
 
         // Employees Endpoints
         Route::get('employees', [EmployeeController::class, 'index'])->name('api.v1.employees.index');
