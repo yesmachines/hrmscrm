@@ -2,6 +2,8 @@
 
 use App\Models\EmployeeProfile;
 use App\Models\Festival;
+use App\Models\LeaveRequest;
+use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +13,7 @@ beforeEach(function () {
     DB::connection('salescrm')->table('personal_access_tokens')->delete();
     DB::connection('salescrm')->table('employees')->delete();
     DB::connection('salescrm')->table('users')->delete();
+    DB::table('leave_requests')->delete();
     DB::table('festival_nationality')->delete();
     DB::table('festivals')->delete();
 });
@@ -253,4 +256,99 @@ test('leaves index endpoint returns holidays and festivals when month is passed'
             ],
         ])
         ->assertJsonPath('data.holidays.0.name', 'Independence Day');
+});
+
+test('leaves holidays endpoint with month parameter returns holidays and employee applied leaves', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Calendar User',
+        'email' => 'calendar.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-CAL-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $countryId = DB::connection('salescrm')->table('countries')->where('name', 'like', 'India%')->value('id') ?? 24;
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $employee->id,
+        'nationality' => 'India',
+        'home_country' => null,
+    ]);
+
+    $holiday = Festival::query()->create([
+        'name' => 'Independence Day',
+        'type' => 'holiday',
+        'shortcode' => 'IND2026-AUG',
+        'is_active' => true,
+        'start_date' => '2026-08-15',
+        'end_date' => '2026-08-15',
+    ]);
+
+    DB::table('festival_nationality')->insert([
+        'festival_id' => $holiday->id,
+        'country_id' => $countryId,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'is_paid' => true,
+        'status' => 1,
+    ]);
+
+    // August leave (should be included)
+    $augustLeave = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-08-10',
+        'end_date' => '2026-08-12',
+        'total_days' => 3,
+        'status' => 'approved',
+        'remarks' => 'Summer vacation',
+    ]);
+
+    // October leave (should be excluded)
+    LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-10-05',
+        'end_date' => '2026-10-06',
+        'total_days' => 2,
+        'status' => 'applied',
+        'remarks' => 'Autumn break',
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->getJson('/api/v1/leaves/holidays?month=8&year=2026');
+
+    $response->assertOk()
+        ->assertJsonPath('statusCode', 200)
+        ->assertJsonPath('data.month', 8)
+        ->assertJsonPath('data.year', 2026)
+        ->assertJsonCount(1, 'data.holidays')
+        ->assertJsonPath('data.holidays.0.name', 'Independence Day')
+        ->assertJsonCount(1, 'data.leaves')
+        ->assertJsonPath('data.leaves.0.id', $augustLeave->id)
+        ->assertJsonPath('data.leaves.0.start_date', '2026-08-10')
+        ->assertJsonPath('data.leaves.0.end_date', '2026-08-12')
+        ->assertJsonPath('data.leaves.0.status', 'approved')
+        ->assertJsonPath('data.leaves.0.leave_type_name', 'Annual Leave')
+        ->assertJsonPath('data.leaves.0.total_days', 3);
+
+    // Also test with only ?month=8 (without year)
+    $responseOnlyMonth = $this->withToken($token)->getJson('/api/v1/leaves/holidays?month=8');
+    $responseOnlyMonth->assertOk()
+        ->assertJsonCount(1, 'data.leaves')
+        ->assertJsonPath('data.leaves.0.id', $augustLeave->id);
 });

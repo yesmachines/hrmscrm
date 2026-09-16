@@ -121,6 +121,62 @@ class LeaveController extends Controller
 
         $data = $this->getFestivalsAndHolidaysForEmployee($employee, $month, $year);
 
+        // Fetch leaves applied by this employee for this month/year
+        $leavesQuery = LeaveRequest::with('leaveType:id,leave_name,code,is_paid')
+            ->where('employee_id', $employee->id);
+
+        if ($month && $year) {
+            $startOfMonth = Carbon::create($year, $month, 1)->startOfMonth()->toDateTimeString();
+            $endOfMonth = Carbon::create($year, $month, 1)->endOfMonth()->toDateTimeString();
+
+            $leavesQuery->where(function ($q) use ($startOfMonth, $endOfMonth) {
+                $q->where(function ($sub) use ($startOfMonth, $endOfMonth) {
+                    $sub->where('start_date', '<=', $endOfMonth)
+                        ->where(function ($inner) use ($startOfMonth) {
+                            $inner->where('end_date', '>=', $startOfMonth)
+                                ->orWhereNull('end_date');
+                        });
+                });
+            });
+        } elseif ($month) {
+            $leavesQuery->where(function ($q) use ($month) {
+                $q->whereMonth('start_date', $month)
+                    ->orWhereMonth('end_date', $month);
+            });
+        } elseif ($year) {
+            $leavesQuery->where(function ($q) use ($year) {
+                $q->whereYear('start_date', $year)
+                    ->orWhereYear('end_date', $year);
+            });
+        }
+
+        $appliedLeaves = $leavesQuery
+            ->orderBy('start_date', 'asc')
+            ->get()
+            ->map(fn (LeaveRequest $leave): array => [
+                'id' => $leave->id,
+                'leave_type_id' => $leave->leave_type_id,
+                'leave_type_name' => $leave->leaveType?->leave_name,
+                'leave_type_code' => $leave->leaveType?->code,
+                'leave_type' => $leave->leaveType ? [
+                    'id' => $leave->leaveType->id,
+                    'leave_name' => $leave->leaveType->leave_name,
+                    'code' => $leave->leaveType->code,
+                    'is_paid' => (bool) $leave->leaveType->is_paid,
+                ] : null,
+                'start_date' => $leave->start_date ? Carbon::parse($leave->start_date)->format('Y-m-d') : null,
+                'end_date' => $leave->end_date ? Carbon::parse($leave->end_date)->format('Y-m-d') : null,
+                'total_days' => (float) $leave->total_days,
+                'status' => $leave->status,
+                'remarks' => $leave->remarks,
+                'created_at' => $leave->created_at?->format('Y-m-d H:i:s'),
+            ]);
+
+        $data['month'] = $month;
+        $data['year'] = $year;
+        $data['leaves'] = $appliedLeaves;
+        $data['applied_leaves'] = $appliedLeaves;
+
         return $this->successResponse($data);
     }
 
