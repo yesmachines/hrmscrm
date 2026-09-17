@@ -6,10 +6,15 @@ use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Database\Seeders\DocumentSeeder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
+    DB::connection('salescrm')->table('personal_access_tokens')->delete();
+    DB::connection('salescrm')->table('employee_managers')->delete();
+    DB::connection('salescrm')->table('employees')->delete();
+    DB::connection('salescrm')->table('users')->delete();
     Storage::fake('public');
     $this->seed(DocumentSeeder::class);
 });
@@ -96,4 +101,13 @@ test('admin can directly upload document for an employee', function () {
     $createdDoc = EmployeeDocument::query()->where('employee_id', $employee->id)->first();
     expect($createdDoc)->not->toBeNull()
         ->and($createdDoc->status)->toBe('approved');
+
+    $this->actingAs($admin)
+        ->get(route('employee-documents.file', $createdDoc))
+        ->assertOk();
+
+    $this->actingAs($admin)
+        ->get(route('employee-documents.download', $createdDoc))
+        ->assertOk()
+        ->assertDownload();
 });

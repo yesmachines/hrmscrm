@@ -16,8 +16,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EmployeeDocumentController extends Controller
 {
@@ -216,6 +218,29 @@ class EmployeeDocumentController extends Controller
         return back()->with('toast', ['type' => 'success', 'message' => 'Document rejected.']);
     }
 
+    public function file(EmployeeDocument $employeeDocument): BinaryFileResponse
+    {
+        $latestFile = $employeeDocument->files()->latest('id')->first();
+        if (! $latestFile || ! Storage::disk('public')->exists($latestFile->file_path)) {
+            abort(404, 'Document file not found on disk.');
+        }
+
+        return response()->file(Storage::disk('public')->path($latestFile->file_path));
+    }
+
+    public function download(EmployeeDocument $employeeDocument): BinaryFileResponse
+    {
+        $latestFile = $employeeDocument->files()->latest('id')->first();
+        if (! $latestFile || ! Storage::disk('public')->exists($latestFile->file_path)) {
+            abort(404, 'Document file not found on disk.');
+        }
+
+        $ext = pathinfo($latestFile->file_path, PATHINFO_EXTENSION);
+        $filename = Str::slug($employeeDocument->document_title ?: $employeeDocument->documentType?->document_name ?: 'document').'.'.$ext;
+
+        return response()->download(Storage::disk('public')->path($latestFile->file_path), $filename);
+    }
+
     /**
      * Auto-sync approved document metadata with the employee profile.
      */
@@ -293,6 +318,7 @@ class EmployeeDocumentController extends Controller
     {
         $employee = Employee::query()->with(['user:id,name,email', 'department:id,name', 'organisation'])->find($doc->employee_id);
         $latestFile = $doc->files->first();
+        $ext = $latestFile ? strtolower(pathinfo($latestFile->file_path, PATHINFO_EXTENSION)) : null;
 
         return [
             'id' => $doc->id,
@@ -316,7 +342,9 @@ class EmployeeDocumentController extends Controller
             'current_version' => $doc->current_version ?? '1.0',
             'status' => $doc->status,
             'created_at' => $doc->created_at?->format('d M Y H:i'),
-            'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+            'file_url' => $latestFile ? route('employee-documents.file', $doc->id) : null,
+            'download_url' => $latestFile ? route('employee-documents.download', $doc->id) : null,
+            'file_extension' => $ext,
             'rendered_html' => $this->renderDocumentHtml($doc, $employee),
             'template' => $doc->documentTemplate ? [
                 'id' => $doc->documentTemplate->id,
@@ -326,7 +354,8 @@ class EmployeeDocumentController extends Controller
                 'id' => $f->id,
                 'version_no' => $f->version_no,
                 'file_path' => $f->file_path,
-                'file_url' => Storage::disk('public')->url($f->file_path),
+                'file_url' => route('employee-documents.file', $doc->id),
+                'download_url' => route('employee-documents.download', $doc->id),
                 'uploaded_date' => $f->uploaded_date?->format('d M Y H:i'),
                 'change_notes' => $f->change_notes,
             ]),

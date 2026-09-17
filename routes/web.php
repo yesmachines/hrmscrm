@@ -51,6 +51,8 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('document-templates', DocumentTemplateController::class);
 
     Route::resource('employee-documents', EmployeeDocumentController::class);
+    Route::get('employee-documents/{employee_document}/file', [EmployeeDocumentController::class, 'file'])->name('employee-documents.file');
+    Route::get('employee-documents/{employee_document}/download', [EmployeeDocumentController::class, 'download'])->name('employee-documents.download');
     Route::post('employee-documents/{employee_document}/approve', [EmployeeDocumentController::class, 'approve'])->name('employee-documents.approve');
     Route::post('employee-documents/{employee_document}/reject', [EmployeeDocumentController::class, 'reject'])->name('employee-documents.reject');
 

@@ -51,6 +51,8 @@ type DocumentDetail = {
     status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived' | 'expired';
     created_at: string;
     file_url: string | null;
+    download_url?: string | null;
+    file_extension?: string | null;
     rendered_html?: string | null;
     template?: { id: number; template_name: string } | null;
     files: {
@@ -281,7 +283,7 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                     )}
                                     {document.file_url && (
                                         <Button asChild variant="outline" size="sm" className="gap-1.5">
-                                            <a href={document.file_url} target="_blank" rel="noopener noreferrer" download>
+                                            <a href={document.download_url || document.file_url} download>
                                                 <Download className="size-3.5" />
                                                 Download File
                                             </a>
@@ -291,19 +293,43 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                             </div>
 
                             {document.file_url ? (
-                                <div className="rounded-xl border border-border/80 bg-neutral-50 overflow-hidden min-h-[400px] flex items-center justify-center">
-                                    {document.file_url.endsWith('.pdf') ? (
+                                <div className="rounded-xl border border-border/80 bg-neutral-50 overflow-hidden min-h-[400px] flex items-center justify-center p-2">
+                                    {(document.file_extension?.toLowerCase() === 'pdf' || (!document.file_extension && document.file_url.includes('.pdf'))) ? (
                                         <iframe
                                             src={document.file_url}
                                             className="w-full h-[600px] border-none rounded-xl"
                                             title="PDF Preview"
                                         />
-                                    ) : (
+                                    ) : (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(document.file_extension?.toLowerCase() || '') || !document.file_extension) ? (
                                         <img
                                             src={document.file_url}
                                             alt={document.document_title}
                                             className="max-h-[550px] object-contain rounded-lg p-2"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                const parent = e.currentTarget.parentElement;
+                                                if (parent && !parent.querySelector('.img-error-fallback')) {
+                                                    const fallback = window.document.createElement('div');
+                                                    fallback.className = 'img-error-fallback text-center p-8 space-y-2';
+                                                    fallback.innerHTML = `<p class="font-medium text-amber-700">Preview not directly available in browser</p><p class="text-xs text-muted-foreground">Click "Download File" above to view the uploaded file.</p>`;
+                                                    parent.appendChild(fallback);
+                                                }
+                                            }}
                                         />
+                                    ) : (
+                                        <div className="p-8 text-center space-y-3">
+                                            <FileText className="size-16 mx-auto text-primary/70" />
+                                            <p className="font-semibold text-base">{document.document_title || document.document_name}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                This file format ({document.file_extension?.toUpperCase() || 'document'}) cannot be previewed directly in the browser.
+                                            </p>
+                                            <Button asChild variant="default" size="sm" className="gap-1.5 mt-2">
+                                                <a href={document.download_url || document.file_url} download>
+                                                    <Download className="size-4" />
+                                                    Download File
+                                                </a>
+                                            </Button>
+                                        </div>
                                     )}
                                 </div>
                             ) : document.rendered_html ? (
