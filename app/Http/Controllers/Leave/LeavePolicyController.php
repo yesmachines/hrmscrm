@@ -48,7 +48,7 @@ class LeavePolicyController extends Controller
             'message' => __('Leave policy created.'),
         ]);
 
-        return to_route('leave-policies.show', $policy);
+        return to_route('leave-policies.index');
     }
 
     public function show(LeavePolicy $leave_policy): Response

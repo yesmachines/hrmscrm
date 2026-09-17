@@ -50,7 +50,7 @@ class OrganisationController extends Controller
             'message' => __('Organisation created.'),
         ]);
 
-        return to_route('organisations.show', $organisation);
+        return to_route('organisations.index');
     }
 
     public function show(Organisation $organisation): Response

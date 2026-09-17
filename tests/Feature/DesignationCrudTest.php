@@ -53,7 +53,7 @@ test('authenticated users can create a new designation', function () {
     expect($designation)->not->toBeNull()
         ->and($designation->shortcode)->toBe('CTO');
 
-    $response->assertRedirect(route('designations.show', $designation));
+    $response->assertRedirect(route('designations.index'));
 });
 
 test('authenticated users can view a designation show page', function () {

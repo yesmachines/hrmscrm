@@ -39,7 +39,7 @@ class LeaveTypeController extends Controller
             'message' => __('Leave type created.'),
         ]);
 
-        return to_route('leave-types.show', $leaveType);
+        return to_route('leave-types.index');
     }
 
     public function show(LeaveType $leave_type): Response

@@ -58,7 +58,7 @@ class OfficeLocationController extends Controller
             'message' => __('Office location created.'),
         ]);
 
-        return to_route('office-locations.show', $location);
+        return to_route('office-locations.index');
     }
 
     public function show(OfficeLocation $office_location): Response

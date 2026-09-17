@@ -51,7 +51,7 @@ class DepartmentController extends Controller
             'message' => __('Department created successfully.'),
         ]);
 
-        return to_route('departments.show', $department);
+        return to_route('departments.index');
     }
 
     public function show(Department $department): Response

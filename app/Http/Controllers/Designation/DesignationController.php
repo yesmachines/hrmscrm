@@ -64,7 +64,7 @@ class DesignationController extends Controller
             'message' => __('Designation created.'),
         ]);
 
-        return to_route('designations.show', $designation);
+        return to_route('designations.index');
     }
 
     public function show(Designation $designation): Response

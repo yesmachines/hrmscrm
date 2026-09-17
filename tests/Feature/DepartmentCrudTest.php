@@ -53,7 +53,7 @@ test('authenticated users can create a department in HRMS', function () {
         ->and($dept->code)->toBe('OPS')
         ->and($dept->status)->toBe(1);
 
-    $response->assertRedirect(route('departments.show', $dept));
+    $response->assertRedirect(route('departments.index'));
 });
 
 test('authenticated users can update a department', function () {
