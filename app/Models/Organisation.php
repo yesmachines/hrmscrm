@@ -9,6 +9,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['org_name', 'short_name', 'logo', 'status'])]
 class Organisation extends Model
 {
+    protected $connection = 'mysql';
+
+    protected $table = 'organisations';
+
     public $timestamps = false;
 
     /**

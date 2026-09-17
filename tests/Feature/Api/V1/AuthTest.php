@@ -27,12 +27,16 @@ test('api login returns a sanctum token for valid credentials', function () {
 
     $response->assertOk()
         ->assertJsonStructure([
-            'token',
-            'token_type',
-            'user' => ['id', 'name', 'email', 'roles'],
+            'statusCode',
+            'message',
+            'data' => [
+                'token',
+                'token_type',
+                'user' => ['id', 'name', 'email'],
+            ],
         ])
-        ->assertJsonPath('token_type', 'Bearer')
-        ->assertJsonPath('user.email', 'mobile.user@example.com');
+        ->assertJsonPath('data.token_type', 'Bearer')
+        ->assertJsonPath('data.user.email', 'mobile.user@example.com');
 
     expect(PersonalAccessToken::query()->where('tokenable_id', $user->id)->count())->toBe(1);
 });

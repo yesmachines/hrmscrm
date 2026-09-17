@@ -9,6 +9,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['organisation_id', 'office_name', 'country_id', 'city', 'address'])]
 class OfficeLocation extends Model
 {
+    protected $connection = 'mysql';
+
+    protected $table = 'office_locations';
+
     public $timestamps = false;
 
     /**

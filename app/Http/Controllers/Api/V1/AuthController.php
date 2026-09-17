@@ -37,6 +37,14 @@ class AuthController extends Controller
 
         $data = clone $user;
         $data->access_token = $token;
+        $data->token = $token;
+        $data->token_type = 'Bearer';
+        $data->user = [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'roles' => $user->roles ?? [],
+        ];
 
         return $this->successResponse($data);
     }
