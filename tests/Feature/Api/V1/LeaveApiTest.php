@@ -14,6 +14,7 @@ use App\Models\SalesCrm\User as SalesCrmUser;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     DB::connection('salescrm')->table('personal_access_tokens')->delete();
@@ -511,4 +512,77 @@ test('sick leave combined with weekend requires certificate', function () {
 
     $responseMonday->assertStatus(422)
         ->assertJsonValidationErrors(['certificate']);
+});
+
+test('it stores signature image into leave_request_details and exposes signature_url', function () {
+    Storage::fake('public');
+
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Signature User',
+        'email' => 'signature.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-SIG-01',
+        'designation' => 'Developer',
+        'division' => 'Engineering',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Casual Leave',
+        'code' => 'CASUAL',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => true,
+        'status' => 1,
+    ]);
+
+    LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 10,
+        'used' => 0,
+        'balance' => 10,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+    $fakeSignature = UploadedFile::fake()->image('signature.png', 200, 80);
+
+    $response = $this->withToken($token)->post('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-12-01',
+        'end_date' => '2026-12-01',
+        'total_days' => 1,
+        'remarks' => 'Taking a day off with oath signature',
+        'signature' => $fakeSignature,
+        'declaration' => 'I hereby declare I will remain available for emergency queries.',
+    ]);
+
+    $response->assertStatus(201);
+    $leaveId = $response->json('data.id');
+
+    $this->assertDatabaseHas('leave_request_details', [
+        'leave_request_id' => $leaveId,
+        'field_name' => 'Signature',
+        'field_key' => 'signature_path',
+    ]);
+
+    $this->assertDatabaseHas('leave_request_details', [
+        'leave_request_id' => $leaveId,
+        'field_name' => 'Declaration',
+        'field_key' => 'declaration_text',
+        'field_value' => 'I hereby declare I will remain available for emergency queries.',
+    ]);
+
+    $showResponse = $this->withToken($token)->getJson("/api/v1/leaves/{$leaveId}");
+    $showResponse->assertStatus(200);
+
+    expect($showResponse->json('data.signature_url'))->not->toBeNull();
+    expect($showResponse->json('data.signature_url'))->toContain('leave-signatures');
 });

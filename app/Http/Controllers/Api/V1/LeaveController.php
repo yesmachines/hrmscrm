@@ -245,6 +245,30 @@ class LeaveController extends Controller
             ]);
         }
 
+        // Store signature oath if uploaded as image file
+        if ($request->hasFile('signature')) {
+            $request->validate([
+                'signature' => 'file|image|mimes:jpg,jpeg,png,webp|max:5120',
+            ]);
+
+            $signaturePath = $request->file('signature')->store('leave-signatures', 'public');
+
+            $leaveRequest->details()->create([
+                'field_name' => 'Signature',
+                'field_key' => 'signature_path',
+                'field_value' => $signaturePath,
+            ]);
+        }
+
+        // Store explicit declaration text or status if provided
+        if ($request->filled('declaration')) {
+            $leaveRequest->details()->create([
+                'field_name' => 'Declaration',
+                'field_key' => 'declaration_text',
+                'field_value' => (string) $request->input('declaration'),
+            ]);
+        }
+
         // Store handover details if required
         if ($leaveType->requires_handover) {
             $details = [
@@ -416,12 +440,18 @@ class LeaveController extends Controller
         });
 
         $details = $leaveRequest->details->map(function ($detail) {
-            return [
+            $item = [
                 'id' => $detail->id,
                 'field_name' => $detail->field_name,
                 'field_key' => $detail->field_key,
                 'field_value' => $detail->field_value,
             ];
+
+            if ($detail->field_key === 'signature_path' && ! empty($detail->field_value)) {
+                $item['file_url'] = asset('storage/'.$detail->field_value);
+            }
+
+            return $item;
         });
 
         $histories = $leaveRequest->histories->map(function ($history) {
@@ -453,6 +483,11 @@ class LeaveController extends Controller
             ];
         });
 
+        $signatureDetail = $leaveRequest->details->firstWhere('field_key', 'signature_path');
+        $signatureUrl = $signatureDetail && ! empty($signatureDetail->field_value)
+            ? asset('storage/'.$signatureDetail->field_value)
+            : null;
+
         return $this->successResponse([
             'id' => $leaveRequest->id,
             'employee_id' => $leaveRequest->employee_id,
@@ -467,6 +502,7 @@ class LeaveController extends Controller
             'updated_at' => $leaveRequest->updated_at?->toIso8601String(),
             'files' => $files,
             'details' => $details,
+            'signature_url' => $signatureUrl,
             'histories' => $histories,
             'approvals' => $approvals,
         ], 'Leave request details retrieved successfully.');
