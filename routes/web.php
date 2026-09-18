@@ -13,6 +13,8 @@ use App\Http\Controllers\Documents\HrPolicyController;
 use App\Http\Controllers\Documents\LetterRequestController;
 use App\Http\Controllers\Employees\EmployeeController;
 use App\Http\Controllers\Employees\EmployeeManagerController;
+use App\Http\Controllers\Events\EventController;
+use App\Http\Controllers\Events\EventTypeController;
 use App\Http\Controllers\IdeaController;
 use App\Http\Controllers\Leave\FestivalController;
 use App\Http\Controllers\Leave\LeaveBalanceController;
@@ -92,6 +94,10 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::post('asset-requests/{asset_request}/approve', [AssetRequestController::class, 'approve'])->name('asset-requests.approve');
     Route::post('asset-requests/{asset_request}/reject', [AssetRequestController::class, 'reject'])->name('asset-requests.reject');
     Route::post('asset-requests/{asset_request}/status', [AssetRequestController::class, 'updateStatus'])->name('asset-requests.update-status');
+
+    // Events Module
+    Route::resource('event-types', EventTypeController::class);
+    Route::resource('events', EventController::class);
 });
 
 require __DIR__.'/settings.php';

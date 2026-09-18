@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\EmployeeController;
+use App\Http\Controllers\Api\V1\EventController;
 use App\Http\Controllers\Api\V1\IdeaController;
 use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\VisitController;
@@ -70,5 +71,12 @@ Route::prefix('v1')->group(function () {
         Route::get('assets/{asset}', [AssetController::class, 'show'])->name('api.v1.assets.show');
         Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('api.v1.assets.assign');
         Route::post('assets/{asset}/return', [AssetController::class, 'returnAsset'])->name('api.v1.assets.return');
+
+        // Events Endpoints
+        Route::get('events', [EventController::class, 'index'])->name('api.v1.events.index');
+        Route::get('events/today', [EventController::class, 'today'])->name('api.v1.events.today');
+        Route::get('events/types', [EventController::class, 'types'])->name('api.v1.events.types');
+        Route::post('events', [EventController::class, 'store'])->name('api.v1.events.store');
+        Route::get('events/{id}', [EventController::class, 'show'])->name('api.v1.events.show');
     });
 });

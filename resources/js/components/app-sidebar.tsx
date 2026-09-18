@@ -3,6 +3,7 @@ import {
     AlertTriangle,
     Briefcase,
     Building2,
+    Calendar,
     CalendarDays,
     CalendarPlus,
     ClipboardList,
@@ -17,6 +18,7 @@ import {
     Mail,
     MapPin,
     Shield,
+    Tags,
     UserCheck,
     Users,
 } from 'lucide-react';
@@ -192,6 +194,23 @@ const mainNavItems: NavItem[] = [
         title: 'Visits',
         icon: UserCheck,
         href: '/visits',
+    },
+    {
+        title: 'Events',
+        icon: Calendar,
+        href: '/events',
+        items: [
+            {
+                title: 'Events Calendar',
+                href: '/events',
+                icon: Calendar,
+            },
+            {
+                title: 'Event Types',
+                href: '/event-types',
+                icon: Tags,
+            },
+        ],
     },
     {
         title: 'Assets',
