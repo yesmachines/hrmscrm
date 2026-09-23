@@ -6,12 +6,36 @@ use App\Models\EmployeeProfile;
 use App\Models\Event;
 use App\Models\EventType;
 use App\Models\LeaveRequest;
+use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 class SystemEventSyncService
 {
+    /**
+     * Cache of valid organisation IDs in HRMS.
+     *
+     * @var array<int, int>|null
+     */
+    protected ?array $validOrganisationIds = null;
+
+    /**
+     * Ensure organisation_id exists in the local organisations table to avoid FK constraint violations.
+     */
+    protected function resolveOrganisationId(?int $organisationId): ?int
+    {
+        if ($organisationId === null) {
+            return null;
+        }
+
+        if ($this->validOrganisationIds === null) {
+            $this->validOrganisationIds = Organisation::query()->pluck('id', 'id')->all();
+        }
+
+        return $this->validOrganisationIds[$organisationId] ?? null;
+    }
+
     /**
      * Synchronize all system-generated events for a given year.
      *
@@ -41,10 +65,6 @@ class SystemEventSyncService
         $employees = Employee::query()
             ->with('user:id,name')
             ->where('status', 1)
-            ->where(function ($q): void {
-                $q->whereNull('resignation_date')
-                    ->orWhereDate('resignation_date', '>', now());
-            })
             ->whereNotNull('joining_date')
             ->get();
 
@@ -88,7 +108,7 @@ class SystemEventSyncService
                     'start_datetime' => $anniversaryDate,
                 ],
                 [
-                    'organisation_id' => $employee->organisation_id,
+                    'organisation_id' => $this->resolveOrganisationId($employee->organisation_id),
                     'title' => $title,
                     'description' => $description,
                     'end_datetime' => (clone $anniversaryDate)->setTime(18, 0, 0),
@@ -113,10 +133,6 @@ class SystemEventSyncService
         $employees = Employee::query()
             ->with('user:id,name')
             ->where('status', 1)
-            ->where(function ($q): void {
-                $q->whereNull('resignation_date')
-                    ->orWhereDate('resignation_date', '>', now());
-            })
             ->get();
 
         if ($employees->isEmpty()) {
@@ -160,7 +176,7 @@ class SystemEventSyncService
                     'start_datetime' => $birthdayDate,
                 ],
                 [
-                    'organisation_id' => $employee->organisation_id,
+                    'organisation_id' => $this->resolveOrganisationId($employee->organisation_id),
                     'title' => $title,
                     'description' => $description,
                     'end_datetime' => (clone $birthdayDate)->setTime(18, 0, 0),
@@ -205,7 +221,7 @@ class SystemEventSyncService
                     'start_datetime' => $joinDate,
                 ],
                 [
-                    'organisation_id' => $employee->organisation_id,
+                    'organisation_id' => $this->resolveOrganisationId($employee->organisation_id),
                     'title' => $title,
                     'description' => $description,
                     'end_datetime' => (clone $joinDate)->setTime(18, 0, 0),
@@ -283,7 +299,7 @@ class SystemEventSyncService
                 'start_datetime' => $startDate,
             ],
             [
-                'organisation_id' => $employee->organisation_id,
+                'organisation_id' => $this->resolveOrganisationId($employee->organisation_id),
                 'title' => $title,
                 'description' => $description,
                 'end_datetime' => $endDate,
