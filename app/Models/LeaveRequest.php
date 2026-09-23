@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use App\Models\SalesCrm\Employee;
+use App\Observers\LeaveRequestObserver;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[ObservedBy([LeaveRequestObserver::class])]
 #[Fillable([
     'employee_id',
     'leave_type_id',
