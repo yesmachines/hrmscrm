@@ -110,3 +110,32 @@ test('system event types cannot be deleted', function () {
 
     $this->assertDatabaseHas('event_types', ['id' => $type->id]);
 });
+
+test('users can filter events by month and year on web events page', function () {
+    $user = createHrmsLoginUser('admin');
+    $this->actingAs($user);
+
+    $type = EventType::factory()->create();
+
+    Event::factory()->create([
+        'event_type_id' => $type->id,
+        'title' => 'September Gathering',
+        'start_datetime' => '2026-09-10 10:00:00',
+        'end_datetime' => '2026-09-10 12:00:00',
+        'status' => 'published',
+    ]);
+
+    Event::factory()->create([
+        'event_type_id' => $type->id,
+        'title' => 'December Festive Dinner',
+        'start_datetime' => '2026-12-15 19:00:00',
+        'end_datetime' => '2026-12-15 22:00:00',
+        'status' => 'published',
+    ]);
+
+    $response = $this->get(route('events.index', ['date_filter' => '2026-09']));
+    $response->assertOk();
+
+    $responseMonth = $this->get(route('events.index', ['month' => 9, 'year' => 2026]));
+    $responseMonth->assertOk();
+});
