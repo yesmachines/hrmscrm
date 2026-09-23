@@ -245,3 +245,57 @@ test('leave request observer automatically creates and removes calendar event on
 
     expect(Event::query()->where('event_type_id', $leaveEventType->id)->where('employee_id', $employee->id)->count())->toBe(0);
 });
+
+test('pruning clears past years system events while preserving manual company events', function () {
+    $employee = createTestEmployee(['name' => 'Past Year User']);
+
+    $systemType = EventType::query()->firstOrCreate(
+        ['event_code' => 'BIRTHDAY'],
+        ['event_name' => 'Birthday', 'event_source' => 'system', 'status' => 1]
+    );
+
+    $manualType = EventType::query()->firstOrCreate(
+        ['event_code' => 'MEETING'],
+        ['event_name' => 'Meetings', 'event_source' => 'manual', 'status' => 1]
+    );
+
+    // Past year system event (2024) - should be pruned
+    $pastSystemEvent = Event::query()->create([
+        'employee_id' => $employee->id,
+        'event_type_id' => $systemType->id,
+        'title' => 'Past Year 2024 Birthday',
+        'start_datetime' => '2024-05-15 09:00:00',
+        'status' => 'published',
+    ]);
+
+    // Past year manual event (2024) - should be PRESERVED
+    $pastManualEvent = Event::query()->create([
+        'event_type_id' => $manualType->id,
+        'title' => 'Important Annual Meeting 2024',
+        'start_datetime' => '2024-06-20 10:00:00',
+        'status' => 'published',
+    ]);
+
+    // Current year system event (2026) - should be PRESERVED
+    $currentSystemEvent = Event::query()->create([
+        'employee_id' => $employee->id,
+        'event_type_id' => $systemType->id,
+        'title' => 'Current Year 2026 Birthday',
+        'start_datetime' => '2026-05-15 09:00:00',
+        'status' => 'published',
+    ]);
+
+    $service = app(SystemEventSyncService::class);
+    $prunedCount = $service->prunePastSystemEvents(2026);
+
+    expect($prunedCount)->toBe(1);
+
+    // Assert past system event is gone
+    $this->assertDatabaseMissing('events', ['id' => $pastSystemEvent->id]);
+
+    // Assert past manual event is still there!
+    $this->assertDatabaseHas('events', ['id' => $pastManualEvent->id]);
+
+    // Assert current year event is still there!
+    $this->assertDatabaseHas('events', ['id' => $currentSystemEvent->id]);
+});

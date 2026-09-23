@@ -34,17 +34,18 @@ class SyncSystemEventsCommand extends Command
         $results = $service->syncAll($year);
 
         $this->table(
-            ['Event Category', 'Records Synchronized'],
+            ['Event Category', 'Records Count'],
             [
                 ['Work Anniversaries', $results['anniversaries']],
                 ['Birthdays', $results['birthdays']],
                 ['New Joiners', $results['new_joiners']],
                 ['Approved Leaves', $results['leaves']],
+                ['Past Years Pruned', $results['pruned_past']],
             ]
         );
 
-        $total = array_sum($results);
-        $this->info("System events synchronization complete. Total events synced: {$total}");
+        $totalSynced = $results['anniversaries'] + $results['birthdays'] + $results['new_joiners'] + $results['leaves'];
+        $this->info("System events synchronization complete. Total events synced for {$year}: {$totalSynced}. Past events cleared: {$results['pruned_past']}");
 
         return self::SUCCESS;
     }

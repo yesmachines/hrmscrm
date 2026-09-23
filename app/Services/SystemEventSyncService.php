@@ -37,20 +37,38 @@ class SystemEventSyncService
     }
 
     /**
-     * Synchronize all system-generated events for a given year.
+     * Synchronize all system-generated events for a given year,
+     * and clear past years' system-generated events.
      *
-     * @return array{anniversaries: int, birthdays: int, new_joiners: int, leaves: int}
+     * @return array{pruned_past: int, anniversaries: int, birthdays: int, new_joiners: int, leaves: int}
      */
     public function syncAll(?int $year = null): array
     {
         $targetYear = $year ?? (int) now()->format('Y');
 
         return [
+            'pruned_past' => $this->prunePastSystemEvents($targetYear),
             'anniversaries' => $this->syncWorkAnniversaries($targetYear),
             'birthdays' => $this->syncBirthdays($targetYear),
             'new_joiners' => $this->syncNewJoiners($targetYear),
             'leaves' => $this->syncApprovedLeaves($targetYear),
         ];
+    }
+
+    /**
+     * Clear past years' system-generated events (birthdays, anniversaries, leaves, new joiners)
+     * prior to the target year, preserving manual company events.
+     */
+    public function prunePastSystemEvents(int $currentYear): int
+    {
+        $cutoffDate = Carbon::create($currentYear, 1, 1)->startOfDay();
+
+        return Event::withTrashed()
+            ->whereHas('eventType', function ($q): void {
+                $q->where('event_source', 'system');
+            })
+            ->where('start_datetime', '<', $cutoffDate)
+            ->forceDelete();
     }
 
     /**
