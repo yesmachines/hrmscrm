@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureHrmsLoginRole
 {
     /**
-     * Only Sales CRM users with admin or hr roles may use HRMS CRM.
+     * Only Sales CRM users with admin, hr, or finance roles may use HRMS CRM.
      *
      * @param  Closure(Request): Response  $next
      */
@@ -32,7 +32,7 @@ class EnsureHrmsLoginRole
             return redirect()
                 ->route('login')
                 ->withErrors([
-                    'email' => __('Only Admin and HR users can access this application.'),
+                    'email' => __('Only Admin, HR, and Finance users can access this application.'),
                 ]);
         }
 

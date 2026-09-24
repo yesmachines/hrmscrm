@@ -11,7 +11,7 @@ class SalesCrmRoles
      *
      * @var list<string>
      */
-    public const LOGIN_ROLES = ['admin', 'hr'];
+    public const LOGIN_ROLES = ['admin', 'hr', 'finance'];
 
     /**
      * Spatie model_type stored in salescrm.cm_model_has_roles.

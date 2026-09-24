@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import {
     AlertTriangle,
+    Award,
     Briefcase,
     Building2,
     Calendar,
@@ -233,6 +234,28 @@ const mainNavItems: NavItem[] = [
                 icon: FolderTree,
             },
         ],
+    },
+    {
+        title: 'Rewards',
+        icon: Award,
+        href: '/rewards',
+        items: [
+            {
+                title: 'Reward Claims',
+                href: '/rewards',
+                icon: Award,
+            },
+            {
+                title: 'Reward Categories',
+                href: '/reward-categories',
+                icon: FolderTree,
+            },
+        ],
+    },
+    {
+        title: 'Socials Moderation',
+        icon: UserCheck, // Or a relevant icon, maybe MessageSquare or Shield if imported, but UserCheck is already imported
+        href: '/socials/moderation',
     },
 ];
 

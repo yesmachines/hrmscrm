@@ -49,7 +49,7 @@ use App\Support\SalesCrmRoles;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Create a Sales CRM user that is allowed to log in to HRMS (admin or hr).
+ * Create a Sales CRM user that is allowed to log in to HRMS (admin, hr, or finance).
  */
 function createHrmsLoginUser(string $role = 'admin', array $attributes = []): SalesCrmUser
 {

@@ -25,6 +25,9 @@ use App\Http\Controllers\Leave\LeaveTypeController;
 use App\Http\Controllers\Organisation\DepartmentController;
 use App\Http\Controllers\Organisation\OfficeLocationController;
 use App\Http\Controllers\Organisation\OrganisationController;
+use App\Http\Controllers\Rewards\RewardCategoryController;
+use App\Http\Controllers\Rewards\RewardController;
+use App\Http\Controllers\SocialController;
 use App\Http\Controllers\Visits\VisitController as VisitWebController;
 use App\Http\Middleware\EnsureHrmsLoginRole;
 use Illuminate\Support\Facades\Auth;
@@ -98,6 +101,17 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     // Events Module
     Route::resource('event-types', EventTypeController::class);
     Route::resource('events', EventController::class);
+
+    // Rewards Module
+    Route::get('rewards/{reward}/download-form', [RewardController::class, 'downloadForm'])->name('rewards.download-form');
+    Route::get('rewards/{reward}/download-attachment', [RewardController::class, 'downloadAttachment'])->name('rewards.download-attachment');
+    Route::post('rewards/{reward}/status', [RewardController::class, 'updateStatus'])->name('rewards.update-status');
+    Route::resource('rewards', RewardController::class)->only(['index', 'store', 'destroy']);
+    Route::resource('reward-categories', RewardCategoryController::class);
+
+    // Socials Module (Moderation)
+    Route::get('socials/moderation', [SocialController::class, 'moderation'])->name('socials.moderation');
+    Route::post('socials/{post}/status', [SocialController::class, 'updateStatus'])->name('socials.update-status');
 });
 
 require __DIR__.'/settings.php';

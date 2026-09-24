@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\EventController;
 use App\Http\Controllers\Api\V1\IdeaController;
 use App\Http\Controllers\Api\V1\LeaveController;
+use App\Http\Controllers\Api\V1\RewardController;
+use App\Http\Controllers\Api\V1\SocialController;
 use App\Http\Controllers\Api\V1\VisitController;
 use Illuminate\Support\Facades\Route;
 
@@ -78,5 +80,18 @@ Route::prefix('v1')->group(function () {
         Route::get('events/types', [EventController::class, 'types'])->name('api.v1.events.types');
         Route::post('events', [EventController::class, 'store'])->name('api.v1.events.store');
         Route::get('events/{id}', [EventController::class, 'show'])->name('api.v1.events.show');
+
+        // Rewards Endpoints
+        Route::get('rewards/categories', [RewardController::class, 'categories'])->name('api.v1.rewards.categories');
+        Route::get('rewards', [RewardController::class, 'index'])->name('api.v1.rewards.index');
+        Route::post('rewards', [RewardController::class, 'store'])->name('api.v1.rewards.store');
+        Route::get('rewards/{id}', [RewardController::class, 'show'])->name('api.v1.rewards.show');
+
+        // Socials Endpoints
+        Route::get('socials', [SocialController::class, 'index'])->name('api.v1.socials.index');
+        Route::post('socials', [SocialController::class, 'store'])->name('api.v1.socials.store');
+        Route::put('socials/{post}', [SocialController::class, 'update'])->name('api.v1.socials.update');
+        Route::delete('socials/{post}', [SocialController::class, 'destroy'])->name('api.v1.socials.destroy');
+        Route::post('socials/{post}/react', [SocialController::class, 'react'])->name('api.v1.socials.react');
     });
 });

@@ -62,7 +62,7 @@ class LetterRequestController extends Controller
             'histories' => fn ($q) => $q->orderByDesc('id'),
         ]);
 
-        $employee = Employee::query()->with('user:id,name,email', 'department:id,name', 'organisation:id,name')->find($letterRequest->employee_id);
+        $employee = Employee::query()->with('user:id,name,email', 'department:id,name', 'organisation:id,org_name')->find($letterRequest->employee_id);
 
         return Inertia::render('letter-requests/show', [
             'request' => $this->payload($letterRequest),
