@@ -22,4 +22,18 @@ class SocialMedia extends Model
     {
         return $this->belongsTo(SocialPost::class, 'post_id');
     }
+
+    protected function filePath(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            get: fn ($value) => $value ? asset('storage/' . $value) : null,
+        );
+    }
+
+    protected function thumbnailPath(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            get: fn ($value) => $value ? asset('storage/' . $value) : null,
+        );
+    }
 }
