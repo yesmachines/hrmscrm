@@ -41,6 +41,7 @@ type LetterDetail = {
     purpose: string;
     details: string | null;
     to_address: string | null;
+    destination_country: string | null;
     visa_designation: string | null;
     salary_amount: string | null;
     bank_iban: string | null;
@@ -49,6 +50,8 @@ type LetterDetail = {
     applied_date: string;
     approved_date: string | null;
     rendered_html?: string | null;
+    file_url?: string | null;
+    download_url?: string | null;
     histories: {
         id: number;
         action_type: string;
@@ -73,14 +76,18 @@ type Props = {
 export default function LetterRequestShow({ request, employee }: Props) {
     const [approveOpen, setApproveOpen] = useState(false);
     const [rejectOpen, setRejectOpen] = useState(false);
-    const [salaryAmount, setSalaryAmount] = useState(request.salary_amount || '15,000 AED');
-    const [bankIban, setBankIban] = useState(request.bank_iban || 'AE070331234567890123456');
+    const [salaryAmount, setSalaryAmount] = useState(request.salary_amount || '');
+    const [bankIban, setBankIban] = useState(request.bank_iban || '');
+    const [toAddress, setToAddress] = useState(request.to_address || '');
+    const [destinationCountry, setDestinationCountry] = useState(request.destination_country || '');
+    const [purpose, setPurpose] = useState(request.purpose || '');
     const [remarks, setRemarks] = useState(request.remarks || '');
     const [rejectRemarks, setRejectRemarks] = useState('');
     const [processing, setProcessing] = useState(false);
 
     const isPending = request.status === 'submitted' || request.status === 'under_review';
     const isSalaryLetter = request.document_code === 'salary_certificate' || request.document_code === 'salary_transfer_letter';
+    const isNocLetter = request.document_code === 'noc' || request.document_code === 'noc_letter';
 
     const handleApprove = () => {
         setProcessing(true);
@@ -89,6 +96,9 @@ export default function LetterRequestShow({ request, employee }: Props) {
             {
                 salary_amount: salaryAmount,
                 bank_iban: bankIban,
+                to_address: toAddress,
+                destination_country: destinationCountry,
+                purpose: purpose,
                 remarks,
             },
             {
@@ -119,7 +129,7 @@ export default function LetterRequestShow({ request, employee }: Props) {
         <>
             <Head title={`${request.document_name} Request`} />
 
-            <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-6 md:p-8">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
@@ -250,6 +260,43 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                         )}
 
                                         <div className="space-y-1.5">
+                                            <Label htmlFor="to_address">Addressed To *</Label>
+                                            <textarea
+                                                id="to_address"
+                                                rows={2}
+                                                value={toAddress}
+                                                onChange={(e) => setToAddress(e.target.value)}
+                                                placeholder="e.g. To Whom It May Concern, Consulate General, etc."
+                                                className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            />
+                                        </div>
+
+                                        {isNocLetter && (
+                                            <>
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="destination_country">Destination Country *</Label>
+                                                    <Input
+                                                        id="destination_country"
+                                                        value={destinationCountry}
+                                                        onChange={(e) => setDestinationCountry(e.target.value)}
+                                                        placeholder="e.g. Kingdom of the Netherlands"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="purpose">Detailed Purpose & Visit Dates *</Label>
+                                                    <textarea
+                                                        id="purpose"
+                                                        rows={3}
+                                                        value={purpose}
+                                                        onChange={(e) => setPurpose(e.target.value)}
+                                                        placeholder="e.g. attending technical and commercial meetings with ALMI... from 15th Sep to 30th Sep"
+                                                        className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+
+                                        <div className="space-y-1.5">
                                             <Label htmlFor="app_remarks">HR Endorsement Remarks</Label>
                                             <textarea
                                                 id="app_remarks"
@@ -280,49 +327,64 @@ export default function LetterRequestShow({ request, employee }: Props) {
                 </div>
 
                 {/* Details Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Left 2 Cols: Request Content & Generated Document Preview */}
-                    <div className="md:col-span-2 space-y-6">
-                        {/* Generated Letter Preview Card */}
-                        {request.rendered_html && (
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {/* Left 3 Cols: Request Content & Generated Document Preview */}
+                    <div className="md:col-span-2 xl:col-span-3 space-y-6">
+                        {/* Generated Letter PDF Preview Card */}
+                        {request.file_url ? (
                             <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-base font-semibold flex items-center gap-2">
                                         <FileText className="size-4 text-primary" />
                                         Generated Official Letter Document
                                     </h3>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="gap-1.5"
-                                        onClick={() => {
-                                            const printWindow = window.open('', '_blank');
-                                            if (printWindow) {
-                                                printWindow.document.write(`
-                                                    <html>
-                                                        <head><title>${request.document_name} - ${request.employee_name}</title></head>
-                                                        <body style="margin: 40px;">${request.rendered_html}</body>
-                                                    </html>
-                                                `);
-                                                printWindow.document.close();
-                                                printWindow.focus();
-                                                setTimeout(() => printWindow.print(), 250);
-                                            }
-                                        }}
-                                    >
-                                        <Printer className="size-3.5" />
-                                        Print Letter / PDF
-                                    </Button>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1.5"
+                                            asChild
+                                        >
+                                            <a href={request.file_url} target="_blank" rel="noreferrer">
+                                                <Printer className="size-3.5" />
+                                                View / Print PDF
+                                            </a>
+                                        </Button>
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            className="gap-1.5"
+                                            asChild
+                                        >
+                                            <a href={request.download_url} download>
+                                                <Printer className="size-3.5" />
+                                                Download PDF
+                                            </a>
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-border/80 bg-slate-50/60 h-[600px] overflow-hidden">
+                                    <iframe src={request.file_url} className="w-full h-full border-0" title="PDF Preview" />
+                                </div>
+                            </div>
+                        ) : request.rendered_html ? (
+                            <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-base font-semibold flex items-center gap-2">
+                                        <FileText className="size-4 text-primary" />
+                                        Letter Preview (Draft)
+                                    </h3>
                                 </div>
 
                                 <div className="rounded-xl border border-border/80 bg-slate-50/60 p-6 overflow-x-auto">
-                                    <div
-                                        className="bg-white shadow-md rounded-lg p-8 mx-auto max-w-[850px] border border-slate-200"
-                                        dangerouslySetInnerHTML={{ __html: request.rendered_html }}
+                                    <iframe
+                                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body { font-family: Arial, sans-serif; margin: 0; padding: 20px; } p, div, span, table { max-width: 100% !important; } p { margin-right: 0 !important; padding-right: 0 !important; width: auto !important; }</style></head><body>${request.rendered_html}</body></html>`}
+                                        className="w-full bg-white shadow-md rounded-lg mx-auto border border-slate-200 min-h-[1000px]"
+                                        title="Letter Preview"
                                     />
                                 </div>
                             </div>
-                        )}
+                        ) : null}
 
                         <div className="rounded-2xl border border-border bg-white p-6 shadow-sm space-y-5">
                             <h3 className="text-base font-semibold border-b border-border pb-3">Request Information</h3>
@@ -364,6 +426,14 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                                 Visa Designation
                                             </span>
                                             <p className="text-sm font-semibold text-foreground">{request.visa_designation}</p>
+                                        </div>
+                                    )}
+                                    {request.destination_country && (
+                                        <div className="bg-neutral-50 p-3.5 rounded-xl border border-border/50">
+                                            <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase block mb-0.5">
+                                                Destination Country
+                                            </span>
+                                            <p className="text-sm font-semibold text-foreground">{request.destination_country}</p>
                                         </div>
                                     )}
                                 </div>

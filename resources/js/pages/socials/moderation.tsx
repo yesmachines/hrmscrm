@@ -163,9 +163,23 @@ export default function SocialsModeration({ posts }: Props) {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     {post.media && post.media.length > 0 ? (
-                                                        <Badge variant="secondary" className="text-xs">
-                                                            {post.media.length} {post.media.length === 1 ? 'item' : 'items'}
-                                                        </Badge>
+                                                        <div className="flex gap-1.5 flex-wrap">
+                                                            {post.media.map((m) => (
+                                                                <a 
+                                                                    key={m.id} 
+                                                                    href={`/storage/${m.file_path}`} 
+                                                                    target="_blank" 
+                                                                    rel="noreferrer" 
+                                                                    className="block relative h-10 w-10 overflow-hidden rounded border border-slate-200 hover:opacity-80 transition-opacity"
+                                                                >
+                                                                    {m.file_type === 'video' ? (
+                                                                        <video src={`/storage/${m.file_path}`} className="h-full w-full object-cover" />
+                                                                    ) : (
+                                                                        <img src={`/storage/${m.file_path}`} alt="Media" className="h-full w-full object-cover" />
+                                                                    )}
+                                                                </a>
+                                                            ))}
+                                                        </div>
                                                     ) : (
                                                         <span className="text-xs text-slate-400">None</span>
                                                     )}
