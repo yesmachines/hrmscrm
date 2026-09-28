@@ -45,10 +45,5 @@ jobs:
             npm install
             npm run build
 
-            # Ensure storage link and permissions are correct
-            php artisan storage:link || true
-            sudo chmod -R 775 storage bootstrap/cache
-            sudo chown -R www-data:www-data storage bootstrap/cache || true
-
             php artisan optimize:clear
             sudo supervisorctl restart ymhrms-worker:*
