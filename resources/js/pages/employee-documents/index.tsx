@@ -2,7 +2,9 @@ import { Head, Link, router } from '@inertiajs/react';
 import {
     CheckCircle2,
     Clock,
+    Download,
     Eye,
+    FileDown,
     FileText,
     Filter,
     Plus,
@@ -14,6 +16,14 @@ import { useState } from 'react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -52,11 +62,19 @@ type PaginatedDocuments = {
     total: number;
 };
 
+type DownloadableForm = {
+    id: number;
+    name: string;
+    code: string;
+    download_url: string;
+};
+
 type Props = {
     documents: PaginatedDocuments;
     categories: { id: number; category_name: string; short_code: string }[];
     documentTypes: { id: number; category_id: number; document_name: string; document_code: string }[];
     employees: { id: number; user_id: number; emp_num: string; designation: string; user?: { name: string } }[];
+    downloadableForms?: DownloadableForm[];
     filters: {
         employee_id?: string;
         category_id?: string;
@@ -71,6 +89,7 @@ export default function EmployeeDocumentsIndex({
     categories,
     documentTypes,
     employees,
+    downloadableForms = [],
     filters,
 }: Props) {
     const [search, setSearch] = useState(filters.search || '');
@@ -138,7 +157,37 @@ export default function EmployeeDocumentsIndex({
                         title="Employee Documents"
                         description="Review employee uploads, personal files, and manage HR documents"
                     />
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        {downloadableForms && downloadableForms.length > 0 && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="border-border bg-white shadow-sm hover:bg-neutral-50 text-neutral-800">
+                                        <FileDown className="size-4 mr-1.5 text-primary" />
+                                        Download Blank Forms
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-80 p-2">
+                                    <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1.5">
+                                        Claim & Declaration Forms
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {downloadableForms.map((form) => (
+                                        <DropdownMenuItem
+                                            key={form.id}
+                                            className="cursor-pointer rounded-lg p-2.5 text-sm focus:bg-neutral-100 flex items-center justify-between"
+                                            onClick={() => window.open(form.download_url, '_blank')}
+                                        >
+                                            <div className="flex flex-col pr-2">
+                                                <span className="font-medium text-neutral-900 leading-snug">{form.name}</span>
+                                                <span className="text-[11px] text-muted-foreground mt-0.5">Blank PDF for manual filling & signing</span>
+                                            </div>
+                                            <Download className="size-4 text-primary shrink-0" />
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+
                         <Button asChild className="bg-primary hover:bg-primary/90 text-white shadow-sm">
                             <Link href="/employee-documents/create">
                                 <Plus className="size-4 mr-1.5" />

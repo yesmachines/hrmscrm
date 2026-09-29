@@ -53,6 +53,7 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     // Documents CRM & Config
     Route::resource('document-categories', DocumentCategoryController::class);
     Route::resource('document-types', DocumentTypeController::class);
+    Route::get('document-types/{document_type}/blank-form', [DocumentTypeController::class, 'downloadBlankForm'])->name('document-types.blank-form');
     Route::resource('document-templates', DocumentTemplateController::class);
 
     Route::resource('employee-documents', EmployeeDocumentController::class);

@@ -43,6 +43,7 @@ Route::prefix('v1')->group(function () {
         // Documents Endpoints (Figma Mobile App)
         Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.documents.categories');
         Route::get('documents/types', [DocumentController::class, 'types'])->name('api.v1.documents.types');
+        Route::get('documents/types/{document_type}/blank-form', [DocumentController::class, 'blankForm'])->name('api.v1.documents.blank-form');
         Route::get('documents', [DocumentController::class, 'index'])->name('api.v1.documents.index');
         Route::post('documents', [DocumentController::class, 'store'])->name('api.v1.documents.store');
         Route::get('documents/policies', [DocumentController::class, 'policies'])->name('api.v1.documents.policies');

@@ -12,12 +12,14 @@ use App\Models\EmployeeDocumentHistory;
 use App\Models\EmployeeRequestDetail;
 use App\Models\SalesCrm\Employee;
 use App\Traits\ApiResponse;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class DocumentController extends Controller
 {
@@ -95,6 +97,8 @@ class DocumentController extends Controller
         }
 
         $types = $query->orderBy('id')->get()->map(function (DocumentType $type) {
+            $hasTemplate = $type->documentTemplates->isNotEmpty();
+
             return [
                 'id' => $type->id,
                 'category_id' => $type->category_id,
@@ -109,6 +113,8 @@ class DocumentController extends Controller
                 'requires_reminder' => (bool) $type->requires_reminder,
                 'record_source' => $type->record_source,
                 'requires_attachments' => (bool) $type->requires_attachments,
+                'has_blank_form' => $hasTemplate,
+                'blank_form_url' => $hasTemplate ? route('api.v1.documents.blank-form', $type->id) : null,
                 'templates' => $type->documentTemplates->map(fn ($t) => [
                     'id' => $t->id,
                     'template_name' => $t->template_name,
@@ -118,6 +124,73 @@ class DocumentController extends Controller
         });
 
         return $this->successResponse($types, 'Document types retrieved successfully.');
+    }
+
+    /**
+     * Download or view blank form template for a document type.
+     */
+    public function blankForm(Request $request, $id)
+    {
+        $docType = DocumentType::query()->with(['documentTemplates' => fn ($q) => $q->where('status', 1)])->find($id);
+        if (! $docType) {
+            return $this->errorResponse('Document type not found.', 404);
+        }
+
+        $template = $docType->documentTemplates->first();
+        if (! $template || empty($template->template_code)) {
+            return $this->errorResponse('No blank form template available for this document type.', 404);
+        }
+
+        $employee = $this->getEmployee($request);
+        $isPureBlank = $request->boolean('pure_blank') || ! $employee;
+
+        $replacements = [
+            '{{employee_name}}' => $isPureBlank ? '&nbsp;' : ($employee?->user?->name ?? '&nbsp;'),
+            '{{employee_code}}' => $isPureBlank ? '&nbsp;' : ($employee?->emp_num ?? '&nbsp;'),
+            '{{department}}' => $isPureBlank ? '&nbsp;' : ($employee?->department?->name ?? '&nbsp;'),
+            '{{designation}}' => $isPureBlank ? '&nbsp;' : ($employee?->designation ?? '&nbsp;'),
+            '{{joining_date}}' => ($isPureBlank || ! $employee?->joining_date) ? '&nbsp;' : Carbon::parse($employee->joining_date)->format('d M Y'),
+        ];
+
+        $html = str_replace(array_keys($replacements), array_values($replacements), $template->template_code);
+
+        // If JSON requested explicitly
+        if ($request->wantsJson() && ! $request->boolean('download')) {
+            return $this->successResponse([
+                'document_type_id' => $docType->id,
+                'document_name' => $docType->document_name,
+                'document_code' => $docType->document_code,
+                'template_name' => $template->template_name,
+                'rendered_html' => $html,
+                'download_url' => route('api.v1.documents.blank-form', ['document_type' => $docType->id, 'download' => 1]),
+            ], 'Blank form template retrieved successfully.');
+        }
+
+        // Return PDF
+        $pdfHtml = '<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>'.htmlspecialchars($docType->document_name).'</title>
+    <style>
+        @page { margin: 12mm 15mm; size: A4 portrait; }
+        body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 12px; color: #111; line-height: 1.4; margin: 0; padding: 0; }
+        table { border-collapse: collapse; width: 100%; }
+        td, th { vertical-align: top; }
+        p { margin: 4px 0; }
+    </style>
+</head>
+<body>'.$html.'</body>
+</html>';
+
+        $pdf = Pdf::loadHTML($pdfHtml)->setPaper('a4', 'portrait');
+        $filename = Str::slug($docType->document_name).'-blank-form.pdf';
+
+        if ($request->query('view') === '1' || $request->query('stream') === '1') {
+            return $pdf->stream($filename);
+        }
+
+        return $pdf->download($filename);
     }
 
     /**

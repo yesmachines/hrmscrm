@@ -66,6 +66,16 @@ class EmployeeDocumentController extends Controller
             ->withQueryString()
             ->through(fn (EmployeeDocument $doc) => $this->payload($doc));
 
+        $downloadableForms = DocumentType::query()
+            ->whereHas('documentTemplates', fn ($q) => $q->where('status', 1))
+            ->get(['id', 'document_name', 'document_code'])
+            ->map(fn (DocumentType $t) => [
+                'id' => $t->id,
+                'name' => $t->document_name,
+                'code' => $t->document_code,
+                'download_url' => route('document-types.blank-form', ['document_type' => $t->id, 'download' => 1]),
+            ]);
+
         $categories = DocumentCategory::query()->where('status', 1)->get(['id', 'category_name', 'short_code']);
         $documentTypes = DocumentType::query()->get(['id', 'category_id', 'document_name', 'document_code']);
         $employees = Employee::query()->with('user:id,name,email')->get(['id', 'user_id', 'emp_num', 'designation']);
@@ -75,18 +85,56 @@ class EmployeeDocumentController extends Controller
             'categories' => $categories,
             'documentTypes' => $documentTypes,
             'employees' => $employees,
+            'downloadableForms' => $downloadableForms,
             'filters' => $request->only(['employee_id', 'category_id', 'document_type_id', 'status', 'search']),
         ]);
     }
 
     public function create(): Response
     {
-        $categories = DocumentCategory::query()->with('documentTypes')->where('status', 1)->get();
+        $categories = DocumentCategory::query()
+            ->with(['documentTypes.documentTemplates' => fn ($q) => $q->where('status', 1)])
+            ->where('status', 1)
+            ->get()
+            ->map(function ($cat) {
+                return [
+                    'id' => $cat->id,
+                    'category_name' => $cat->category_name,
+                    'short_code' => $cat->short_code,
+                    'document_types' => $cat->documentTypes->map(function ($type) {
+                        $hasBlank = $type->documentTemplates->isNotEmpty();
+
+                        return [
+                            'id' => $type->id,
+                            'category_id' => $type->category_id,
+                            'document_name' => $type->document_name,
+                            'document_code' => $type->document_code,
+                            'requires_number' => (bool) $type->requires_number,
+                            'requires_expiry' => (bool) $type->requires_expiry,
+                            'requires_hr_approval' => (bool) $type->requires_hr_approval,
+                            'has_blank_form' => $hasBlank,
+                            'blank_form_url' => $hasBlank ? route('document-types.blank-form', ['document_type' => $type->id, 'download' => 1]) : null,
+                        ];
+                    }),
+                ];
+            });
+
+        $downloadableForms = DocumentType::query()
+            ->whereHas('documentTemplates', fn ($q) => $q->where('status', 1))
+            ->get(['id', 'document_name', 'document_code'])
+            ->map(fn (DocumentType $t) => [
+                'id' => $t->id,
+                'name' => $t->document_name,
+                'code' => $t->document_code,
+                'download_url' => route('document-types.blank-form', ['document_type' => $t->id, 'download' => 1]),
+            ]);
+
         $employees = Employee::query()->with('user:id,name,email')->get(['id', 'user_id', 'emp_num', 'designation']);
 
         return Inertia::render('employee-documents/create', [
             'categories' => $categories,
             'employees' => $employees,
+            'downloadableForms' => $downloadableForms,
         ]);
     }
 
@@ -100,12 +148,18 @@ class EmployeeDocumentController extends Controller
             'issue_date' => 'nullable|date',
             'expiry_date' => 'nullable|date',
             'remarks' => 'nullable|string',
+            'status' => 'nullable|string|in:submitted,approved,draft',
             'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ]);
 
         $docType = DocumentType::query()->findOrFail($request->input('document_type_id'));
 
-        DB::transaction(function () use ($request, $docType) {
+        $status = $request->input('status');
+        if (! in_array($status, ['submitted', 'approved', 'draft'], true)) {
+            $status = $docType->requires_hr_approval ? 'submitted' : 'approved';
+        }
+
+        DB::transaction(function () use ($request, $docType, $status) {
             $document = EmployeeDocument::query()->create([
                 'employee_id' => $request->input('employee_id'),
                 'document_type_id' => $docType->id,
@@ -116,7 +170,7 @@ class EmployeeDocumentController extends Controller
                 'remarks' => $request->input('remarks'),
                 'current_version' => '1.0',
                 'created_by' => $request->user()?->id,
-                'status' => 'approved', // HR direct uploads are auto-approved
+                'status' => $status,
             ]);
 
             $filePath = $request->file('file')->store('employee_documents', 'public');
@@ -126,16 +180,20 @@ class EmployeeDocumentController extends Controller
                 'file_path' => $filePath,
                 'uploaded_by' => $request->user()?->id,
                 'uploaded_date' => Carbon::now(),
-                'change_notes' => 'Uploaded by HR',
+                'change_notes' => $status === 'submitted' ? 'Uploaded document awaiting HR approval' : 'Uploaded by HR',
             ]);
 
             EmployeeDocumentHistory::query()->create([
                 'employee_document_id' => $document->id,
-                'action_type' => 'approved',
-                'remarks' => 'Document uploaded and approved by HR',
+                'action_type' => $status,
+                'remarks' => $status === 'submitted' ? 'Document uploaded and awaiting HR approval' : 'Document uploaded and approved by HR',
                 'done_by' => $request->user()?->id,
                 'action_on' => Carbon::now(),
             ]);
+
+            if ($status === 'approved') {
+                $this->syncWithProfile($document);
+            }
 
             if ($docType->requires_reminder && $request->filled('expiry_date')) {
                 $expiryDate = Carbon::parse($request->input('expiry_date'));
@@ -143,14 +201,17 @@ class EmployeeDocumentController extends Controller
                     'employee_document_id' => $document->id,
                     'reminder_date' => (clone $expiryDate)->subDays(90),
                     'days_before' => 90,
+                    'status' => 'pending',
                 ]);
             }
-
-            $this->syncWithProfile($document);
         });
 
+        $message = $status === 'submitted'
+            ? 'Document uploaded successfully and queued for HR approval.'
+            : 'Document uploaded and approved successfully.';
+
         return redirect()->route('employee-documents.index')
-            ->with('toast', ['type' => 'success', 'message' => 'Document created and approved successfully.']);
+            ->with('toast', ['type' => 'success', 'message' => $message]);
     }
 
     public function show(EmployeeDocument $employeeDocument): Response
