@@ -104,14 +104,47 @@ class LeaveValidationService
             ]);
         }
 
-        // 5. Gender Eligibility Check (from Leave Type)
-        if (! empty($leaveType->gender) && strtolower($leaveType->gender) !== 'all') {
-            $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
-            $employeeGender = $profile?->gender ?? $employee->gender ?? null;
+        // 5. Gender Eligibility Check (from Leave Type & Special Cases like Maternity / Paternity)
+        $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
+        $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
+        $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
+            'm', 'male' => 'male',
+            'f', 'female' => 'female',
+            default => null,
+        };
 
-            if ($employeeGender && strtolower($employeeGender) !== strtolower($leaveType->gender)) {
+        $isMaternity = $leaveType->code === 'MATERNITY' || str_contains(strtolower($leaveType->leave_name), 'maternity');
+        $isPaternity = $leaveType->code === 'PATERNITY' || str_contains(strtolower($leaveType->leave_name), 'paternity');
+
+        $leaveTypeGender = match (strtolower(trim($leaveType->gender ?? ''))) {
+            'female', 'f' => 'female',
+            'male', 'm' => 'male',
+            default => null,
+        };
+
+        if ($isMaternity) {
+            $leaveTypeGender = 'female';
+        } elseif ($isPaternity) {
+            $leaveTypeGender = 'male';
+        }
+
+        if ($leaveTypeGender !== null && $employeeGender !== null && $employeeGender !== $leaveTypeGender) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$leaveTypeGender} employees."],
+            ]);
+        }
+
+        // 6. Religious Eligibility Check (Pilgrimage / Hajj Leave is only for Muslim employees)
+        $isPilgrimage = $leaveType->code === 'PILGRIMAGE' || str_contains(strtolower($leaveType->leave_name), 'pilgrim') || str_contains(strtolower($leaveType->leave_name), 'hajj');
+        if ($isPilgrimage) {
+            $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
+            $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
+                || str_contains($rawEmployeeReligion, 'muslim')
+                || str_contains($rawEmployeeReligion, 'islam');
+
+            if (! $isMuslim) {
                 throw ValidationException::withMessages([
-                    'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$leaveType->gender} employees."],
+                    'leave_type_id' => ['Pilgrimage Leave is only applicable for Muslim employees.'],
                 ]);
             }
         }
@@ -171,14 +204,15 @@ class LeaveValidationService
         }
 
         // 10. Handover Requirement Check (from Leave Type)
-        if ($leaveType->requires_handover) {
-            $handoverId = $data['handover_person_id'] ?? null;
-            if (empty($handoverId)) {
-                throw ValidationException::withMessages([
-                    'handover_person_id' => ['A handover person is required for this leave type.'],
-                ]);
-            }
+        $handoverId = $data['handover_person_id'] ?? null;
 
+        if ($leaveType->requires_handover && empty($handoverId)) {
+            throw ValidationException::withMessages([
+                'handover_person_id' => ['A handover person is required for this leave type.'],
+            ]);
+        }
+
+        if (! empty($handoverId)) {
             if ((int) $handoverId === (int) $employee->id) {
                 throw ValidationException::withMessages([
                     'handover_person_id' => ['You cannot select yourself as the handover person.'],
@@ -192,7 +226,20 @@ class LeaveValidationService
                 ]);
             }
 
-            if (empty($data['handover_description'])) {
+            // Check if the selected handover employee is also on leave during the requested dates
+            $handoverOnLeave = LeaveRequest::where('employee_id', $handoverId)
+                ->whereIn('status', ['applied', 'approved'])
+                ->where('start_date', '<=', $endDate)
+                ->where('end_date', '>=', $startDate)
+                ->exists();
+
+            if ($handoverOnLeave) {
+                throw ValidationException::withMessages([
+                    'handover_person_id' => ['The selected handover person is also on leave during the requested dates.'],
+                ]);
+            }
+
+            if ($leaveType->requires_handover && empty($data['handover_description'])) {
                 throw ValidationException::withMessages([
                     'handover_description' => ['Handover description / responsibilities are required.'],
                 ]);

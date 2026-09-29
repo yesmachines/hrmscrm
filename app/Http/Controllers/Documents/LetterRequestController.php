@@ -4,9 +4,10 @@ namespace App\Http\Controllers\Documents;
 
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeDocument;
+use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
-use App\Models\EmployeeRequestDetail;
 use App\Models\SalesCrm\Employee;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,8 +16,6 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use Barryvdh\DomPDF\Facade\Pdf;
-use App\Models\EmployeeDocumentFile;
 
 class LetterRequestController extends Controller
 {
@@ -102,7 +101,7 @@ class LetterRequestController extends Controller
 
             // Render HTML with the new dynamic fields
             $html = $this->renderDocumentHtml($letterRequest, null, $tempDetails);
-            
+
             if ($html) {
                 // Generate PDF
                 $pdfHtml = '<!DOCTYPE html>
@@ -115,14 +114,14 @@ class LetterRequestController extends Controller
         p { margin-right: 0 !important; padding-right: 0 !important; width: auto !important; }
     </style>
 </head>
-<body>' . $html . '</body>
+<body>'.$html.'</body>
 </html>';
                 $pdf = Pdf::loadHTML($pdfHtml);
                 $pdf->setPaper('a4', 'portrait');
-                
+
                 // Ensure output directory exists
-                $filename = 'letters/' . Str::slug($letterRequest->document_number ?: 'doc-'.$letterRequest->id) . '-' . time() . '.pdf';
-                
+                $filename = 'letters/'.Str::slug($letterRequest->document_number ?: 'doc-'.$letterRequest->id).'-'.time().'.pdf';
+
                 Storage::disk('public')->put($filename, $pdf->output());
 
                 EmployeeDocumentFile::query()->create([
@@ -182,7 +181,7 @@ class LetterRequestController extends Controller
         $details = array_merge($details, array_filter($tempDetails));
         $employee?->loadMissing(['user', 'department', 'organisation']);
         $profile = $employee?->profile();
-        
+
         $grossSalary = (float) ($employee?->gross_salary ?? 0);
         $formatter = new \NumberFormatter('en', \NumberFormatter::SPELLOUT);
         $salaryInWords = ucwords($formatter->format($grossSalary));
@@ -203,7 +202,7 @@ class LetterRequestController extends Controller
             '{{housing_allowance}}' => $employee?->housing_allowance ? number_format((float) $employee->housing_allowance, 2) : '0.00',
             '{{other_allowance}}' => '0.00',
             '{{gross_salary}}' => $employee?->gross_salary ? number_format($grossSalary, 2) : '0.00',
-            '{{gross_salary_in_words}}' => 'Dirhams ' . $salaryInWords . ' only',
+            '{{gross_salary_in_words}}' => 'Dirhams '.$salaryInWords.' only',
             '{{document_number}}' => $doc->document_number ?: ('DOC-'.str_pad((string) $doc->id, 5, '0', STR_PAD_LEFT)),
             '{{issue_date}}' => $doc->issue_date ? $doc->issue_date->format('d M Y') : Carbon::now()->format('d M Y'),
             '{{purpose}}' => $details['purpose'] ?? 'Official Purpose',
@@ -220,8 +219,8 @@ class LetterRequestController extends Controller
             '{{bank_name}}' => 'Emirates NBD',
             '{{account_number}}' => '1234567890',
             '{{iban_number}}' => 'AE000000000000000000000',
-            '{{company_stamp_url}}' => file_exists(public_path('images/sample-stamp.jpg')) ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents(public_path('images/sample-stamp.jpg'))) : '',
-            '{{company_signature_url}}' => file_exists(public_path('images/sample-signature.png')) ? 'data:image/png;base64,' . base64_encode(file_get_contents(public_path('images/sample-signature.png'))) : '',
+            '{{company_stamp_url}}' => file_exists(public_path('images/sample-stamp.jpg')) ? 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('images/sample-stamp.jpg'))) : '',
+            '{{company_signature_url}}' => file_exists(public_path('images/sample-signature.png')) ? 'data:image/png;base64,'.base64_encode(file_get_contents(public_path('images/sample-signature.png'))) : '',
         ];
 
         foreach ($details as $k => $v) {
@@ -235,7 +234,7 @@ class LetterRequestController extends Controller
     {
         $employee = Employee::query()->with(['user:id,name,email', 'department:id,name', 'organisation'])->find($doc->employee_id);
         $details = $doc->requestDetails->pluck('field_value', 'field_key');
-        
+
         $latestFile = $doc->files()->latest('id')->first();
 
         return [

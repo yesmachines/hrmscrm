@@ -36,8 +36,47 @@ class LeaveController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        // Fetch all active leave types
-        $leaveTypes = LeaveType::where('status', 1)->get();
+        // Fetch active leave types filtered by employee gender
+        $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
+        $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
+        $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
+            'm', 'male' => 'male',
+            'f', 'female' => 'female',
+            default => null,
+        };
+
+        $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
+        $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
+            || str_contains($rawEmployeeReligion, 'muslim')
+            || str_contains($rawEmployeeReligion, 'islam');
+
+        $leaveTypes = LeaveType::where('status', 1)->get()->filter(function ($type) use ($employeeGender, $isMuslim) {
+            $isMaternity = $type->code === 'MATERNITY' || str_contains(strtolower($type->leave_name), 'maternity');
+            $isPaternity = $type->code === 'PATERNITY' || str_contains(strtolower($type->leave_name), 'paternity');
+            $isPilgrimage = $type->code === 'PILGRIMAGE' || str_contains(strtolower($type->leave_name), 'pilgrim') || str_contains(strtolower($type->leave_name), 'hajj');
+
+            if ($isPilgrimage && ! $isMuslim) {
+                return false;
+            }
+
+            $typeGender = match (strtolower(trim($type->gender ?? ''))) {
+                'female', 'f' => 'female',
+                'male', 'm' => 'male',
+                default => null,
+            };
+
+            if ($isMaternity) {
+                $typeGender = 'female';
+            } elseif ($isPaternity) {
+                $typeGender = 'male';
+            }
+
+            if ($typeGender !== null && $employeeGender !== null && $employeeGender !== $typeGender) {
+                return false;
+            }
+
+            return true;
+        })->values();
 
         $typesData = $leaveTypes->map(function ($type) use ($employee) {
             // There is only one policy for a single leave type

@@ -5,6 +5,7 @@ import {
     Calendar,
     Send,
     User as UserIcon,
+    UserCheck,
     AlertCircle,
     CheckCircle2,
     Clock,
@@ -25,6 +26,13 @@ interface EmployeeOption {
     employee_code: string | null;
     designation: string | null;
     organisation_id: number | null;
+    gender?: string | null;
+    religion?: string | null;
+    profile?: {
+        id?: number;
+        gender?: string | null;
+        religion?: string | null;
+    } | null;
     department?: {
         id: number;
         name: string;
@@ -41,7 +49,9 @@ interface LeaveTypeOption {
     code: string;
     is_paid: boolean;
     requires_attachment: boolean;
+    requires_handover?: boolean;
     status?: number;
+    gender?: string | null;
 }
 
 interface LeaveBalanceItem {
@@ -53,13 +63,27 @@ interface LeaveBalanceItem {
     balance: number;
 }
 
+interface ActiveLeaveItem {
+    id: number;
+    employee_id: number;
+    start_date: string;
+    end_date: string;
+    status: string;
+}
+
 interface Props {
     employees: EmployeeOption[];
     leaveTypes: LeaveTypeOption[];
     leaveBalances: LeaveBalanceItem[];
+    activeLeaves?: ActiveLeaveItem[];
 }
 
-export default function LeaveRequestsCreate({ employees = [], leaveTypes = [], leaveBalances = [] }: Props) {
+export default function LeaveRequestsCreate({
+    employees = [],
+    leaveTypes = [],
+    leaveBalances = [],
+    activeLeaves = [],
+}: Props) {
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
     const startDateId = useId();
@@ -68,6 +92,8 @@ export default function LeaveRequestsCreate({ employees = [], leaveTypes = [], l
     const statusSelectId = useId();
     const remarksId = useId();
     const certificateId = useId();
+    const handoverPersonSelectId = useId();
+    const handoverDescId = useId();
 
     const [employeeSearch, setEmployeeSearch] = useState('');
 
@@ -80,6 +106,8 @@ export default function LeaveRequestsCreate({ employees = [], leaveTypes = [], l
         status: 'applied',
         remarks: '',
         certificate: null as File | null,
+        handover_person_id: '',
+        handover_description: '',
     });
 
     const filteredEmployees = useMemo(() => {
@@ -120,15 +148,98 @@ export default function LeaveRequestsCreate({ employees = [], leaveTypes = [], l
         return leaveBalances.find((b) => b.employee_id === empId && b.leave_type_id === typeId) ?? null;
     }, [data.employee_id, data.leave_type_id, leaveBalances]);
 
-    const selectedLeaveType = useMemo(() => {
-        if (!data.leave_type_id) return null;
-        return leaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? null;
-    }, [data.leave_type_id, leaveTypes]);
-
     const selectedEmployee = useMemo(() => {
         if (!data.employee_id) return null;
         return employees.find((e) => String(e.id) === String(data.employee_id)) ?? null;
     }, [data.employee_id, employees]);
+
+    const availableLeaveTypes = useMemo(() => {
+        if (!selectedEmployee) {
+            return leaveTypes;
+        }
+
+        const rawGender = selectedEmployee.gender || selectedEmployee.profile?.gender;
+        const normalizedGender = rawGender ? rawGender.toLowerCase().trim() : null;
+        const isMale = normalizedGender === 'm' || normalizedGender === 'male';
+        const isFemale = normalizedGender === 'f' || normalizedGender === 'female';
+
+        const rawReligion = (selectedEmployee.religion || selectedEmployee.profile?.religion || '').toLowerCase().trim();
+        const isMuslim =
+            ['muslim', 'islam', 'islamic'].includes(rawReligion) ||
+            rawReligion.includes('muslim') ||
+            rawReligion.includes('islam');
+
+        return leaveTypes.filter((type) => {
+            const isMaternity = type.code === 'MATERNITY' || type.leave_name.toLowerCase().includes('maternity');
+            const isPaternity = type.code === 'PATERNITY' || type.leave_name.toLowerCase().includes('paternity');
+            const isPilgrimage =
+                type.code === 'PILGRIMAGE' ||
+                type.leave_name.toLowerCase().includes('pilgrim') ||
+                type.leave_name.toLowerCase().includes('hajj');
+
+            if (isPilgrimage && !isMuslim) {
+                return false;
+            }
+
+            const typeGender = type.gender ? type.gender.toLowerCase().trim() : null;
+
+            if (isMale) {
+                if (isMaternity || typeGender === 'female' || typeGender === 'f') {
+                    return false;
+                }
+            }
+
+            if (isFemale) {
+                if (isPaternity || typeGender === 'male' || typeGender === 'm') {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }, [selectedEmployee, leaveTypes]);
+
+    useEffect(() => {
+        if (data.leave_type_id && !availableLeaveTypes.some((lt) => String(lt.id) === String(data.leave_type_id))) {
+            setData('leave_type_id', '');
+        }
+    }, [availableLeaveTypes]);
+
+    const selectedLeaveType = useMemo(() => {
+        if (!data.leave_type_id) return null;
+        return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? null;
+    }, [data.leave_type_id, availableLeaveTypes]);
+
+    const candidateHandoverEmployees = useMemo(() => {
+        if (!data.employee_id) return employees;
+        const currentEmpId = Number(data.employee_id);
+        return employees.filter((emp) => emp.id !== currentEmpId);
+    }, [data.employee_id, employees]);
+
+    const isEmployeeOnLeave = (empId: number): boolean => {
+        if (!data.start_date || !data.end_date) return false;
+        const reqStart = new Date(data.start_date);
+        const reqEnd = new Date(data.end_date);
+        if (isNaN(reqStart.getTime()) || isNaN(reqEnd.getTime())) return false;
+
+        return (activeLeaves || []).some((leave) => {
+            if (leave.employee_id !== empId) return false;
+            const lStart = new Date(leave.start_date);
+            const lEnd = new Date(leave.end_date);
+            return lStart <= reqEnd && lEnd >= reqStart;
+        });
+    };
+
+    const isSelectedHandoverOnLeave = useMemo(() => {
+        if (!data.handover_person_id) return false;
+        return isEmployeeOnLeave(Number(data.handover_person_id));
+    }, [data.handover_person_id, data.start_date, data.end_date, activeLeaves]);
+
+    useEffect(() => {
+        if (data.handover_person_id && String(data.employee_id) === String(data.handover_person_id)) {
+            setData('handover_person_id', '');
+        }
+    }, [data.employee_id]);
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -215,7 +326,7 @@ export default function LeaveRequestsCreate({ employees = [], leaveTypes = [], l
                                     required
                                 >
                                     <option value="">-- Choose Leave Type --</option>
-                                    {leaveTypes.map((type) => (
+                                    {availableLeaveTypes.map((type) => (
                                         <option key={type.id} value={type.id}>
                                             {type.leave_name} ({type.code}) - {type.is_paid ? 'Paid' : 'Unpaid'}
                                             {type.status === 0 ? ' [Inactive]' : ''}
@@ -319,6 +430,89 @@ export default function LeaveRequestsCreate({ employees = [], leaveTypes = [], l
                                 )}
                             </div>
 
+                            {/* Work Handover Section */}
+                            {(Boolean(selectedLeaveType?.requires_handover) || Boolean(data.handover_person_id)) && (
+                                <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-5">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <UserCheck className="size-5 text-primary" />
+                                            <h4 className="text-sm font-semibold text-foreground">
+                                                Work Handover Details
+                                                {selectedLeaveType?.requires_handover && (
+                                                    <span className="ml-1 text-destructive">*</span>
+                                                )}
+                                            </h4>
+                                        </div>
+                                        {selectedLeaveType?.requires_handover && (
+                                            <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                                                Required by policy
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Handover Colleague Dropdown */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor={handoverPersonSelectId} className="flex items-center gap-1">
+                                            Handover Colleague
+                                            {selectedLeaveType?.requires_handover && (
+                                                <span className="text-destructive">*</span>
+                                            )}
+                                        </Label>
+                                        <select
+                                            id={handoverPersonSelectId}
+                                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            value={data.handover_person_id}
+                                            onChange={(e) => setData('handover_person_id', e.target.value)}
+                                            required={Boolean(selectedLeaveType?.requires_handover)}
+                                        >
+                                            <option value="">Select colleague to handover work to...</option>
+                                            {candidateHandoverEmployees.map((emp) => {
+                                                const onLeave = isEmployeeOnLeave(emp.id);
+                                                return (
+                                                    <option key={emp.id} value={emp.id} disabled={onLeave}>
+                                                        {emp.user?.name ?? `Employee #${emp.id}`}
+                                                        {emp.designation ? ` (${emp.designation})` : ''}
+                                                        {onLeave ? ' — [On Leave during these dates]' : ''}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+
+                                        {isSelectedHandoverOnLeave && (
+                                            <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
+                                                <AlertCircle className="size-4 shrink-0" />
+                                                <span>The selected handover colleague is also on leave during the requested dates. Please choose another employee.</span>
+                                            </div>
+                                        )}
+
+                                        {errors.handover_person_id && (
+                                            <p className="text-sm text-destructive">{errors.handover_person_id}</p>
+                                        )}
+                                    </div>
+
+                                    {/* Handover Description */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor={handoverDescId} className="flex items-center gap-1">
+                                            Handover Tasks & Responsibilities
+                                            {selectedLeaveType?.requires_handover && (
+                                                <span className="text-destructive">*</span>
+                                            )}
+                                        </Label>
+                                        <Textarea
+                                            id={handoverDescId}
+                                            rows={3}
+                                            placeholder="Detail active tasks, pending approvals, and primary contact coverage during your leave..."
+                                            value={data.handover_description}
+                                            onChange={(e) => setData('handover_description', e.target.value)}
+                                            required={Boolean(selectedLeaveType?.requires_handover)}
+                                        />
+                                        {errors.handover_description && (
+                                            <p className="text-sm text-destructive">{errors.handover_description}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Document / Certificate Attachment */}
                             <div className="space-y-2">
                                 <Label htmlFor={certificateId} className="flex items-center gap-1.5">
@@ -347,7 +541,7 @@ export default function LeaveRequestsCreate({ employees = [], leaveTypes = [], l
                                 <Button variant="outline" type="button" asChild>
                                     <Link href="/leave-requests">Cancel</Link>
                                 </Button>
-                                <Button type="submit" disabled={processing} className="min-w-[140px]">
+                                <Button type="submit" disabled={processing || isSelectedHandoverOnLeave} className="min-w-[140px]">
                                     <Send className="mr-2 size-4" />
                                     {processing ? 'Submitting...' : 'Apply Leave'}
                                 </Button>

@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Check, X, FileText, Calendar, Building, Clock, FileBadge2 } from 'lucide-react';
+import { ArrowLeft, Check, X, FileText, Calendar, Building, Clock, FileBadge2, UserCheck } from 'lucide-react';
 import { index, update } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ type LeaveRequestDetail = {
         id: number;
         leave_name: string;
         is_paid: boolean;
+        requires_handover?: boolean;
     };
     employee: {
         id: number;
@@ -31,6 +32,12 @@ type LeaveRequestDetail = {
         file_path: string;
         original_name: string;
     }[];
+    details: {
+        id: number;
+        field_name: string;
+        field_key: string;
+        field_value: string;
+    }[];
     histories: {
         id: number;
         action_type: string;
@@ -40,7 +47,20 @@ type LeaveRequestDetail = {
     }[];
 };
 
-export default function LeaveRequestShow({ leave_request }: { leave_request: LeaveRequestDetail }) {
+type HandoverEmployee = {
+    id: number;
+    user?: { name: string; email: string } | null;
+    designation?: string | null;
+    department?: { name: string } | null;
+} | null;
+
+export default function LeaveRequestShow({
+    leave_request,
+    handoverEmployee,
+}: {
+    leave_request: LeaveRequestDetail;
+    handoverEmployee?: HandoverEmployee;
+}) {
     const handleStatusUpdate = (status: string) => {
         router.put(update.url(leave_request.id), { status }, {
             preserveScroll: true,
@@ -129,6 +149,66 @@ export default function LeaveRequestShow({ leave_request }: { leave_request: Lea
                                 </div>
                             )}
                         </div>
+
+                        {/* Handover Details */}
+                        {(Boolean(handoverEmployee) || Boolean(leave_request.details?.some((d) => d.field_key === 'handover_description'))) && (
+                            <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
+                                <h3 className="mb-4 text-lg font-semibold text-foreground flex items-center gap-2">
+                                    <UserCheck className="size-5 text-primary" />
+                                    Work Handover Information
+                                </h3>
+                                <div className="space-y-4">
+                                    {handoverEmployee && (
+                                        <div className="rounded-lg bg-muted/40 p-4">
+                                            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">
+                                                Covering Colleague
+                                            </p>
+                                            <p className="text-base font-semibold text-foreground">
+                                                {handoverEmployee.user?.name}
+                                            </p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {handoverEmployee.designation ?? 'Employee'}
+                                                {handoverEmployee.department?.name ? ` • ${handoverEmployee.department.name}` : ''}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {leave_request.details?.find((d) => d.field_key === 'handover_description')?.field_value && (
+                                        <div>
+                                            <p className="text-sm text-muted-foreground mb-1">Tasks & Coverage Responsibilities</p>
+                                            <p className="text-foreground whitespace-pre-line bg-muted/30 p-3 rounded-md border text-sm">
+                                                {leave_request.details.find((d) => d.field_key === 'handover_description')?.field_value}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {(leave_request.details?.some((d) => d.field_key === 'emergency_contact_no') ||
+                                        leave_request.details?.some((d) => d.field_key === 'traveling_outside_country')) && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4 text-sm">
+                                            {leave_request.details?.find((d) => d.field_key === 'emergency_contact_no')?.field_value && (
+                                                <div>
+                                                    <p className="text-muted-foreground">Emergency Contact</p>
+                                                    <p className="font-medium text-foreground">
+                                                        {leave_request.details.find((d) => d.field_key === 'emergency_contact_no')?.field_value}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {leave_request.details?.find((d) => d.field_key === 'traveling_outside_country')?.field_value === 'Yes' && (
+                                                <div>
+                                                    <p className="text-muted-foreground">Travel Abroad</p>
+                                                    <p className="font-medium text-foreground">
+                                                        Yes
+                                                        {leave_request.details?.find((d) => d.field_key === 'destination')?.field_value
+                                                            ? ` (${leave_request.details.find((d) => d.field_key === 'destination')?.field_value})`
+                                                            : ''}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Certificates / Files */}
                         {leave_request.files && leave_request.files.length > 0 && (

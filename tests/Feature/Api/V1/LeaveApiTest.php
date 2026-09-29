@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\EmployeeProfile;
 use App\Models\LeaveBalance;
 use App\Models\LeaveHistory;
 use App\Models\LeavePolicy;
@@ -20,6 +21,7 @@ beforeEach(function () {
     DB::connection('salescrm')->table('personal_access_tokens')->delete();
     DB::connection('salescrm')->table('employees')->delete();
     DB::connection('salescrm')->table('users')->delete();
+    DB::table('employee_profiles')->delete();
     DB::table('leave_request_approvals')->delete();
     DB::table('leave_request_details')->delete();
     DB::table('leave_request_files')->delete();
@@ -585,4 +587,493 @@ test('it stores signature image into leave_request_details and exposes signature
 
     expect($showResponse->json('data.signature_url'))->not->toBeNull();
     expect($showResponse->json('data.signature_url'))->toContain('leave-signatures');
+});
+
+test('leaves meta hides maternity leave for male employees and shows it for female employees', function () {
+    $maleUser = SalesCrmUser::query()->create([
+        'name' => 'John Male',
+        'email' => 'john.male@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $maleEmployee = Employee::query()->create([
+        'user_id' => $maleUser->id,
+        'emp_num' => 'EMP-MALE-01',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $maleEmployee->id,
+        'gender' => 'M',
+    ]);
+
+    $femaleUser = SalesCrmUser::query()->create([
+        'name' => 'Jane Female',
+        'email' => 'jane.female@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $femaleEmployee = Employee::query()->create([
+        'user_id' => $femaleUser->id,
+        'emp_num' => 'EMP-FEMALE-01',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $femaleEmployee->id,
+        'gender' => 'F',
+    ]);
+
+    $annualLeave = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'status' => 1,
+        'gender' => null,
+    ]);
+
+    $maternityLeave = LeaveType::query()->create([
+        'leave_name' => 'Maternity Leave',
+        'code' => 'MATERNITY',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'status' => 1,
+        'gender' => 'female',
+    ]);
+
+    // Male token check: should NOT contain Maternity Leave
+    $maleToken = $maleUser->createToken('test')->plainTextToken;
+    $maleResponse = $this->withToken($maleToken)->getJson('/api/v1/leaves/meta');
+    $maleResponse->assertOk();
+
+    $maleLeaveTypeCodes = collect($maleResponse->json('data.leave_types'))->pluck('code')->all();
+    expect($maleLeaveTypeCodes)->toContain('ANNUAL')
+        ->and($maleLeaveTypeCodes)->not->toContain('MATERNITY');
+
+    // Female token check: SHOULD contain Maternity Leave
+    $femaleToken = $femaleUser->createToken('test')->plainTextToken;
+    $this->app['auth']->forgetGuards();
+    $femaleResponse = $this->withToken($femaleToken)->getJson('/api/v1/leaves/meta');
+    $femaleResponse->assertOk();
+
+    $femaleLeaveTypeCodes = collect($femaleResponse->json('data.leave_types'))->pluck('code')->all();
+    expect($femaleLeaveTypeCodes)->toContain('ANNUAL')
+        ->and($femaleLeaveTypeCodes)->toContain('MATERNITY');
+});
+
+test('applying maternity leave fails for male employee with validation error', function () {
+    $maleUser = SalesCrmUser::query()->create([
+        'name' => 'John Male Applier',
+        'email' => 'john.applier@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $maleEmployee = Employee::query()->create([
+        'user_id' => $maleUser->id,
+        'emp_num' => 'EMP-MALE-02',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $maleEmployee->id,
+        'gender' => 'M',
+    ]);
+
+    $maternityLeave = LeaveType::query()->create([
+        'leave_name' => 'Maternity Leave',
+        'code' => 'MATERNITY',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => false,
+        'status' => 1,
+    ]);
+
+    $maleToken = $maleUser->createToken('test')->plainTextToken;
+    $response = $this->withToken($maleToken)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $maternityLeave->id,
+        'start_date' => '2026-11-01',
+        'end_date' => '2026-11-10',
+        'total_days' => 10,
+        'remarks' => 'Maternity application by male',
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['leave_type_id']);
+
+    expect($response->json('errors.leave_type_id.0'))->toContain('only applicable for female employees');
+});
+
+test('applying maternity leave succeeds for female employee', function () {
+    $femaleUser = SalesCrmUser::query()->create([
+        'name' => 'Jane Female Applier',
+        'email' => 'jane.applier@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $femaleEmployee = Employee::query()->create([
+        'user_id' => $femaleUser->id,
+        'emp_num' => 'EMP-FEMALE-02',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $femaleEmployee->id,
+        'gender' => 'F',
+    ]);
+
+    $maternityLeave = LeaveType::query()->create([
+        'leave_name' => 'Maternity Leave',
+        'code' => 'MATERNITY',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => false,
+        'status' => 1,
+    ]);
+
+    $femaleToken = $femaleUser->createToken('test')->plainTextToken;
+    $response = $this->withToken($femaleToken)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $maternityLeave->id,
+        'start_date' => '2026-11-01',
+        'end_date' => '2026-11-10',
+        'total_days' => 10,
+        'remarks' => 'Maternity leave application',
+        'due_date' => '2026-11-05',
+    ]);
+
+    $response->assertStatus(201);
+    $this->assertDatabaseHas('leave_requests', [
+        'employee_id' => $femaleEmployee->id,
+        'leave_type_id' => $maternityLeave->id,
+        'status' => 'applied',
+    ]);
+});
+
+test('applying leave fails if selected handover person is also on leave during requested dates', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Applicant User',
+        'email' => 'applicant.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $applicant = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-APP-01',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $colleagueUser = SalesCrmUser::query()->create([
+        'name' => 'Colleague User',
+        'email' => 'colleague.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $colleague = Employee::query()->create([
+        'user_id' => $colleagueUser->id,
+        'emp_num' => 'EMP-COL-01',
+        'designation' => 'Senior Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'requires_handover' => true,
+        'allow_balance' => false,
+        'status' => 1,
+    ]);
+
+    // Colleague already has an approved leave from Nov 10 to Nov 15
+    LeaveRequest::query()->create([
+        'employee_id' => $colleague->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-10 09:00:00',
+        'end_date' => '2026-11-15 18:00:00',
+        'total_days' => 5,
+        'status' => 'approved',
+        'created_by' => $colleagueUser->id,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    // Applicant tries to request leave from Nov 12 to Nov 18 with colleague as handover person
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-12',
+        'end_date' => '2026-11-18',
+        'total_days' => 6,
+        'remarks' => 'Holiday vacation',
+        'handover_person_id' => $colleague->id,
+        'handover_description' => 'Handover sprint tasks',
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['handover_person_id']);
+
+    expect($response->json('errors.handover_person_id.0'))->toContain('also on leave');
+});
+
+test('applying leave succeeds when selected handover person is not on leave', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Applicant User 2',
+        'email' => 'applicant2.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $applicant = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-APP-02',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $colleagueUser = SalesCrmUser::query()->create([
+        'name' => 'Colleague User 2',
+        'email' => 'colleague2.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $colleague = Employee::query()->create([
+        'user_id' => $colleagueUser->id,
+        'emp_num' => 'EMP-COL-02',
+        'designation' => 'Senior Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'requires_handover' => true,
+        'allow_balance' => false,
+        'status' => 1,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-12',
+        'end_date' => '2026-11-18',
+        'total_days' => 6,
+        'remarks' => 'Holiday vacation',
+        'handover_person_id' => $colleague->id,
+        'handover_description' => 'Handover sprint tasks to available colleague',
+    ]);
+
+    $response->assertStatus(201);
+
+    $leaveId = $response->json('data.id');
+    $this->assertDatabaseHas('leave_request_details', [
+        'leave_request_id' => $leaveId,
+        'field_key' => 'handover_person_id',
+        'field_value' => (string) $colleague->id,
+    ]);
+});
+
+test('leaves meta hides pilgrimage leave for non-muslim employees and shows it for muslim employees', function () {
+    $nonMuslimUser = SalesCrmUser::query()->create([
+        'name' => 'John NonMuslim',
+        'email' => 'john.nonmuslim@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $nonMuslimEmployee = Employee::query()->create([
+        'user_id' => $nonMuslimUser->id,
+        'emp_num' => 'EMP-NONM-01',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $nonMuslimEmployee->id,
+        'religion' => 'Christian',
+    ]);
+
+    $muslimUser = SalesCrmUser::query()->create([
+        'name' => 'Ahmed Muslim',
+        'email' => 'ahmed.muslim@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $muslimEmployee = Employee::query()->create([
+        'user_id' => $muslimUser->id,
+        'emp_num' => 'EMP-MUS-01',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $muslimEmployee->id,
+        'religion' => 'Muslim',
+    ]);
+
+    $annualLeave = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL-PLG',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'status' => 1,
+    ]);
+
+    $pilgrimageLeave = LeaveType::query()->create([
+        'leave_name' => 'Pilgrimage Leave',
+        'code' => 'PILGRIMAGE',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'status' => 1,
+    ]);
+
+    // Non-Muslim token check: should NOT contain Pilgrimage Leave
+    $nonMuslimToken = $nonMuslimUser->createToken('test')->plainTextToken;
+    $nonMuslimResponse = $this->withToken($nonMuslimToken)->getJson('/api/v1/leaves/meta');
+    $nonMuslimResponse->assertOk();
+
+    $nonMuslimCodes = collect($nonMuslimResponse->json('data.leave_types'))->pluck('code')->all();
+    expect($nonMuslimCodes)->toContain('ANNUAL-PLG')
+        ->and($nonMuslimCodes)->not->toContain('PILGRIMAGE');
+
+    // Muslim token check: SHOULD contain Pilgrimage Leave
+    $muslimToken = $muslimUser->createToken('test')->plainTextToken;
+    $this->app['auth']->forgetGuards();
+    $muslimResponse = $this->withToken($muslimToken)->getJson('/api/v1/leaves/meta');
+    $muslimResponse->assertOk();
+
+    $muslimCodes = collect($muslimResponse->json('data.leave_types'))->pluck('code')->all();
+    expect($muslimCodes)->toContain('ANNUAL-PLG')
+        ->and($muslimCodes)->toContain('PILGRIMAGE');
+});
+
+test('applying pilgrimage leave fails for non-muslim employee with validation error', function () {
+    $nonMuslimUser = SalesCrmUser::query()->create([
+        'name' => 'David NonMuslim',
+        'email' => 'david.nonmuslim@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $nonMuslimEmployee = Employee::query()->create([
+        'user_id' => $nonMuslimUser->id,
+        'emp_num' => 'EMP-NONM-02',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $nonMuslimEmployee->id,
+        'religion' => 'Christian',
+    ]);
+
+    $pilgrimageLeave = LeaveType::query()->create([
+        'leave_name' => 'Pilgrimage Leave',
+        'code' => 'PILGRIMAGE',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => false,
+        'status' => 1,
+    ]);
+
+    $nonMuslimToken = $nonMuslimUser->createToken('test')->plainTextToken;
+    $response = $this->withToken($nonMuslimToken)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $pilgrimageLeave->id,
+        'start_date' => '2026-12-01',
+        'end_date' => '2026-12-15',
+        'total_days' => 15,
+        'remarks' => 'Pilgrimage leave application',
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['leave_type_id']);
+
+    expect($response->json('errors.leave_type_id.0'))
+        ->toBe('Pilgrimage Leave is only applicable for Muslim employees.');
+});
+
+test('applying pilgrimage leave succeeds for muslim employee', function () {
+    $muslimUser = SalesCrmUser::query()->create([
+        'name' => 'Fatima Muslim',
+        'email' => 'fatima.muslim@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $muslimEmployee = Employee::query()->create([
+        'user_id' => $muslimUser->id,
+        'emp_num' => 'EMP-MUS-02',
+        'designation' => 'Developer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $muslimEmployee->id,
+        'religion' => 'Islam',
+    ]);
+
+    $pilgrimageLeave = LeaveType::query()->create([
+        'leave_name' => 'Pilgrimage Leave',
+        'code' => 'PILGRIMAGE',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'allow_balance' => false,
+        'status' => 1,
+    ]);
+
+    $muslimToken = $muslimUser->createToken('test')->plainTextToken;
+    $response = $this->withToken($muslimToken)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $pilgrimageLeave->id,
+        'start_date' => '2026-12-01',
+        'end_date' => '2026-12-15',
+        'total_days' => 15,
+        'remarks' => 'Hajj Pilgrimage leave',
+    ]);
+
+    $response->assertStatus(201);
+
+    $this->assertDatabaseHas('leave_requests', [
+        'employee_id' => $muslimEmployee->id,
+        'leave_type_id' => $pilgrimageLeave->id,
+        'status' => 'applied',
+    ]);
 });

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Leave;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmployeeProfile;
 use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
@@ -10,6 +11,7 @@ use App\Models\SalesCrm\Employee;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -42,8 +44,16 @@ class LeaveRequestController extends Controller
             ->orderBy('id')
             ->get();
 
+        $profiles = Employee::profilesFor($employees);
+        $employees->each(function (Employee $emp) use ($profiles) {
+            $profile = $profiles->get($emp->id);
+            $emp->gender = $profile?->gender;
+            $emp->religion = $profile?->religion;
+            $emp->setRelation('profile', $profile);
+        });
+
         $leaveTypes = LeaveType::query()
-            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status')
+            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status', 'gender', 'requires_handover')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
             ->get();
@@ -54,10 +64,17 @@ class LeaveRequestController extends Controller
             ->select('id', 'employee_id', 'leave_type_id', 'allocated', 'used', 'balance')
             ->get();
 
+        $activeLeaves = LeaveRequest::query()
+            ->whereIn('status', ['applied', 'approved'])
+            ->where('end_date', '>=', now()->startOfYear())
+            ->select('id', 'employee_id', 'start_date', 'end_date', 'status')
+            ->get();
+
         return Inertia::render('leave-requests/create', [
             'employees' => $employees,
             'leaveTypes' => $leaveTypes,
             'leaveBalances' => $leaveBalances,
+            'activeLeaves' => $activeLeaves,
         ]);
     }
 
@@ -72,7 +89,92 @@ class LeaveRequestController extends Controller
             'status' => 'required|in:applied,approved',
             'remarks' => 'nullable|string',
             'certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'handover_person_id' => 'nullable|exists:salescrm.employees,id',
+            'handover_description' => 'nullable|string',
         ]);
+
+        $employee = Employee::query()->findOrFail($validated['employee_id']);
+        $leaveType = LeaveType::query()->findOrFail($validated['leave_type_id']);
+
+        $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
+        $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
+        $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
+            'm', 'male' => 'male',
+            'f', 'female' => 'female',
+            default => null,
+        };
+
+        $isMaternity = $leaveType->code === 'MATERNITY' || str_contains(strtolower($leaveType->leave_name), 'maternity');
+        $isPaternity = $leaveType->code === 'PATERNITY' || str_contains(strtolower($leaveType->leave_name), 'paternity');
+
+        $leaveTypeGender = match (strtolower(trim($leaveType->gender ?? ''))) {
+            'female', 'f' => 'female',
+            'male', 'm' => 'male',
+            default => null,
+        };
+
+        if ($isMaternity) {
+            $leaveTypeGender = 'female';
+        } elseif ($isPaternity) {
+            $leaveTypeGender = 'male';
+        }
+
+        if ($leaveTypeGender !== null && $employeeGender !== null && $employeeGender !== $leaveTypeGender) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$leaveTypeGender} employees."],
+            ]);
+        }
+
+        $isPilgrimage = $leaveType->code === 'PILGRIMAGE' || str_contains(strtolower($leaveType->leave_name), 'pilgrim') || str_contains(strtolower($leaveType->leave_name), 'hajj');
+        if ($isPilgrimage) {
+            $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
+            $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
+                || str_contains($rawEmployeeReligion, 'muslim')
+                || str_contains($rawEmployeeReligion, 'islam');
+
+            if (! $isMuslim) {
+                throw ValidationException::withMessages([
+                    'leave_type_id' => ['Pilgrimage Leave is only applicable for Muslim employees.'],
+                ]);
+            }
+        }
+
+        $startDate = Carbon::parse($validated['start_date'])->startOfDay();
+        $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+
+        $handoverPersonId = $validated['handover_person_id'] ?? null;
+
+        if ($leaveType->requires_handover && empty($handoverPersonId)) {
+            throw ValidationException::withMessages([
+                'handover_person_id' => ['A handover person is required for this leave type.'],
+            ]);
+        }
+
+        if (! empty($handoverPersonId)) {
+            if ((int) $handoverPersonId === (int) $employee->id) {
+                throw ValidationException::withMessages([
+                    'handover_person_id' => ['You cannot select the employee themselves as the handover person.'],
+                ]);
+            }
+
+            $handoverOnLeave = LeaveRequest::where('employee_id', $handoverPersonId)
+                ->whereIn('status', ['applied', 'approved'])
+                ->where('start_date', '<=', $endDate)
+                ->where('end_date', '>=', $startDate)
+                ->exists();
+
+            if ($handoverOnLeave) {
+                throw ValidationException::withMessages([
+                    'handover_person_id' => ['The selected handover person is also on leave during the requested dates.'],
+                ]);
+            }
+
+            if ($leaveType->requires_handover && empty($validated['handover_description'])) {
+                throw ValidationException::withMessages([
+                    'handover_description' => ['Handover description is required.'],
+                ]);
+            }
+        }
 
         $totalDays = $validated['total_days'] ?? (
             Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
@@ -101,6 +203,22 @@ class LeaveRequestController extends Controller
             'done_by' => $request->user()?->id,
             'action_on' => now(),
         ]);
+
+        if (! empty($handoverPersonId)) {
+            $leaveRequest->details()->create([
+                'field_name' => 'Handover Person ID',
+                'field_key' => 'handover_person_id',
+                'field_value' => (string) $handoverPersonId,
+            ]);
+
+            if (! empty($validated['handover_description'])) {
+                $leaveRequest->details()->create([
+                    'field_name' => 'Handover Description',
+                    'field_key' => 'handover_description',
+                    'field_value' => (string) $validated['handover_description'],
+                ]);
+            }
+        }
 
         if ($request->hasFile('certificate')) {
             $path = $request->file('certificate')->store('leave-certificates', 'public');
@@ -143,16 +261,27 @@ class LeaveRequestController extends Controller
             'employee:id,user_id,employee_code,designation,department_id,image_url',
             'employee.user:id,name,email',
             'employee.department:id,name',
-            'leaveType:id,leave_name,is_paid',
+            'leaveType:id,leave_name,is_paid,requires_handover',
             'files',
+            'details',
             'histories' => function ($query) {
                 $query->orderBy('action_on', 'desc');
             },
-            'histories.doneBy:id,name', // Assuming LeaveHistory has doneBy relation to User
+            'histories.doneBy:id,name',
         ]);
+
+        $handoverDetail = $leave_request->details->firstWhere('field_key', 'handover_person_id');
+        $handoverEmployee = null;
+        if ($handoverDetail && ! empty($handoverDetail->field_value)) {
+            $handoverEmployee = Employee::with([
+                'user:id,name,email',
+                'department:id,name',
+            ])->find($handoverDetail->field_value);
+        }
 
         return Inertia::render('leave-requests/show', [
             'leave_request' => $leave_request,
+            'handoverEmployee' => $handoverEmployee,
         ]);
     }
 
