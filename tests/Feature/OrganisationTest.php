@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Organisation;
+use Database\Seeders\OrganisationSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -60,4 +61,15 @@ test('authenticated users can manage organisations with logo upload', function (
         ->assertRedirect(route('organisations.index'));
 
     expect(Organisation::query()->find($organisation->id))->toBeNull();
+});
+
+test('organisation seeder creates yes machinery, yes machinery saudi, and yes automations', function () {
+    $this->seed(OrganisationSeeder::class);
+
+    $names = ['Yes Machinery', 'Yes Machinery Saudi', 'Yes Automations'];
+    foreach ($names as $name) {
+        $org = Organisation::query()->where('org_name', $name)->first();
+        expect($org)->not->toBeNull()
+            ->and($org->status)->toBe(1);
+    }
 });

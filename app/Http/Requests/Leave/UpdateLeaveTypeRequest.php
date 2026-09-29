@@ -60,12 +60,23 @@ class UpdateLeaveTypeRequest extends FormRequest
             'requires_attachment' => ['nullable', 'boolean'],
             'requires_approval' => ['nullable', 'boolean'],
             'max_days' => ['nullable', 'integer', 'min:0'],
-            'annual_limit' => ['nullable', 'integer', 'min:0'],
+            'annual_limit' => ['required', 'integer', 'min:0'],
             'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'all'])],
             'allow_once' => ['nullable', 'boolean'],
             'allow_balance' => ['nullable', 'boolean'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
             'requires_handover' => ['nullable', 'boolean'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function attributes(): array
+    {
+        return [
+            'annual_limit' => 'annual limit',
+            'max_days' => 'max days',
         ];
     }
 
@@ -82,8 +93,8 @@ class UpdateLeaveTypeRequest extends FormRequest
             'is_paid' => (bool) ($validated['is_paid'] ?? true),
             'requires_attachment' => (bool) ($validated['requires_attachment'] ?? false),
             'requires_approval' => (bool) ($validated['requires_approval'] ?? true),
-            'max_days' => $validated['max_days'] ?? null,
-            'annual_limit' => $validated['annual_limit'] ?? null,
+            'max_days' => isset($validated['max_days']) && $validated['max_days'] !== null ? (int) $validated['max_days'] : null,
+            'annual_limit' => (int) $validated['annual_limit'],
             'gender' => $validated['gender'] ?? null,
             'allow_once' => (bool) ($validated['allow_once'] ?? false),
             'allow_balance' => (bool) ($validated['allow_balance'] ?? true),

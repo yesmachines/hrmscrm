@@ -150,18 +150,19 @@ export default function LeaveTypeFormFields({
                     </select>
                 </Field>
 
-                <Field label="Max days" name="max_days" error={errors.max_days}>
+                <Field label="Max days (optional)" name="max_days" error={errors.max_days}>
                     <Input
                         id="max_days"
                         name="max_days"
                         type="number"
                         min={0}
+                        placeholder="Optional per-request limit"
                         defaultValue={defaults.max_days ?? ''}
                     />
                 </Field>
 
                 <Field
-                    label="Annual limit"
+                    label="Annual limit *"
                     name="annual_limit"
                     error={errors.annual_limit}
                 >
@@ -170,6 +171,8 @@ export default function LeaveTypeFormFields({
                         name="annual_limit"
                         type="number"
                         min={0}
+                        required
+                        placeholder="Mandatory annual limit (e.g. 30)"
                         defaultValue={defaults.annual_limit ?? ''}
                     />
                 </Field>

@@ -40,6 +40,7 @@ jobs:
             fi
 
             php artisan migrate --force
+            php artisan db:seed --class=OrganisationSeeder --force
 
             # Frontend build using npm
             npm install

@@ -125,3 +125,61 @@ test('leave policy create page marks leave types as disabled only if they alread
             )
         );
 });
+
+test('annual limit is mandatory while max days is optional when creating and updating leave types', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    // 1. Missing annual_limit should fail validation
+    $this->actingAs($admin)
+        ->from(route('leave-types.create'))
+        ->post(route('leave-types.store'), [
+            'leave_name' => 'Casual Leave',
+            'code' => 'CL',
+            'max_days' => 5,
+            'annual_limit' => '',
+        ])
+        ->assertRedirect(route('leave-types.create'))
+        ->assertSessionHasErrors(['annual_limit']);
+
+    // 2. Providing annual_limit without max_days should succeed
+    $this->actingAs($admin)
+        ->post(route('leave-types.store'), [
+            'leave_name' => 'Casual Leave',
+            'code' => 'CL',
+            'max_days' => null,
+            'annual_limit' => 12,
+            'is_paid' => 1,
+            'status' => 1,
+        ])
+        ->assertRedirect(route('leave-types.index'));
+
+    $created = LeaveType::query()->where('code', 'CL')->first();
+    expect($created)->not->toBeNull()
+        ->and($created->annual_limit)->toBe(12)
+        ->and($created->max_days)->toBeNull();
+
+    // 3. Updating leave type without annual_limit should fail validation
+    $this->actingAs($admin)
+        ->from(route('leave-types.edit', $created))
+        ->put(route('leave-types.update', $created), [
+            'leave_name' => 'Casual Leave Updated',
+            'code' => 'CL',
+            'annual_limit' => '',
+            'max_days' => 10,
+        ])
+        ->assertRedirect(route('leave-types.edit', $created))
+        ->assertSessionHasErrors(['annual_limit']);
+
+    // 4. Updating leave type with annual_limit and nullable max_days should succeed
+    $this->actingAs($admin)
+        ->put(route('leave-types.update', $created), [
+            'leave_name' => 'Casual Leave Updated',
+            'code' => 'CL',
+            'annual_limit' => 15,
+            'max_days' => null,
+        ])
+        ->assertRedirect(route('leave-types.show', $created));
+
+    expect($created->fresh()->annual_limit)->toBe(15)
+        ->and($created->fresh()->max_days)->toBeNull();
+});
