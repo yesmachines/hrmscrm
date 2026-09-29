@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Check, Plus, X } from 'lucide-react';
+import { Check, Plus, X, Edit2, Ban } from 'lucide-react';
 import { index, update, show } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,14 @@ export default function LeaveRequestsIndex({ requests }: { requests: PaginatedRe
         router.put(update.url(id), { status }, {
             preserveScroll: true,
         });
+    };
+
+    const handleCancel = (id: number) => {
+        if (confirm('Are you sure you want to cancel this leave request? Any deducted balance will be refunded.')) {
+            router.post(`/leave-requests/${id}/cancel`, {}, {
+                preserveScroll: true,
+            });
+        }
     };
 
     return (
@@ -113,10 +121,16 @@ export default function LeaveRequestsIndex({ requests }: { requests: PaginatedRe
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-right">
-                                            <div className="flex justify-end gap-2">
+                                            <div className="flex justify-end gap-1.5">
                                                 <Button variant="ghost" size="sm" asChild>
                                                     <Link href={show.url(row.id)}>
                                                         View
+                                                    </Link>
+                                                </Button>
+                                                <Button variant="outline" size="sm" asChild>
+                                                    <Link href={`/leave-requests/${row.id}/edit`}>
+                                                        <Edit2 className="mr-1 size-3" />
+                                                        Edit
                                                     </Link>
                                                 </Button>
                                                 {row.status === 'applied' && (
@@ -130,6 +144,12 @@ export default function LeaveRequestsIndex({ requests }: { requests: PaginatedRe
                                                             Approve
                                                         </Button>
                                                     </>
+                                                )}
+                                                {(row.status === 'approved' || row.status === 'applied') && (
+                                                    <Button variant="destructive" size="sm" onClick={() => handleCancel(row.id)}>
+                                                        <Ban className="mr-1 size-3" />
+                                                        Cancel
+                                                    </Button>
                                                 )}
                                             </div>
                                         </td>

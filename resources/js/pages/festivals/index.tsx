@@ -11,6 +11,7 @@ type FestivalRow = {
     name: string;
     is_active: number;
     type: string;
+    religion: string | null;
     shortcode: string;
     start_date: string | null;
     end_date: string | null;
@@ -50,6 +51,9 @@ export default function FestivalsIndex({
                             <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
                                 <th className="px-4 py-3 font-medium">Type</th>
+                                <th className="hidden px-4 py-3 font-medium md:table-cell">
+                                    Religion
+                                </th>
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     Shortcode
                                 </th>
@@ -68,7 +72,7 @@ export default function FestivalsIndex({
                             {festivals.data.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={6}
+                                        colSpan={7}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
                                         No festivals or holidays found.{' '}
@@ -99,6 +103,15 @@ export default function FestivalsIndex({
                                             >
                                                 {row.type}
                                             </span>
+                                        </td>
+                                        <td className="hidden px-4 py-3 md:table-cell">
+                                            {row.religion ? (
+                                                <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                                                    {row.religion}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">All</span>
+                                            )}
                                         </td>
                                         <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
                                             {row.shortcode}

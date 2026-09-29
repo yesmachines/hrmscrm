@@ -363,3 +363,85 @@ test('leaves holidays endpoint with month parameter returns holidays and employe
         ->assertJsonCount(1, 'data.leaves')
         ->assertJsonPath('data.leaves.0.id', $augustLeave->id);
 });
+
+test('leaves festivals endpoint filters festivals based on employee religion', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Muslim User',
+        'email' => 'muslim.fest@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-REL-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $employee->id,
+        'nationality' => 'India',
+        'religion' => 'Muslim',
+    ]);
+
+    $countryId = DB::connection('salescrm')->table('countries')->where('name', 'like', 'India%')->value('id') ?? 24;
+
+    // Muslim festival
+    $eid = Festival::query()->create([
+        'name' => 'Eid al-Fitr',
+        'type' => 'festival',
+        'religion' => 'Muslim',
+        'shortcode' => 'EID2026',
+        'is_active' => true,
+        'start_date' => '2026-03-31',
+        'end_date' => '2026-03-31',
+    ]);
+    DB::table('festival_nationality')->insert([
+        'festival_id' => $eid->id,
+        'country_id' => $countryId,
+    ]);
+
+    // Hindu festival
+    $diwali = Festival::query()->create([
+        'name' => 'Diwali',
+        'type' => 'festival',
+        'religion' => 'Hindu',
+        'shortcode' => 'DIW2026',
+        'is_active' => true,
+        'start_date' => '2026-11-08',
+        'end_date' => '2026-11-08',
+    ]);
+    DB::table('festival_nationality')->insert([
+        'festival_id' => $diwali->id,
+        'country_id' => $countryId,
+    ]);
+
+    // Public / general holiday with no specific religion
+    $newYear = Festival::query()->create([
+        'name' => 'New Year Day',
+        'type' => 'holiday',
+        'religion' => null,
+        'shortcode' => 'NYD2026',
+        'is_active' => true,
+        'start_date' => '2026-01-01',
+        'end_date' => '2026-01-01',
+    ]);
+    DB::table('festival_nationality')->insert([
+        'festival_id' => $newYear->id,
+        'country_id' => $countryId,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+    $response = $this->withToken($token)->getJson('/api/v1/leaves/festivals');
+
+    $response->assertOk();
+    $festivalNames = collect($response->json('data.festivals'))->pluck('name')->all();
+    $holidayNames = collect($response->json('data.holidays'))->pluck('name')->all();
+
+    expect($festivalNames)->toContain('Eid al-Fitr')
+        ->and($festivalNames)->not->toContain('Diwali')
+        ->and($holidayNames)->toContain('New Year Day');
+});

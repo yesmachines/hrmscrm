@@ -25,6 +25,7 @@ class UpdateFestivalRequest extends FormRequest
                 ? ['nullable', 'date']
                 : ['required', 'date', 'after_or_equal:start_date'],
             'is_active' => ['boolean'],
+            'religion' => ['nullable', 'string', 'max:255'],
             'countries' => ['nullable', 'array'],
             'countries.*' => ['integer'],
         ];
@@ -42,6 +43,7 @@ class UpdateFestivalRequest extends FormRequest
         return [
             'name' => $this->input('name'),
             'type' => $type,
+            'religion' => $this->input('religion'),
             'start_date' => $startDate,
             'end_date' => $endDate,
             'is_active' => $this->boolean('is_active'),

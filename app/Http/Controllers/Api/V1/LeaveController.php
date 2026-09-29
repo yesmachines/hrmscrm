@@ -599,6 +599,20 @@ class LeaveController extends Controller
             $query->whereNull('festival_nationality.country_id');
         }
 
+        $employeeReligion = strtolower(trim($profile->religion ?? ''));
+        if (! empty($employeeReligion)) {
+            $query->where(function ($q) use ($employeeReligion) {
+                $q->whereNull('festivals.religion')
+                    ->orWhere('festivals.religion', '')
+                    ->orWhereRaw('LOWER(festivals.religion) = ?', [$employeeReligion]);
+            });
+        } else {
+            $query->where(function ($q) {
+                $q->whereNull('festivals.religion')
+                    ->orWhere('festivals.religion', '');
+            });
+        }
+
         if ($month && $year) {
             $startOfMonth = Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
             $endOfMonth = Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
@@ -633,7 +647,7 @@ class LeaveController extends Controller
         }
 
         $festivals = $query
-            ->select('festivals.id', 'festivals.name', 'festivals.type', 'festivals.shortcode', 'festivals.start_date', 'festivals.end_date')
+            ->select('festivals.id', 'festivals.name', 'festivals.type', 'festivals.religion', 'festivals.shortcode', 'festivals.start_date', 'festivals.end_date')
             ->distinct()
             ->orderBy('festivals.start_date', 'asc')
             ->get();

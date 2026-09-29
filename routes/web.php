@@ -75,7 +75,8 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('leave-types', LeaveTypeController::class);
     Route::resource('leave-policies', LeavePolicyController::class);
     Route::resource('festivals', FestivalController::class);
-    Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'show', 'update', 'create', 'store']);
+    Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'show', 'edit', 'update', 'create', 'store']);
+    Route::post('leave-requests/{leave_request}/cancel', [LeaveRequestController::class, 'cancel'])->name('leave-requests.cancel');
     Route::resource('leave-balances', LeaveBalanceController::class);
     Route::resource('leave-histories', LeaveHistoryController::class);
 

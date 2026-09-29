@@ -14,6 +14,7 @@ export default function FestivalCreate({
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         type: 'festival',
+        religion: '',
         start_date: '',
         end_date: '',
         is_active: '1',

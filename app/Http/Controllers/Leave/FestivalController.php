@@ -136,6 +136,7 @@ class FestivalController extends Controller
             'id' => $festival->id,
             'name' => $festival->name,
             'type' => $festival->type,
+            'religion' => $festival->religion,
             'shortcode' => $festival->shortcode,
             'is_active' => (int) $festival->is_active,
             'start_date' => $festival->start_date?->format('Y-m-d'),

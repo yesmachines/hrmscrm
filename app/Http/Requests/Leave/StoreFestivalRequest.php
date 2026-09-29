@@ -25,6 +25,7 @@ class StoreFestivalRequest extends FormRequest
                 ? ['nullable', 'date']
                 : ['required', 'date', 'after_or_equal:start_date'],
             'is_active' => ['boolean'],
+            'religion' => ['nullable', 'string', 'max:255'],
             'countries' => ['nullable', 'array'],
             'countries.*' => ['integer'],
         ];
@@ -44,6 +45,7 @@ class StoreFestivalRequest extends FormRequest
         return [
             'name' => $name,
             'type' => $type,
+            'religion' => $this->input('religion'),
             'shortcode' => $shortcode,
             'is_active' => $this->boolean('is_active'),
             'start_date' => $startDate,

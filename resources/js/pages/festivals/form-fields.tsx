@@ -9,6 +9,7 @@ type FestivalFormValues = {
     name?: string | null;
     is_active?: number | string | null;
     type?: string | null;
+    religion?: string | null;
     shortcode?: string | null;
     start_date?: string | null;
     end_date?: string | null;
@@ -88,6 +89,15 @@ export default function FestivalFormFields({
                         <option value="festival">Festival (Single Day)</option>
                         <option value="holiday">Holiday (Date Range)</option>
                     </select>
+                </Field>
+
+                <Field label="Religion" name="religion" error={errors.religion}>
+                    <Input
+                        id="religion"
+                        name="religion"
+                        placeholder="e.g. Muslim, Hindu, Christian (optional)"
+                        defaultValue={defaults.religion ?? ''}
+                    />
                 </Field>
 
                 {defaults.shortcode && (

@@ -551,3 +551,261 @@ test('hr user can apply pilgrimage leave for muslim employee', function () {
         'status' => 'applied',
     ]);
 });
+
+test('hr user can view edit leave page', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $salesUser = SalesCrmUser::factory()->create();
+
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Casual Leave',
+        'code' => 'CL-EDIT',
+        'is_paid' => 1,
+        'requires_attachment' => 0,
+        'requires_approval' => 1,
+        'status' => 1,
+    ]);
+
+    $leave = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-10-01',
+        'end_date' => '2026-10-03',
+        'total_days' => 3,
+        'status' => 'applied',
+        'created_by' => $hrUser->id,
+    ]);
+
+    $this->actingAs($hrUser)
+        ->withoutVite()
+        ->get(route('leave-requests.edit', $leave))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('leave-requests/edit')
+            ->has('leaveRequest')
+            ->has('employees')
+            ->has('leaveTypes')
+        );
+});
+
+test('hr user can cancel an approved leave request and balance is refunded', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $salesUser = SalesCrmUser::factory()->create();
+
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Analyst',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Paid Time Off',
+        'code' => 'PTO-CANCEL',
+        'is_paid' => 1,
+        'requires_attachment' => 0,
+        'requires_approval' => 1,
+        'status' => 1,
+    ]);
+
+    $balance = LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 20,
+        'carried_forward' => 0,
+        'used' => 5,
+        'balance' => 15,
+    ]);
+
+    $leave = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-10-05',
+        'end_date' => '2026-10-07',
+        'total_days' => 3,
+        'status' => 'approved',
+        'created_by' => $hrUser->id,
+    ]);
+
+    $response = $this->actingAs($hrUser)
+        ->post(route('leave-requests.cancel', $leave), [
+            'remarks' => 'Employee cancelled trip due to project deadline.',
+        ]);
+
+    $response->assertRedirect();
+
+    $leave->refresh();
+    expect($leave->status)->toBe('cancelled');
+
+    $balance->refresh();
+    // 3 days should be refunded: used = 5 - 3 = 2, balance = 15 + 3 = 18
+    expect((float) $balance->used)->toBe(2.0)
+        ->and((float) $balance->balance)->toBe(18.0);
+
+    $this->assertDatabaseHas('leave_histories', [
+        'leave_request_id' => $leave->id,
+        'action_type' => 'cancelled',
+        'done_by' => $hrUser->id,
+    ]);
+});
+
+test('hr user editing date range of approved leave adjusts leave balance for duration increase and decrease', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $salesUser = SalesCrmUser::factory()->create();
+
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Engineer',
+        'division' => 'Engineering',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'AL-DATES',
+        'is_paid' => 1,
+        'requires_attachment' => 0,
+        'requires_approval' => 1,
+        'status' => 1,
+    ]);
+
+    $balance = LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 20,
+        'carried_forward' => 0,
+        'used' => 3,
+        'balance' => 17,
+    ]);
+
+    $leave = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-10-10',
+        'end_date' => '2026-10-12',
+        'total_days' => 3,
+        'status' => 'approved',
+        'created_by' => $hrUser->id,
+    ]);
+
+    // 1. Extend leave from 3 days to 5 days (increase duration)
+    $response = $this->actingAs($hrUser)
+        ->put(route('leave-requests.update', $leave), [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-10-10',
+            'end_date' => '2026-10-14',
+            'total_days' => 5,
+            'status' => 'approved',
+            'remarks' => 'Extended leave by 2 days.',
+        ]);
+
+    $response->assertRedirect(route('leave-requests.index'));
+
+    $leave->refresh();
+    expect((float) $leave->total_days)->toBe(5.0)
+        ->and($leave->end_date->format('Y-m-d'))->toBe('2026-10-14');
+
+    $balance->refresh();
+    // Additional 2 days deducted: used = 3 + 2 = 5, balance = 17 - 2 = 15
+    expect((float) $balance->used)->toBe(5.0)
+        ->and((float) $balance->balance)->toBe(15.0);
+
+    // 2. Reduce leave from 5 days to 2 days (decrease duration)
+    $response2 = $this->actingAs($hrUser)
+        ->put(route('leave-requests.update', $leave), [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-10-10',
+            'end_date' => '2026-10-11',
+            'total_days' => 2,
+            'status' => 'approved',
+            'remarks' => 'Shortened leave back to 2 days.',
+        ]);
+
+    $response2->assertRedirect(route('leave-requests.index'));
+
+    $leave->refresh();
+    expect((float) $leave->total_days)->toBe(2.0);
+
+    $balance->refresh();
+    // 3 days refunded: used = 5 - 3 = 2, balance = 15 + 3 = 18
+    expect((float) $balance->used)->toBe(2.0)
+        ->and((float) $balance->balance)->toBe(18.0);
+});
+
+test('hr user editing status from applied to approved deducts leave balance', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $salesUser = SalesCrmUser::factory()->create();
+
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Coordinator',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SL-APPROVE',
+        'is_paid' => 1,
+        'requires_attachment' => 0,
+        'requires_approval' => 1,
+        'status' => 1,
+    ]);
+
+    $balance = LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 12,
+        'carried_forward' => 0,
+        'used' => 1,
+        'balance' => 11,
+    ]);
+
+    $leave = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-10-20',
+        'end_date' => '2026-10-22',
+        'total_days' => 3,
+        'status' => 'applied',
+        'created_by' => $hrUser->id,
+    ]);
+
+    // Update to approved
+    $response = $this->actingAs($hrUser)
+        ->put(route('leave-requests.update', $leave), [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-10-20',
+            'end_date' => '2026-10-22',
+            'total_days' => 3,
+            'status' => 'approved',
+            'remarks' => 'Approved by HR manager.',
+        ]);
+
+    $response->assertRedirect(route('leave-requests.index'));
+
+    $leave->refresh();
+    expect($leave->status)->toBe('approved');
+
+    $balance->refresh();
+    // 3 days deducted: used = 1 + 3 = 4, balance = 11 - 3 = 8
+    expect((float) $balance->used)->toBe(4.0)
+        ->and((float) $balance->balance)->toBe(8.0);
+});

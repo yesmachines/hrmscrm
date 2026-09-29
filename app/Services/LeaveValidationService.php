@@ -428,6 +428,18 @@ class LeaveValidationService
 
             $festival = Festival::find($data['festival_id']);
             if ($festival) {
+                if (! empty($festival->religion)) {
+                    $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
+                    $festivalReligion = strtolower(trim($festival->religion));
+                    if ($rawEmployeeReligion !== $festivalReligion
+                        && ! str_contains($rawEmployeeReligion, $festivalReligion)
+                        && ! str_contains($festivalReligion, $rawEmployeeReligion)
+                    ) {
+                        throw ValidationException::withMessages([
+                            'festival_id' => ["The selected festival ({$festival->name}) is only applicable for {$festival->religion} employees."],
+                        ]);
+                    }
+                }
                 $remarks = 'Festival: '.$festival->name.($remarks ? "\n".$remarks : '');
             }
         }

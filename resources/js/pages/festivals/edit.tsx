@@ -10,6 +10,7 @@ type FestivalData = {
     id: number;
     name: string;
     type: string;
+    religion: string | null;
     shortcode: string;
     is_active: number;
     start_date: string | null;
@@ -27,6 +28,7 @@ export default function FestivalEdit({
     const { data, setData, put, processing, errors } = useForm({
         name: festival.name,
         type: festival.type,
+        religion: festival.religion ?? '',
         shortcode: festival.shortcode,
         start_date: festival.start_date ?? '',
         end_date: festival.end_date ?? '',

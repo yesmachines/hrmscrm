@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, Check, X, FileText, Calendar, Building, Clock, FileBadge2, UserCheck } from 'lucide-react';
+import { ArrowLeft, Check, X, FileText, Calendar, Building, Clock, FileBadge2, UserCheck, Pencil, Ban } from 'lucide-react';
 import { index, update } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
@@ -67,6 +67,17 @@ export default function LeaveRequestShow({
         });
     };
 
+    const handleCancel = () => {
+        const reason = prompt('Optional cancellation remarks / reason:');
+        if (reason !== null) {
+            router.post(`/leave-requests/${leave_request.id}/cancel`, {
+                remarks: reason || null,
+            }, {
+                preserveScroll: true,
+            });
+        }
+    };
+
     return (
         <>
             <Head title="Leave Request Details" />
@@ -84,18 +95,36 @@ export default function LeaveRequestShow({
                             description={`Submitted on ${new Date(leave_request.created_at).toLocaleDateString()}`}
                         />
                     </div>
-                    {leave_request.status === 'applied' && (
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" onClick={() => handleStatusUpdate('rejected')}>
-                                <X className="mr-2 size-4" />
-                                Reject
+                    <div className="flex flex-wrap items-center gap-2">
+                        {leave_request.status === 'applied' && (
+                            <>
+                                <Button variant="outline" onClick={() => handleStatusUpdate('rejected')}>
+                                    <X className="mr-2 size-4" />
+                                    Reject
+                                </Button>
+                                <Button onClick={() => handleStatusUpdate('approved')}>
+                                    <Check className="mr-2 size-4" />
+                                    Approve
+                                </Button>
+                            </>
+                        )}
+                        <Button variant="outline" asChild>
+                            <Link href={`/leave-requests/${leave_request.id}/edit`}>
+                                <Pencil className="mr-2 size-4" />
+                                Edit
+                            </Link>
+                        </Button>
+                        {['applied', 'approved'].includes(leave_request.status) && (
+                            <Button
+                                variant="outline"
+                                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                onClick={handleCancel}
+                            >
+                                <Ban className="mr-2 size-4" />
+                                Cancel Leave
                             </Button>
-                            <Button onClick={() => handleStatusUpdate('approved')}>
-                                <Check className="mr-2 size-4" />
-                                Approve
-                            </Button>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
