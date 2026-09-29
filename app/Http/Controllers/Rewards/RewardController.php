@@ -131,6 +131,7 @@ class RewardController extends Controller
             'category_id' => ['required', 'exists:reward_categories,id'],
             'submitted_by' => ['nullable', 'exists:salescrm.employees,id'],
             'amount' => ['required', 'numeric', 'min:0.01'],
+            'currency' => ['nullable', 'string', 'max:10'],
             'description' => ['required', 'string'],
             'document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ]);
@@ -166,6 +167,7 @@ class RewardController extends Controller
             'claim_no' => $claimNo,
             'description' => $validated['description'],
             'amount' => $validated['amount'],
+            'currency' => $validated['currency'] ?? 'AED',
             'document_file' => $filePath,
             'submitted_date' => now(),
             'status' => 'pending',

@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'claim_no',
     'description',
     'amount',
+    'currency',
     'document_file',
     'submitted_date',
     'status',

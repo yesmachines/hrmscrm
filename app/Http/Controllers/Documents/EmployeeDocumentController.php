@@ -220,6 +220,12 @@ class EmployeeDocumentController extends Controller
 
     public function file(EmployeeDocument $employeeDocument): BinaryFileResponse
     {
+        if ($employeeDocument->documentType?->category?->short_code === 'letter_requests'
+            && $employeeDocument->created_at
+            && $employeeDocument->created_at->copy()->addMonths(3)->isPast()) {
+            abort(403, 'This letter request has expired and is no longer available.');
+        }
+
         $latestFile = $employeeDocument->files()->latest('id')->first();
         if (! $latestFile || ! Storage::disk('public')->exists($latestFile->file_path)) {
             abort(404, 'Document file not found on disk.');
@@ -230,6 +236,12 @@ class EmployeeDocumentController extends Controller
 
     public function download(EmployeeDocument $employeeDocument): BinaryFileResponse
     {
+        if ($employeeDocument->documentType?->category?->short_code === 'letter_requests'
+            && $employeeDocument->created_at
+            && $employeeDocument->created_at->copy()->addMonths(3)->isPast()) {
+            abort(403, 'This letter request has expired and is no longer available.');
+        }
+
         $latestFile = $employeeDocument->files()->latest('id')->first();
         if (! $latestFile || ! Storage::disk('public')->exists($latestFile->file_path)) {
             abort(404, 'Document file not found on disk.');
@@ -320,6 +332,10 @@ class EmployeeDocumentController extends Controller
         $latestFile = $doc->files->first();
         $ext = $latestFile ? strtolower(pathinfo($latestFile->file_path, PATHINFO_EXTENSION)) : null;
 
+        $isLetterRequest = $doc->documentType?->category?->short_code === 'letter_requests';
+        $isExpiredLetter = $isLetterRequest && $doc->created_at && $doc->created_at->copy()->addMonths(3)->isPast();
+        $canAccessFile = ! $isExpiredLetter;
+
         return [
             'id' => $doc->id,
             'employee_id' => $doc->employee_id,
@@ -340,12 +356,12 @@ class EmployeeDocumentController extends Controller
             'expiry_date_display' => $doc->expiry_date?->format('d M Y'),
             'remarks' => $doc->remarks,
             'current_version' => $doc->current_version ?? '1.0',
-            'status' => $doc->status,
+            'status' => $isExpiredLetter ? 'expired' : $doc->status,
             'created_at' => $doc->created_at?->format('d M Y H:i'),
-            'file_url' => $latestFile ? route('employee-documents.file', $doc->id) : null,
-            'download_url' => $latestFile ? route('employee-documents.download', $doc->id) : null,
+            'file_url' => ($latestFile && $canAccessFile) ? route('employee-documents.file', $doc->id) : null,
+            'download_url' => ($latestFile && $canAccessFile) ? route('employee-documents.download', $doc->id) : null,
             'file_extension' => $ext,
-            'rendered_html' => $this->renderDocumentHtml($doc, $employee),
+            'rendered_html' => $canAccessFile ? $this->renderDocumentHtml($doc, $employee) : null,
             'template' => $doc->documentTemplate ? [
                 'id' => $doc->documentTemplate->id,
                 'template_name' => $doc->documentTemplate->template_name,

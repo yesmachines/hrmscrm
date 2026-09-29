@@ -24,6 +24,7 @@ class RewardFactory extends Factory
             'claim_no' => 'REW-'.date('Y').'-'.str_pad((string) fake()->unique()->numberBetween(1, 9999), 4, '0', STR_PAD_LEFT),
             'description' => fake()->paragraph(),
             'amount' => fake()->randomFloat(2, 100, 2500),
+            'currency' => 'AED',
             'document_file' => null,
             'submitted_date' => now(),
             'status' => 'pending',

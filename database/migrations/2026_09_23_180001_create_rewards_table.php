@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('claim_no', 100)->unique()->index();
             $table->text('description');
             $table->decimal('amount', 12, 2)->default(0.00);
+            $table->string('currency', 10)->default('AED');
             $table->string('document_file')->nullable();
             $table->dateTime('submitted_date')->index();
             $table->enum('status', ['pending', 'approved', 'paid', 'rejected'])->default('pending')->index();
