@@ -90,8 +90,10 @@ Route::prefix('v1')->group(function () {
         // Socials Endpoints
         Route::get('socials', [SocialController::class, 'index'])->name('api.v1.socials.index');
         Route::post('socials', [SocialController::class, 'store'])->name('api.v1.socials.store');
-        Route::put('socials/{post}', [SocialController::class, 'update'])->name('api.v1.socials.update');
+        Route::match(['put', 'patch', 'post'], 'socials/{post}', [SocialController::class, 'update'])->name('api.v1.socials.update');
         Route::delete('socials/{post}', [SocialController::class, 'destroy'])->name('api.v1.socials.destroy');
+        Route::delete('socials/{post}/media/{media}', [SocialController::class, 'destroyMedia'])->name('api.v1.socials.media.destroy');
         Route::post('socials/{post}/react', [SocialController::class, 'react'])->name('api.v1.socials.react');
+        Route::delete('socials/{post}/react', [SocialController::class, 'unreact'])->name('api.v1.socials.react.destroy');
     });
 });
