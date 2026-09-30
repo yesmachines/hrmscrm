@@ -118,7 +118,6 @@ class DocumentController extends Controller
                 'templates' => $type->documentTemplates->map(fn ($t) => [
                     'id' => $t->id,
                     'template_name' => $t->template_name,
-                    'template_code' => $t->template_code,
                 ])->values(),
             ];
         });
@@ -447,11 +446,7 @@ class DocumentController extends Controller
             'remarks' => $doc->remarks,
             'status' => $doc->status,
             'current_version' => $doc->current_version,
-            'template' => $doc->documentTemplate ? [
-                'id' => $doc->documentTemplate->id,
-                'template_name' => $doc->documentTemplate->template_name,
-                'template_code' => $doc->documentTemplate->template_code,
-            ] : null,
+            'template_name' => $doc->documentTemplate?->template_name,
             'files' => $files,
             'histories' => $histories,
             'request_details' => $doc->requestDetails->pluck('field_value', 'field_key'),
