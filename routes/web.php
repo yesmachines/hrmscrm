@@ -99,6 +99,7 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::post('asset-requests/{asset_request}/approve', [AssetRequestController::class, 'approve'])->name('asset-requests.approve');
     Route::post('asset-requests/{asset_request}/reject', [AssetRequestController::class, 'reject'])->name('asset-requests.reject');
     Route::post('asset-requests/{asset_request}/status', [AssetRequestController::class, 'updateStatus'])->name('asset-requests.update-status');
+    Route::post('asset-requests/{asset_request}/assign', [AssetRequestController::class, 'assignAsset'])->name('asset-requests.assign');
 
     // Events Module
     Route::resource('event-types', EventTypeController::class);

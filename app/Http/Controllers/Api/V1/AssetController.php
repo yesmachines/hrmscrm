@@ -498,10 +498,85 @@ class AssetController extends Controller
 
         $asset->update(['status' => 'Active']);
 
+        // When assign an asset, change matching open asset request status to Completed
+        $openRequest = AssetRequest::where('requested_by', $validated['employee_id'])
+            ->whereIn('status', ['Approved', 'In Progress', 'Pending', 'Under Review'])
+            ->where(function ($q) use ($asset) {
+                $q->where('asset_id', $asset->id)
+                    ->orWhere(function ($q2) use ($asset) {
+                        $q2->whereNull('asset_id')
+                            ->where('category_id', $asset->category_id);
+                    });
+            })
+            ->latest()
+            ->first();
+
+        if ($openRequest) {
+            $openRequest->update([
+                'status' => 'Completed',
+                'asset_id' => $asset->id,
+            ]);
+        }
+
         return $this->successResponse([
             'assignment' => $assignment->load('assignee.user'),
             'asset' => $asset->fresh(['category', 'currentAssignment.assignee.user']),
         ], 'Asset assigned successfully.', 201);
+    }
+
+    /**
+     * Admin assigns an asset to fulfill an asset request, marking request Completed.
+     */
+    public function assignRequestAsset(Request $request, AssetRequest $asset_request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        if (! SalesCrmRoles::userHasLoginAccess((int) $user->id)) {
+            return $this->errorResponse('Unauthorized. Only HR or Admin can assign assets.', 403);
+        }
+
+        $validated = $request->validate([
+            'asset_id' => 'required|exists:assets,id',
+            'assigned_date' => 'required|date',
+            'note' => 'nullable|string',
+        ]);
+
+        $asset = Asset::query()->findOrFail($validated['asset_id']);
+
+        // Mark any previous active assignments as Returned
+        AssetAssignment::where('asset_id', $asset->id)
+            ->where('status', 'Assigned')
+            ->update([
+                'status' => 'Returned',
+                'returned_date' => now()->toDateString(),
+            ]);
+
+        $assignment = AssetAssignment::create([
+            'asset_id' => $asset->id,
+            'assigned_to' => $asset_request->requested_by,
+            'assigned_date' => $validated['assigned_date'],
+            'note' => $validated['note'] ?? null,
+            'status' => 'Assigned',
+        ]);
+
+        $asset->update(['status' => 'Active']);
+
+        $asset_request->update([
+            'asset_id' => $asset->id,
+            'status' => 'Completed',
+            'admin_notes' => $asset_request->admin_notes
+                ? $asset_request->admin_notes."\nAssigned asset {$asset->referenceno} on {$validated['assigned_date']}."
+                : "Assigned asset {$asset->referenceno} on {$validated['assigned_date']}.",
+        ]);
+
+        return $this->successResponse([
+            'assignment' => $assignment->load('assignee.user'),
+            'asset' => $asset->fresh(['category']),
+            'request' => $asset_request->fresh(['asset', 'category', 'requester.user']),
+        ], 'Asset assigned and request completed successfully.');
     }
 
     /**

@@ -443,3 +443,170 @@ test('employee can submit repair request for their assigned asset', function () 
         ->assertJsonPath('data.request.category_id', $category->id)
         ->assertJsonPath('data.request.request_type', 'Repair');
 });
+
+test('assigning an asset to an employee marks their open asset request as completed via web route', function () {
+    $adminUser = createHrmsLoginUser('admin');
+
+    $salesUser = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Developer',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $category = AssetCategory::query()->create([
+        'category' => 'Laptop',
+        'shortcode' => 'LAP-REQ-COMP',
+        'status' => 1,
+    ]);
+
+    $asset = Asset::query()->create([
+        'category_id' => $category->id,
+        'asset_name' => 'ThinkPad T14s',
+        'referenceno' => 'AST-TP-001',
+        'condition' => 'Excellent',
+        'status' => 'Returned',
+    ]);
+
+    $assetRequest = AssetRequest::query()->create([
+        'request_no' => 'REQ-COMP-01',
+        'requested_by' => $employee->id,
+        'request_type' => 'New',
+        'category_id' => $category->id,
+        'description' => 'Need workstation laptop.',
+        'priority' => 'Normal',
+        'status' => 'Approved',
+        'requested_date' => now()->toDateString(),
+    ]);
+
+    $response = $this->actingAs($adminUser)
+        ->post(route('assets.assign', $asset->id), [
+            'assigned_to' => $employee->id,
+            'assigned_date' => now()->toDateString(),
+            'note' => 'Delivered with charger',
+        ]);
+
+    $response->assertRedirect();
+
+    $assetRequest->refresh();
+    expect($assetRequest->status)->toBe('Completed')
+        ->and($assetRequest->asset_id)->toBe($asset->id);
+
+    $asset->refresh();
+    expect($asset->status)->toBe('Active');
+});
+
+test('admin can assign asset to request directly and status changes to completed', function () {
+    $adminUser = createHrmsLoginUser('admin');
+
+    $salesUser = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'DevOps',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $category = AssetCategory::query()->create([
+        'category' => 'Keyboard',
+        'shortcode' => 'KBD-ASSIGN',
+        'status' => 1,
+    ]);
+
+    $asset = Asset::query()->create([
+        'category_id' => $category->id,
+        'asset_name' => 'Keychron K2',
+        'referenceno' => 'AST-KBD-009',
+        'condition' => 'New',
+        'status' => 'Active',
+    ]);
+
+    $assetRequest = AssetRequest::query()->create([
+        'request_no' => 'REQ-KBD-01',
+        'requested_by' => $employee->id,
+        'request_type' => 'New',
+        'category_id' => $category->id,
+        'description' => 'Need mechanical keyboard for coding.',
+        'priority' => 'Normal',
+        'status' => 'Approved',
+        'requested_date' => now()->toDateString(),
+    ]);
+
+    $response = $this->actingAs($adminUser)
+        ->post(route('asset-requests.assign', $assetRequest->id), [
+            'asset_id' => $asset->id,
+            'assigned_date' => now()->toDateString(),
+            'note' => 'Brand new in box with braided cable.',
+        ]);
+
+    $response->assertRedirect();
+
+    $assetRequest->refresh();
+    expect($assetRequest->status)->toBe('Completed')
+        ->and($assetRequest->asset_id)->toBe($asset->id)
+        ->and($assetRequest->admin_notes)->toContain('assigned to employee');
+
+    $assignment = AssetAssignment::query()->where('asset_id', $asset->id)->where('assigned_to', $employee->id)->first();
+    expect($assignment)->not->toBeNull()
+        ->and($assignment->status)->toBe('Assigned');
+});
+
+test('admin can assign asset to asset request via API and status changes to completed', function () {
+    $adminUser = createHrmsLoginUser('admin');
+
+    $salesUser = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Architect',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $category = AssetCategory::query()->create([
+        'category' => 'Monitor',
+        'shortcode' => 'MON-API',
+        'status' => 1,
+    ]);
+
+    $asset = Asset::query()->create([
+        'category_id' => $category->id,
+        'asset_name' => 'LG UltraFine 32',
+        'referenceno' => 'AST-LG-001',
+        'condition' => 'Excellent',
+        'status' => 'Active',
+    ]);
+
+    $assetRequest = AssetRequest::query()->create([
+        'request_no' => 'REQ-MON-API',
+        'requested_by' => $employee->id,
+        'request_type' => 'New',
+        'category_id' => $category->id,
+        'description' => 'Need large monitor for designs.',
+        'priority' => 'High',
+        'status' => 'Approved',
+        'requested_date' => now()->toDateString(),
+    ]);
+
+    Sanctum::actingAs($adminUser);
+
+    $response = $this->postJson(route('api.v1.assets.requests.assign', $assetRequest->id), [
+        'asset_id' => $asset->id,
+        'assigned_date' => now()->toDateString(),
+        'note' => 'Assigned via API endpoint',
+    ]);
+
+    $response->assertStatus(200)
+        ->assertJsonPath('statusCode', 200)
+        ->assertJsonPath('data.request.status', 'Completed');
+
+    $assetRequest->refresh();
+    expect($assetRequest->status)->toBe('Completed')
+        ->and($assetRequest->asset_id)->toBe($asset->id);
+});

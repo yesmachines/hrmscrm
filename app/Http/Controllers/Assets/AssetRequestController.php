@@ -173,9 +173,65 @@ class AssetRequestController extends Controller
             'approver:id,name',
         ]);
 
+        $availableAssets = Asset::with('category:id,category')
+            ->where(function ($query) use ($asset_request) {
+                $query->whereNotIn('status', ['Retired', 'Lost'])
+                    ->whereDoesntHave('assignments', function ($q) {
+                        $q->where('status', 'Assigned');
+                    });
+                if ($asset_request->asset_id) {
+                    $query->orWhere('id', $asset_request->asset_id);
+                }
+            })
+            ->select('id', 'category_id', 'referenceno', 'asset_name', 'condition', 'status')
+            ->orderBy('asset_name')
+            ->get();
+
         return Inertia::render('assets/requests/show', [
             'assetRequest' => $asset_request,
+            'availableAssets' => $availableAssets,
         ]);
+    }
+
+    public function assignAsset(Request $request, AssetRequest $asset_request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'asset_id' => 'required|exists:assets,id',
+            'assigned_date' => 'required|date',
+            'note' => 'nullable|string',
+        ]);
+
+        $asset = Asset::query()->findOrFail($validated['asset_id']);
+
+        // Close any previous open assignment for this asset
+        $asset->assignments()->where('status', 'Assigned')->update([
+            'returned_date' => now()->toDateString(),
+            'status' => 'Returned',
+        ]);
+
+        // Create assignment for requester
+        $asset->assignments()->create([
+            'assigned_to' => $asset_request->requested_by,
+            'assigned_date' => $validated['assigned_date'],
+            'note' => $validated['note'] ?? null,
+            'status' => 'Assigned',
+        ]);
+
+        $asset->update(['status' => 'Active']);
+
+        // When assign an asset, change request status to Completed
+        $noteText = ! empty($validated['note']) ? ' - Note: '.$validated['note'] : '';
+        $completionNote = "Asset {$asset->asset_name} ({$asset->referenceno}) assigned to employee on {$validated['assigned_date']}{$noteText}.";
+
+        $asset_request->update([
+            'asset_id' => $asset->id,
+            'status' => 'Completed',
+            'admin_notes' => $asset_request->admin_notes
+                ? $asset_request->admin_notes."\n".$completionNote
+                : $completionNote,
+        ]);
+
+        return back()->with('success', 'Asset assigned to employee successfully. Request status changed to Completed.');
     }
 
     public function approve(Request $request, AssetRequest $asset_request): RedirectResponse

@@ -71,6 +71,7 @@ Route::prefix('v1')->group(function () {
         Route::post('assets/requests/{asset_request}/approve', [AssetController::class, 'approveRequest'])->name('api.v1.assets.requests.approve');
         Route::post('assets/requests/{asset_request}/reject', [AssetController::class, 'rejectRequest'])->name('api.v1.assets.requests.reject');
         Route::post('assets/requests/{asset_request}/status', [AssetController::class, 'updateRequestStatus'])->name('api.v1.assets.requests.status');
+        Route::post('assets/requests/{asset_request}/assign', [AssetController::class, 'assignRequestAsset'])->name('api.v1.assets.requests.assign');
         Route::get('assets/{asset}', [AssetController::class, 'show'])->name('api.v1.assets.show');
         Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('api.v1.assets.assign');
         Route::post('assets/{asset}/return', [AssetController::class, 'returnAsset'])->name('api.v1.assets.return');

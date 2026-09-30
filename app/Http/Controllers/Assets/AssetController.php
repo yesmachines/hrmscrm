@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\AssetAssignment;
 use App\Models\AssetCategory;
+use App\Models\AssetRequest;
 use App\Models\SalesCrm\Employee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -161,6 +162,7 @@ class AssetController extends Controller
             'assigned_to' => 'required|exists:salescrm.employees,id',
             'assigned_date' => 'required|date',
             'note' => 'nullable|string',
+            'asset_request_id' => 'nullable|exists:asset_requests,id',
         ]);
 
         // Close any previous open assignment
@@ -177,6 +179,36 @@ class AssetController extends Controller
         ]);
 
         $asset->update(['status' => 'Active']);
+
+        // When assign an asset, change matching open asset request status to Completed
+        if (! empty($validated['asset_request_id'])) {
+            AssetRequest::where('id', $validated['asset_request_id'])->update([
+                'status' => 'Completed',
+                'asset_id' => $asset->id,
+            ]);
+        } else {
+            $openRequest = AssetRequest::where('requested_by', $validated['assigned_to'])
+                ->whereIn('status', ['Approved', 'In Progress', 'Pending', 'Under Review'])
+                ->where(function ($q) use ($asset) {
+                    $q->where('asset_id', $asset->id)
+                        ->orWhere(function ($q2) use ($asset) {
+                            $q2->whereNull('asset_id')
+                                ->where('category_id', $asset->category_id);
+                        });
+                })
+                ->latest()
+                ->first();
+
+            if ($openRequest) {
+                $openRequest->update([
+                    'status' => 'Completed',
+                    'asset_id' => $asset->id,
+                    'admin_notes' => $openRequest->admin_notes
+                        ? $openRequest->admin_notes."\nFulfillment: Asset assigned on {$validated['assigned_date']}."
+                        : "Fulfillment: Asset assigned on {$validated['assigned_date']}.",
+                ]);
+            }
+        }
 
         return back()->with('success', 'Asset assigned to employee successfully.');
     }

@@ -11,6 +11,7 @@ import {
     Laptop,
     Tag,
     User,
+    UserCheck,
     XCircle,
 } from 'lucide-react';
 import Heading from '@/components/heading';
@@ -20,6 +21,18 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { dashboard } from '@/routes';
+
+interface AvailableAsset {
+    id: number;
+    referenceno: string;
+    asset_name: string;
+    condition: string;
+    status: string;
+    category?: {
+        category: string;
+    } | null;
+    category_id: number;
+}
 
 interface AssetRequestDetail {
     id: number;
@@ -74,14 +87,42 @@ interface AssetRequestDetail {
 
 interface Props {
     assetRequest: AssetRequestDetail;
+    availableAssets?: AvailableAsset[];
 }
 
-export default function AssetRequestShow({ assetRequest }: Props) {
-    const [action, setAction] = useState<'idle' | 'approve' | 'reject' | 'status'>('idle');
+export default function AssetRequestShow({ assetRequest, availableAssets = [] }: Props) {
+    const [action, setAction] = useState<'idle' | 'approve' | 'reject' | 'status' | 'assign'>('idle');
     const [adminNotes, setAdminNotes] = useState(assetRequest.admin_notes || '');
     const [rejectionReason, setRejectionReason] = useState('');
     const [newStatus, setNewStatus] = useState<string>(assetRequest.status);
+    const [selectedAssetId, setSelectedAssetId] = useState<string>(
+        assetRequest.asset?.id ? String(assetRequest.asset.id) : '',
+    );
+    const [assignedDate, setAssignedDate] = useState<string>(
+        new Date().toISOString().split('T')[0],
+    );
+    const [assignNote, setAssignNote] = useState<string>('');
     const [processing, setProcessing] = useState(false);
+
+    const handleAssignAsset = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedAssetId) return;
+        setProcessing(true);
+        router.post(
+            `/asset-requests/${assetRequest.id}/assign`,
+            {
+                asset_id: selectedAssetId,
+                assigned_date: assignedDate,
+                note: assignNote,
+            },
+            {
+                onFinish: () => {
+                    setProcessing(false);
+                    setAction('idle');
+                },
+            },
+        );
+    };
 
     const handleApprove = (e: React.FormEvent) => {
         e.preventDefault();
@@ -206,6 +247,20 @@ export default function AssetRequestShow({ assetRequest }: Props) {
                                 </Button>
                             </>
                         )}
+                        {!['Completed', 'Rejected', 'Cancelled'].includes(assetRequest.status) && (
+                            <Button
+                                onClick={() => {
+                                    if (!selectedAssetId && assetRequest.asset?.id) {
+                                        setSelectedAssetId(String(assetRequest.asset.id));
+                                    }
+                                    setAction('assign');
+                                }}
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                            >
+                                <UserCheck className="mr-1.5 h-4 w-4" />
+                                Assign Asset
+                            </Button>
+                        )}
                         <Button
                             onClick={() => setAction('status')}
                             variant="outline"
@@ -216,6 +271,80 @@ export default function AssetRequestShow({ assetRequest }: Props) {
                 </div>
 
                 {/* Modals / Action Panels */}
+                {action === 'assign' && (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 dark:border-primary/40 dark:bg-primary/10">
+                        <h3 className="text-base font-semibold text-foreground mb-1 flex items-center gap-2">
+                            <UserCheck className="h-5 w-5 text-primary" />
+                            Assign Asset & Complete Request
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            Allocate an available asset to <strong className="text-foreground">{assetRequest.requester?.user?.name || 'the employee'}</strong>. 
+                            When an asset is assigned, this request status will automatically change to <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">Completed</strong>.
+                        </p>
+                        <form onSubmit={handleAssignAsset} className="space-y-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="assetSelect">Select Asset to Assign *</Label>
+                                    <select
+                                        id="assetSelect"
+                                        required
+                                        value={selectedAssetId}
+                                        onChange={(e) => setSelectedAssetId(e.target.value)}
+                                        className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                                    >
+                                        <option value="">-- Choose an Available Asset --</option>
+                                        {availableAssets.map((a) => (
+                                            <option key={a.id} value={a.id}>
+                                                {a.asset_name} ({a.referenceno}) - {a.condition} [{a.category?.category || 'General'}]
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {availableAssets.length === 0 && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                            No unassigned assets available in inventory.
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="assignDate">Assigned Date *</Label>
+                                    <Input
+                                        id="assignDate"
+                                        type="date"
+                                        required
+                                        value={assignedDate}
+                                        onChange={(e) => setAssignedDate(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1.5 sm:col-span-2">
+                                    <Label htmlFor="assignNotes">Handover Notes / Condition During Assignment</Label>
+                                    <Textarea
+                                        id="assignNotes"
+                                        value={assignNote}
+                                        onChange={(e) => setAssignNote(e.target.value)}
+                                        placeholder="e.g. Serial #, charger and accessories provided. Given in excellent condition."
+                                        rows={2}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                                <Button
+                                    type="submit"
+                                    disabled={processing || !selectedAssetId}
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                                >
+                                    {processing ? 'Assigning...' : 'Confirm Assignment & Complete'}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setAction('idle')}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                )}
                 {action === 'approve' && (
                     <div className="rounded-xl border border-emerald-300 bg-emerald-50/50 p-6 dark:border-emerald-800 dark:bg-emerald-950/20">
                         <h3 className="text-base font-semibold text-emerald-900 dark:text-emerald-200 mb-2">
