@@ -22,6 +22,7 @@ test('authenticated users can manage leave types and leave policies', function (
             'max_days' => 30,
             'annual_limit' => 21,
             'gender' => 'all',
+            'religion' => 'Muslim',
             'allow_once' => 0,
             'allow_balance' => 1,
             'status' => 1,
@@ -32,7 +33,8 @@ test('authenticated users can manage leave types and leave policies', function (
     $leaveType = LeaveType::query()->where('code', 'AL')->first();
     expect($leaveType)->not->toBeNull()
         ->and($leaveType->is_paid)->toBeTrue()
-        ->and($leaveType->requires_approval)->toBeTrue();
+        ->and($leaveType->requires_approval)->toBeTrue()
+        ->and($leaveType->religion)->toBe('Muslim');
 
     $organisation = Organisation::query()->create([
         'org_name' => 'Acme Corp',

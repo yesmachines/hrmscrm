@@ -50,12 +50,23 @@ class LeaveController extends Controller
             || str_contains($rawEmployeeReligion, 'muslim')
             || str_contains($rawEmployeeReligion, 'islam');
 
-        $leaveTypes = LeaveType::where('status', 1)->get()->filter(function ($type) use ($employeeGender, $isMuslim) {
+        $leaveTypes = LeaveType::where('status', 1)->get()->filter(function ($type) use ($employeeGender, $rawEmployeeReligion, $isMuslim) {
             $isMaternity = $type->code === 'MATERNITY' || str_contains(strtolower($type->leave_name), 'maternity');
             $isPaternity = $type->code === 'PATERNITY' || str_contains(strtolower($type->leave_name), 'paternity');
             $isPilgrimage = $type->code === 'PILGRIMAGE' || str_contains(strtolower($type->leave_name), 'pilgrim') || str_contains(strtolower($type->leave_name), 'hajj');
 
-            if ($isPilgrimage && ! $isMuslim) {
+            if (! empty($type->religion)) {
+                $requiredReligion = strtolower(trim($type->religion));
+                if ($requiredReligion === 'muslim') {
+                    if (! $isMuslim) {
+                        return false;
+                    }
+                } elseif ($requiredReligion !== $rawEmployeeReligion
+                    && ! str_contains($rawEmployeeReligion, $requiredReligion)
+                    && ! str_contains($requiredReligion, $rawEmployeeReligion)) {
+                    return false;
+                }
+            } elseif ($isPilgrimage && ! $isMuslim) {
                 return false;
             }
 
@@ -102,6 +113,7 @@ class LeaveController extends Controller
                 'max_days' => $type->max_days,
                 'annual_limit' => $type->annual_limit,
                 'gender' => $type->gender,
+                'religion' => $type->religion,
                 'allow_once' => (bool) $type->allow_once,
                 'allow_balance' => (bool) $type->allow_balance,
                 'balance' => [

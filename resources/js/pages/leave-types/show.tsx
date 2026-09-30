@@ -16,6 +16,7 @@ type LeaveType = {
     max_days: number | null;
     annual_limit: number | null;
     gender: string | null;
+    religion: string | null;
     allow_once: number;
     allow_balance: number;
     status: number;
@@ -116,6 +117,10 @@ export default function LeaveTypesShow({ leaveType }: { leaveType: LeaveType }) 
                         value={leaveType.status === 1 ? 'Active' : 'Inactive'}
                     />
                     <Detail label="Gender" value={leaveType.gender} />
+                    <Detail
+                        label="Religion"
+                        value={leaveType.religion || 'Any / Universal'}
+                    />
                     <Detail label="Max days" value={leaveType.max_days} />
                     <Detail
                         label="Annual limit"

@@ -53,7 +53,7 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status', 'gender', 'requires_handover')
+            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status', 'gender', 'religion', 'requires_handover')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
             ->get();
@@ -126,15 +126,26 @@ class LeaveRequestController extends Controller
         }
 
         $isPilgrimage = $leaveType->code === 'PILGRIMAGE' || str_contains(strtolower($leaveType->leave_name), 'pilgrim') || str_contains(strtolower($leaveType->leave_name), 'hajj');
-        if ($isPilgrimage) {
+        if (! empty($leaveType->religion) || $isPilgrimage) {
             $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
             $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
                 || str_contains($rawEmployeeReligion, 'muslim')
                 || str_contains($rawEmployeeReligion, 'islam');
 
-            if (! $isMuslim) {
+            $requiredReligion = strtolower(trim($leaveType->religion ?: 'muslim'));
+            $matched = false;
+            if ($requiredReligion === 'muslim') {
+                $matched = $isMuslim;
+            } else {
+                $matched = ($rawEmployeeReligion === $requiredReligion)
+                    || str_contains($rawEmployeeReligion, $requiredReligion)
+                    || str_contains($requiredReligion, $rawEmployeeReligion);
+            }
+
+            if (! $matched) {
+                $religionLabel = $leaveType->religion ?: 'Muslim';
                 throw ValidationException::withMessages([
-                    'leave_type_id' => ['Pilgrimage Leave is only applicable for Muslim employees.'],
+                    'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$religionLabel} employees."],
                 ]);
             }
         }
@@ -315,7 +326,7 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status', 'gender', 'requires_handover')
+            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status', 'gender', 'religion', 'requires_handover')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
             ->get();
@@ -410,15 +421,26 @@ class LeaveRequestController extends Controller
             }
 
             $isPilgrimage = $leaveType->code === 'PILGRIMAGE' || str_contains(strtolower($leaveType->leave_name), 'pilgrim') || str_contains(strtolower($leaveType->leave_name), 'hajj');
-            if ($isPilgrimage) {
+            if (! empty($leaveType->religion) || $isPilgrimage) {
                 $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
                 $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
                     || str_contains($rawEmployeeReligion, 'muslim')
                     || str_contains($rawEmployeeReligion, 'islam');
 
-                if (! $isMuslim) {
+                $requiredReligion = strtolower(trim($leaveType->religion ?: 'muslim'));
+                $matched = false;
+                if ($requiredReligion === 'muslim') {
+                    $matched = $isMuslim;
+                } else {
+                    $matched = ($rawEmployeeReligion === $requiredReligion)
+                        || str_contains($rawEmployeeReligion, $requiredReligion)
+                        || str_contains($requiredReligion, $rawEmployeeReligion);
+                }
+
+                if (! $matched) {
+                    $religionLabel = $leaveType->religion ?: 'Muslim';
                     throw ValidationException::withMessages([
-                        'leave_type_id' => ["{$leaveType->leave_name} is only applicable for Muslim employees."],
+                        'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$religionLabel} employees."],
                     ]);
                 }
             }

@@ -50,6 +50,7 @@ class StoreDocumentTypeRequest extends FormRequest
             'requires_reminder' => ['nullable', 'boolean'],
             'record_source' => ['nullable', 'string', Rule::in(['uploaded', 'generated'])],
             'requires_attachments' => ['nullable', 'boolean'],
+            'validity_days' => ['nullable', 'integer', 'min:1'],
         ];
     }
 
@@ -71,6 +72,7 @@ class StoreDocumentTypeRequest extends FormRequest
             'requires_reminder' => (bool) ($validated['requires_reminder'] ?? false),
             'record_source' => $validated['record_source'] ?? null,
             'requires_attachments' => (bool) ($validated['requires_attachments'] ?? false),
+            'validity_days' => isset($validated['validity_days']) && $validated['validity_days'] !== '' ? (int) $validated['validity_days'] : null,
         ];
     }
 }

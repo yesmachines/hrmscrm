@@ -170,8 +170,12 @@ class LetterRequestController extends Controller
 
     protected function renderDocumentHtml(EmployeeDocument $doc, ?Employee $employee, array $tempDetails = []): ?string
     {
+        $employee ??= Employee::query()
+            ->with(['user', 'department', 'organisation'])
+            ->find($doc->employee_id);
+
         $template = $doc->documentTemplate
-            ?? $doc->documentType?->documentTemplates()->where('status', 1)->first();
+            ?? $doc->documentType?->resolveTemplate($employee?->organisation_id);
 
         if (! $template || empty($template->template_code)) {
             return null;

@@ -9,10 +9,12 @@ type Option = {
     id: number;
     name: string;
     code?: string;
+    short_name?: string;
 };
 
 type DocumentTemplateFormValues = {
     document_type_id?: number | string | null;
+    organisation_id?: number | string | null;
     template_name?: string | null;
     template_code?: string | null;
     status?: number | string | null;
@@ -22,6 +24,7 @@ type Props = {
     errors: Errors;
     defaults?: DocumentTemplateFormValues;
     documentTypes?: Option[];
+    organisations?: Option[];
 };
 
 const fieldClass =
@@ -51,6 +54,7 @@ export default function DocumentTemplateFormFields({
     errors,
     defaults = {},
     documentTypes = [],
+    organisations = [],
 }: Props) {
     return (
         <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
@@ -59,7 +63,7 @@ export default function DocumentTemplateFormFields({
                     Template details
                 </h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                    Link a template to a document type
+                    Link a template to a document type and optional organisation
                 </p>
             </div>
 
@@ -81,6 +85,27 @@ export default function DocumentTemplateFormFields({
                             <option key={type.id} value={type.id}>
                                 {type.name}
                                 {type.code ? ` (${type.code})` : ''}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+
+                <Field
+                    label="Organisation"
+                    name="organisation_id"
+                    error={errors.organisation_id}
+                >
+                    <select
+                        id="organisation_id"
+                        name="organisation_id"
+                        defaultValue={defaults.organisation_id ?? ''}
+                        className={fieldClass}
+                    >
+                        <option value="">All Organisations (General)</option>
+                        {organisations.map((org) => (
+                            <option key={org.id} value={org.id}>
+                                {org.name}
+                                {org.short_name ? ` (${org.short_name})` : ''}
                             </option>
                         ))}
                     </select>

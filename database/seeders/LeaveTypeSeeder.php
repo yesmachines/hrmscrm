@@ -138,6 +138,7 @@ class LeaveTypeSeeder extends Seeder
                 'allow_balance' => false,
                 'status' => 1,
                 'requires_handover' => true,
+                'religion' => 'Muslim',
             ],
         ];
 

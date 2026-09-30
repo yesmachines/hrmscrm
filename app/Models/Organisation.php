@@ -29,4 +29,9 @@ class Organisation extends Model
     {
         return $this->hasMany(OfficeLocation::class);
     }
+
+    public function documentTemplates(): HasMany
+    {
+        return $this->hasMany(DocumentTemplate::class);
+    }
 }

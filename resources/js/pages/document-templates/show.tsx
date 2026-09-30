@@ -9,10 +9,12 @@ import { dashboard } from '@/routes';
 type Template = {
     id: number;
     document_type_id: number;
+    organisation_id?: number | null;
     template_name: string;
     template_code: string;
     status: number;
     document_type: { id: number; name: string; code: string } | null;
+    organisation?: { id: number; name: string; short_name?: string } | null;
 };
 
 function Detail({
@@ -112,6 +114,14 @@ export default function DocumentTemplatesShow({
                             template.document_type
                                 ? `${template.document_type.name} (${template.document_type.code})`
                                 : null
+                        }
+                    />
+                    <Detail
+                        label="Organisation"
+                        value={
+                            template.organisation
+                                ? `${template.organisation.name}${template.organisation.short_name ? ` (${template.organisation.short_name})` : ''}`
+                                : 'All Organisations (General)'
                         }
                     />
                     <Detail

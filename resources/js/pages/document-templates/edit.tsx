@@ -10,23 +10,28 @@ type Option = {
     id: number;
     name: string;
     code?: string;
+    short_name?: string;
 };
 
 type Template = {
     id: number;
     document_type_id: number;
+    organisation_id?: number | null;
     template_name: string;
     template_code: string;
     status: number;
     document_type: { id: number; name: string; code: string } | null;
+    organisation?: { id: number; name: string; short_name?: string } | null;
 };
 
 export default function DocumentTemplatesEdit({
     template,
     documentTypes,
+    organisations = [],
 }: {
     template: Template;
     documentTypes: Option[];
+    organisations?: Option[];
 }) {
     setLayoutProps({
         breadcrumbs: [
@@ -66,6 +71,7 @@ export default function DocumentTemplatesEdit({
                                 errors={errors}
                                 defaults={template}
                                 documentTypes={documentTypes}
+                                organisations={organisations}
                             />
 
                             <div className="flex items-center justify-end gap-3">

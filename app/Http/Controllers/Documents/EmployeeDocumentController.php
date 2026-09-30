@@ -143,6 +143,8 @@ class EmployeeDocumentController extends Controller
         $request->validate([
             'employee_id' => 'required|integer',
             'document_type_id' => 'required|exists:document_types,id',
+            'document_template_id' => 'nullable|exists:document_templates,id',
+            'organisation_id' => 'nullable|integer|exists:organisations,id',
             'document_number' => 'nullable|string|max:100',
             'document_title' => 'nullable|string|max:255',
             'issue_date' => 'nullable|date',
@@ -153,16 +155,22 @@ class EmployeeDocumentController extends Controller
         ]);
 
         $docType = DocumentType::query()->findOrFail($request->input('document_type_id'));
+        $employee = Employee::query()->find($request->input('employee_id'));
+        $organisationId = $request->input('organisation_id') ?? $employee?->organisation_id;
+        $templateId = $request->input('document_template_id')
+            ?? $docType->resolveTemplate($organisationId)?->id;
 
         $status = $request->input('status');
         if (! in_array($status, ['submitted', 'approved', 'draft'], true)) {
             $status = $docType->requires_hr_approval ? 'submitted' : 'approved';
         }
 
-        DB::transaction(function () use ($request, $docType, $status) {
+        DB::transaction(function () use ($request, $docType, $status, $organisationId, $templateId) {
             $document = EmployeeDocument::query()->create([
                 'employee_id' => $request->input('employee_id'),
+                'organisation_id' => $organisationId,
                 'document_type_id' => $docType->id,
+                'document_template_id' => $templateId,
                 'document_number' => $request->input('document_number'),
                 'document_title' => $request->input('document_title') ?? $docType->document_name,
                 'issue_date' => $request->input('issue_date'),
@@ -335,8 +343,12 @@ class EmployeeDocumentController extends Controller
 
     protected function renderDocumentHtml(EmployeeDocument $doc, ?Employee $employee): ?string
     {
+        $employee ??= Employee::query()
+            ->with(['user', 'department', 'organisation'])
+            ->find($doc->employee_id);
+
         $template = $doc->documentTemplate
-            ?? $doc->documentType?->documentTemplates()->where('status', 1)->first();
+            ?? $doc->documentType?->resolveTemplate($employee?->organisation_id);
 
         if (! $template || empty($template->template_code)) {
             return null;

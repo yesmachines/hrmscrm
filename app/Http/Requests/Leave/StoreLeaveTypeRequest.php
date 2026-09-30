@@ -28,7 +28,7 @@ class StoreLeaveTypeRequest extends FormRequest
             }
         }
 
-        foreach (['max_days', 'annual_limit', 'gender'] as $field) {
+        foreach (['max_days', 'annual_limit', 'gender', 'religion'] as $field) {
             if ($this->input($field) === '') {
                 $this->merge([$field => null]);
             }
@@ -53,6 +53,7 @@ class StoreLeaveTypeRequest extends FormRequest
             'max_days' => ['nullable', 'integer', 'min:0'],
             'annual_limit' => ['required', 'integer', 'min:0'],
             'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'all'])],
+            'religion' => ['nullable', 'string', 'max:100'],
             'allow_once' => ['nullable', 'boolean'],
             'allow_balance' => ['nullable', 'boolean'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
@@ -87,6 +88,7 @@ class StoreLeaveTypeRequest extends FormRequest
             'max_days' => isset($validated['max_days']) && $validated['max_days'] !== null ? (int) $validated['max_days'] : null,
             'annual_limit' => (int) $validated['annual_limit'],
             'gender' => $validated['gender'] ?? null,
+            'religion' => $validated['religion'] ?? null,
             'allow_once' => (bool) ($validated['allow_once'] ?? false),
             'allow_balance' => (bool) ($validated['allow_balance'] ?? true),
             'status' => (int) ($validated['status'] ?? 1),

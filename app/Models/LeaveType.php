@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'max_days',
     'annual_limit',
     'gender',
+    'religion',
     'allow_once',
     'allow_balance',
     'status',
@@ -35,6 +36,7 @@ class LeaveType extends Model
             'allow_balance' => 'boolean',
             'requires_handover' => 'boolean',
             'status' => 'integer',
+            'religion' => 'string',
         ];
     }
 

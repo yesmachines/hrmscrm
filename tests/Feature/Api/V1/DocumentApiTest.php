@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\DocumentTemplate;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
+use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Database\Seeders\DocumentSeeder;
@@ -151,4 +153,80 @@ test('documents letter request endpoint submits noc request', function () {
     $detailsResponse = $this->withToken($token)->getJson("/api/v1/documents/letters/{$letter->id}");
     $detailsResponse->assertOk()
         ->assertJsonPath('data.purpose', 'Employment Visa Process');
+});
+
+test('documents upload and letter requests accept organisation_id and document_template_id', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Org Doc User',
+        'email' => 'orgdoc@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-DOCS-004',
+        'designation' => 'Analyst',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $org = Organisation::query()->firstOrCreate(
+        ['short_name' => 'TEST_ORG'],
+        ['org_name' => 'Test Organisation', 'status' => 1]
+    );
+
+    $docType = DocumentType::query()->where('document_code', 'passport')->first();
+    $template = DocumentTemplate::query()->create([
+        'document_type_id' => $docType->id,
+        'organisation_id' => $org->id,
+        'template_name' => 'Org Passport Template',
+        'template_code' => 'org_passport_tpl',
+        'status' => 1,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+    $file = UploadedFile::fake()->create('passport.pdf', 500, 'application/pdf');
+
+    // 1. Upload document with organisation_id and document_template_id
+    $uploadResponse = $this->withToken($token)->postJson('/api/v1/documents', [
+        'document_type_id' => $docType->id,
+        'document_template_id' => $template->id,
+        'organisation_id' => $org->id,
+        'document_number' => 'ORG-PASSPORT-01',
+        'document_title' => 'Org Passport Copy',
+        'file' => $file,
+    ]);
+
+    $uploadResponse->assertStatus(201);
+
+    $uploadedDoc = EmployeeDocument::query()->where('document_number', 'ORG-PASSPORT-01')->first();
+    expect($uploadedDoc)->not->toBeNull()
+        ->and($uploadedDoc->organisation_id)->toBe($org->id)
+        ->and($uploadedDoc->document_template_id)->toBe($template->id);
+
+    // 2. Query documents filtered by organisation_id
+    $listResponse = $this->withToken($token)->getJson("/api/v1/documents?organisation_id={$org->id}");
+    $listResponse->assertOk()
+        ->assertJsonPath('statusCode', 200);
+
+    $items = collect($listResponse->json('data'));
+    expect($items->pluck('id'))->toContain($uploadedDoc->id);
+
+    // 3. Submit letter request with organisation_id
+    $nocType = DocumentType::query()->where('document_code', 'noc')->first();
+    $letterResponse = $this->withToken($token)->postJson('/api/v1/documents/letters', [
+        'document_type_id' => $nocType->id,
+        'document_template_id' => $template->id,
+        'organisation_id' => $org->id,
+        'purpose' => 'Bank Loan Application',
+        'details' => 'NOC for auto finance',
+    ]);
+
+    $letterResponse->assertStatus(201);
+    $letterDoc = EmployeeDocument::query()->where('employee_id', $employee->id)->where('document_type_id', $nocType->id)->first();
+    expect($letterDoc)->not->toBeNull()
+        ->and($letterDoc->organisation_id)->toBe($org->id)
+        ->and($letterDoc->document_template_id)->toBe($template->id);
 });

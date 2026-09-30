@@ -124,6 +124,7 @@ class LeaveTypeController extends Controller
             'max_days' => $leaveType->max_days,
             'annual_limit' => $leaveType->annual_limit,
             'gender' => $leaveType->gender,
+            'religion' => $leaveType->religion,
             'allow_once' => (int) $leaveType->allow_once,
             'allow_balance' => (int) $leaveType->allow_balance,
             'status' => (int) $leaveType->status,

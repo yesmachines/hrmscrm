@@ -14,6 +14,7 @@ type LeaveTypeFormValues = {
     max_days?: number | string | null;
     annual_limit?: number | string | null;
     gender?: string | null;
+    religion?: string | null;
     allow_once?: number | string | null;
     allow_balance?: number | string | null;
     status?: number | string | null;
@@ -148,6 +149,15 @@ export default function LeaveTypeFormFields({
                         <option value="male">Male</option>
                         <option value="female">Female</option>
                     </select>
+                </Field>
+
+                <Field label="Religion" name="religion" error={errors.religion}>
+                    <Input
+                        id="religion"
+                        name="religion"
+                        placeholder="e.g. Muslim, Christian, Hindu (optional)"
+                        defaultValue={defaults.religion ?? ''}
+                    />
                 </Field>
 
                 <Field label="Max days (optional)" name="max_days" error={errors.max_days}>

@@ -111,18 +111,18 @@ class DocumentTypeController extends Controller
      */
     public function downloadBlankForm(Request $request, DocumentType $document_type): HttpResponse
     {
-        $template = $document_type->documentTemplates()->where('status', 1)->first();
-
-        if (! $template || empty($template->template_code)) {
-            abort(404, 'No blank form template available for this document type.');
-        }
-
         $user = $request->user();
         $employee = null;
         if ($user) {
             $employee = Employee::where('user_id', $user->id)
-                ->with(['department', 'user'])
+                ->with(['department', 'user', 'organisation'])
                 ->first();
+        }
+
+        $template = $document_type->resolveTemplate($employee?->organisation_id);
+
+        if (! $template || empty($template->template_code)) {
+            abort(404, 'No blank form template available for this document type.');
         }
 
         $isPureBlank = $request->boolean('pure_blank') || ! $employee;
@@ -201,6 +201,7 @@ class DocumentTypeController extends Controller
             'requires_reminder' => $type->requires_reminder,
             'record_source' => $type->record_source,
             'requires_attachments' => $type->requires_attachments,
+            'validity_days' => $type->validity_days,
             'has_blank_form' => $hasTemplate,
             'blank_form_url' => $hasTemplate ? route('document-types.blank-form', $type->id) : null,
             'category' => $type->category

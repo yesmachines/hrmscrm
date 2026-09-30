@@ -7,6 +7,7 @@ use App\Http\Requests\Documents\StoreDocumentTemplateRequest;
 use App\Http\Requests\Documents\UpdateDocumentTemplateRequest;
 use App\Models\DocumentTemplate;
 use App\Models\DocumentType;
+use App\Models\Organisation;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -16,7 +17,7 @@ class DocumentTemplateController extends Controller
     public function index(): Response
     {
         $templates = DocumentTemplate::query()
-            ->with('documentType:id,document_name,document_code')
+            ->with(['documentType:id,document_name,document_code', 'organisation:id,org_name,short_name'])
             ->orderByDesc('id')
             ->paginate(10)
             ->withQueryString()
@@ -31,6 +32,7 @@ class DocumentTemplateController extends Controller
     {
         return Inertia::render('document-templates/create', [
             'documentTypes' => $this->documentTypes(),
+            'organisations' => $this->organisations(),
         ]);
     }
 
@@ -48,7 +50,7 @@ class DocumentTemplateController extends Controller
 
     public function show(DocumentTemplate $document_template): Response
     {
-        $document_template->load('documentType:id,document_name,document_code');
+        $document_template->load(['documentType:id,document_name,document_code', 'organisation:id,org_name,short_name']);
 
         return Inertia::render('document-templates/show', [
             'template' => $this->payload($document_template),
@@ -57,11 +59,12 @@ class DocumentTemplateController extends Controller
 
     public function edit(DocumentTemplate $document_template): Response
     {
-        $document_template->load('documentType:id,document_name,document_code');
+        $document_template->load(['documentType:id,document_name,document_code', 'organisation:id,org_name,short_name']);
 
         return Inertia::render('document-templates/edit', [
             'template' => $this->payload($document_template),
             'documentTypes' => $this->documentTypes(),
+            'organisations' => $this->organisations(),
         ]);
     }
 
@@ -108,6 +111,23 @@ class DocumentTemplateController extends Controller
     }
 
     /**
+     * @return list<array{id: int, name: string, short_name: string}>
+     */
+    private function organisations(): array
+    {
+        return Organisation::query()
+            ->where('status', 1)
+            ->orderBy('org_name')
+            ->get(['id', 'org_name', 'short_name'])
+            ->map(fn (Organisation $org): array => [
+                'id' => $org->id,
+                'name' => $org->org_name,
+                'short_name' => $org->short_name,
+            ])
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function payload(DocumentTemplate $template): array
@@ -115,6 +135,7 @@ class DocumentTemplateController extends Controller
         return [
             'id' => $template->id,
             'document_type_id' => $template->document_type_id,
+            'organisation_id' => $template->organisation_id,
             'template_name' => $template->template_name,
             'template_code' => $template->template_code,
             'status' => $template->status,
@@ -123,6 +144,13 @@ class DocumentTemplateController extends Controller
                     'id' => $template->documentType->id,
                     'name' => $template->documentType->document_name,
                     'code' => $template->documentType->document_code,
+                ]
+                : null,
+            'organisation' => $template->organisation
+                ? [
+                    'id' => $template->organisation->id,
+                    'name' => $template->organisation->org_name,
+                    'short_name' => $template->organisation->short_name,
                 ]
                 : null,
         ];

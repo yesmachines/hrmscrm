@@ -10,12 +10,15 @@ type Option = {
     id: number;
     name: string;
     code?: string;
+    short_name?: string;
 };
 
 export default function DocumentTemplatesCreate({
     documentTypes,
+    organisations = [],
 }: {
     documentTypes: Option[];
+    organisations?: Option[];
 }) {
     return (
         <>
@@ -36,6 +39,7 @@ export default function DocumentTemplatesCreate({
                             <DocumentTemplateFormFields
                                 errors={errors}
                                 documentTypes={documentTypes}
+                                organisations={organisations}
                             />
 
                             <div className="flex items-center justify-end gap-3">

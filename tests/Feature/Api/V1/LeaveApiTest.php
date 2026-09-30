@@ -1077,3 +1077,64 @@ test('applying pilgrimage leave succeeds for muslim employee', function () {
         'status' => 'applied',
     ]);
 });
+
+test('leave meta returns religion and filters leave types by religion', function () {
+    $christianUser = SalesCrmUser::query()->create([
+        'name' => 'John Christian',
+        'email' => 'john.christian@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $christianEmployee = Employee::query()->create([
+        'user_id' => $christianUser->id,
+        'emp_num' => 'EMP-CHR-01',
+        'designation' => 'Designer',
+        'division' => 'Creative',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    EmployeeProfile::query()->create([
+        'employee_id' => $christianEmployee->id,
+        'religion' => 'Christian',
+    ]);
+
+    $universalLeave = LeaveType::query()->create([
+        'leave_name' => 'General Sick Leave',
+        'code' => 'GEN_SICK',
+        'is_paid' => true,
+        'status' => 1,
+        'religion' => null,
+    ]);
+
+    $muslimOnlyLeave = LeaveType::query()->create([
+        'leave_name' => 'Islamic Pilgrimage',
+        'code' => 'ISLAM_PILGRIM',
+        'is_paid' => false,
+        'status' => 1,
+        'religion' => 'Muslim',
+    ]);
+
+    $christianOnlyLeave = LeaveType::query()->create([
+        'leave_name' => 'Christian Retreat',
+        'code' => 'CHR_RETREAT',
+        'is_paid' => true,
+        'status' => 1,
+        'religion' => 'Christian',
+    ]);
+
+    $token = $christianUser->createToken('test')->plainTextToken;
+    $response = $this->withToken($token)->getJson('/api/v1/leaves/meta');
+
+    $response->assertOk()
+        ->assertJsonPath('statusCode', 200);
+
+    $leaveTypeCodes = collect($response->json('data.leave_types'))->pluck('code')->all();
+    expect($leaveTypeCodes)->toContain('GEN_SICK')
+        ->and($leaveTypeCodes)->toContain('CHR_RETREAT')
+        ->and($leaveTypeCodes)->not->toContain('ISLAM_PILGRIM');
+
+    $chrRetreat = collect($response->json('data.leave_types'))->firstWhere('code', 'CHR_RETREAT');
+    expect($chrRetreat['religion'])->toBe('Christian');
+});

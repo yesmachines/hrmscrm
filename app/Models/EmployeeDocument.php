@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'employee_id',
+    'organisation_id',
     'document_type_id',
     'document_number',
     'document_title',
@@ -25,9 +26,15 @@ class EmployeeDocument extends Model
     protected function casts(): array
     {
         return [
+            'organisation_id' => 'integer',
             'issue_date' => 'date',
             'expiry_date' => 'date',
         ];
+    }
+
+    public function organisation(): BelongsTo
+    {
+        return $this->belongsTo(Organisation::class);
     }
 
     public function documentType(): BelongsTo

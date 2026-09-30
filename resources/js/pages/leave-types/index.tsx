@@ -13,6 +13,7 @@ type LeaveTypeRow = {
     is_paid: number;
     requires_approval: number;
     status: number;
+    religion: string | null;
 };
 
 type PaginatedLeaveTypes = {
@@ -55,6 +56,9 @@ export default function LeaveTypesIndex({
                                 <th className="hidden px-4 py-3 font-medium md:table-cell">
                                     Approval
                                 </th>
+                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                                    Religion
+                                </th>
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     Status
                                 </th>
@@ -67,7 +71,7 @@ export default function LeaveTypesIndex({
                             {leaveTypes.data.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={6}
+                                        colSpan={7}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
                                         No leave types found.{' '}
@@ -96,6 +100,15 @@ export default function LeaveTypesIndex({
                                             {row.requires_approval === 1
                                                 ? 'Required'
                                                 : 'Not required'}
+                                        </td>
+                                        <td className="hidden px-4 py-3 lg:table-cell">
+                                            {row.religion ? (
+                                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
+                                                    {row.religion}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">Universal</span>
+                                            )}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <span

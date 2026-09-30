@@ -9,10 +9,12 @@ import { dashboard } from '@/routes';
 type TemplateRow = {
     id: number;
     document_type_id: number;
+    organisation_id?: number | null;
     template_name: string;
     template_code: string;
     status: number;
     document_type: { id: number; name: string; code: string } | null;
+    organisation?: { id: number; name: string; short_name?: string } | null;
 };
 
 type PaginatedTemplates = {
@@ -55,6 +57,9 @@ export default function DocumentTemplatesIndex({
                                 <th className="hidden px-4 py-3 font-medium md:table-cell">
                                     Document type
                                 </th>
+                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                                    Organisation
+                                </th>
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     Status
                                 </th>
@@ -67,7 +72,7 @@ export default function DocumentTemplatesIndex({
                             {templates.data.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={5}
+                                        colSpan={6}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
                                         No document templates found.{' '}
@@ -107,6 +112,17 @@ export default function DocumentTemplatesIndex({
                                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                                                 {row.document_type?.name ?? '—'}
                                             </span>
+                                        </td>
+                                        <td className="hidden px-4 py-3 lg:table-cell">
+                                            {row.organisation ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                                    {row.organisation.short_name || row.organisation.name}
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                                    All Organisations
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <span

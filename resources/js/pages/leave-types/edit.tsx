@@ -16,6 +16,7 @@ type LeaveType = {
     max_days: number | null;
     annual_limit: number | null;
     gender: string | null;
+    religion: string | null;
     allow_once: number;
     allow_balance: number;
     status: number;

@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'requires_reminder',
     'record_source',
     'requires_attachments',
+    'validity_days',
 ])]
 class DocumentType extends Model
 {
@@ -32,6 +33,7 @@ class DocumentType extends Model
             'requires_hr_approval' => 'boolean',
             'requires_reminder' => 'boolean',
             'requires_attachments' => 'boolean',
+            'validity_days' => 'integer',
         ];
     }
 
@@ -48,5 +50,20 @@ class DocumentType extends Model
     public function documentTemplates(): HasMany
     {
         return $this->hasMany(DocumentTemplate::class);
+    }
+
+    public function resolveTemplate(?int $organisationId = null): ?DocumentTemplate
+    {
+        $query = $this->documentTemplates()->where('status', 1);
+
+        if ($organisationId) {
+            $orgTemplate = (clone $query)->where('organisation_id', $organisationId)->first();
+            if ($orgTemplate) {
+                return $orgTemplate;
+            }
+        }
+
+        return (clone $query)->whereNull('organisation_id')->first()
+            ?? $query->first();
     }
 }
