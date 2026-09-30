@@ -721,11 +721,13 @@ class DocumentController extends Controller
         }
 
         $doc = EmployeeDocument::query()
-            ->with(['documentType', 'documentTemplate', 'requestDetails', 'histories'])
+            ->with(['documentType', 'documentTemplate', 'requestDetails', 'histories', 'files' => fn ($q) => $q->orderByDesc('id')])
             ->where('employee_id', $employee->id)
             ->findOrFail($id);
 
         $details = $doc->requestDetails->pluck('field_value', 'field_key');
+        $latestFile = $doc->files->first();
+        $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
 
         return $this->successResponse([
             'id' => $doc->id,
@@ -734,14 +736,16 @@ class DocumentController extends Controller
             'details' => $details['details'] ?? 'Requesting a No Objection Certificate for embassy submission regarding the new employment visa renewal and international mobility transfer.',
             'to_address' => $details['to_address'] ?? null,
             'visa_designation' => $details['visa_designation'] ?? null,
+            'salary_amount' => $details['salary_amount'] ?? null,
+            'bank_iban' => $details['bank_iban'] ?? null,
+            'destination_country' => $details['destination_country'] ?? null,
             'applied_date' => $doc->created_at?->format('d M Y') ?? '12 JAN 2026',
+            'approved_date' => $doc->status === 'approved' ? ($doc->updated_at?->format('d M Y') ?? null) : null,
             'status' => ucfirst($doc->status),
             'remarks' => $doc->remarks,
-            'template' => $doc->documentTemplate ? [
-                'id' => $doc->documentTemplate->id,
-                'template_name' => $doc->documentTemplate->template_name,
-                'template_code' => $doc->documentTemplate->template_code,
-            ] : null,
+            'file_url' => $fileUrl,
+            'download_url' => $latestFile ? url('storage/'.$latestFile->file_path) : null,
+            'has_generated_file' => (bool) $latestFile,
         ], 'Letter request details retrieved successfully.');
     }
 }
