@@ -7,7 +7,6 @@ use App\Models\Idea;
 use App\Models\SalesCrm\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-
 use OpenApi\Attributes as OA;
 
 class IdeaController extends Controller

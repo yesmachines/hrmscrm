@@ -9,7 +9,6 @@ use App\Models\SalesCrm\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-
 use OpenApi\Attributes as OA;
 
 class RewardController extends Controller
