@@ -11,12 +11,32 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use OpenApi\Attributes as OA;
 
 class EmployeeController extends Controller
 {
     /**
      * Get a listing of employees (with search, filtering, and pagination support).
      */
+    #[OA\Get(
+        path: '/api/v1/employees',
+        summary: 'Get employees list with search and filters',
+        security: [['sanctum' => []]],
+        tags: ['Employees'],
+        parameters: [
+            new OA\Parameter(name: 'search', in: 'query', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'department_id', in: 'query', schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'exclude_me', in: 'query', schema: new OA\Schema(type: 'boolean')),
+            new OA\Parameter(name: 'with_profile', in: 'query', schema: new OA\Schema(type: 'boolean')),
+            new OA\Parameter(name: 'all', in: 'query', schema: new OA\Schema(type: 'boolean')),
+            new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer', default: 15)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Employees retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -111,6 +131,21 @@ class EmployeeController extends Controller
     /**
      * Get single employee details.
      */
+    #[OA\Get(
+        path: '/api/v1/employees/{id}',
+        summary: 'Get employee details by ID',
+        security: [['sanctum' => []]],
+        tags: ['Employees'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'with_profile', in: 'query', schema: new OA\Schema(type: 'boolean')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Employee details retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee not found'),
+        ]
+    )]
     public function show(Request $request, int|string $id): JsonResponse
     {
         $user = $request->user();

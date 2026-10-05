@@ -1,0 +1,855 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "HRMS CRM API Documentation",
+        "description": "API documentation for the HRMS CRM application",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://hrmscrm.test",
+            "description": "Local Development Server"
+        },
+        {
+            "url": "https://ymhrms.girafdev.com",
+            "description": "Demo Production Server"
+        }
+    ],
+    "paths": {
+        "/api/v1/assets": {
+            "get": {
+                "tags": [
+                    "Assets"
+                ],
+                "summary": "Get assets list",
+                "description": "List all assets assigned to the authenticated employee (or all inventory for HR/Admin with ?all=1).",
+                "operationId": "88c700e21f1f3d103099eaf4feff4234",
+                "responses": {
+                    "200": {
+                        "description": "Assets retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/login": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "User login",
+                "operationId": "bae68d1c55329ecb6e41f48285840c8f",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "user@example.com"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "format": "password",
+                                        "example": "password123"
+                                    },
+                                    "device_name": {
+                                        "type": "string",
+                                        "example": "mobile"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful login",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string"
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "Bearer"
+                                        },
+                                        "user": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer"
+                                                },
+                                                "name": {
+                                                    "type": "string"
+                                                },
+                                                "email": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                }
+            }
+        },
+        "/api/v1/me": {
+            "get": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Get authenticated user details",
+                "operationId": "13b43df400e475a157538f73617b8c3d",
+                "responses": {
+                    "200": {
+                        "description": "User details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "email": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/logout": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "User logout",
+                "operationId": "c5cdd87fdbf9d0f95dede875bd023dec",
+                "responses": {
+                    "200": {
+                        "description": "Logged out successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/documents/categories": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Get document categories with counts",
+                "description": "Categories Hub (Matching Figma Main Documents Hub).",
+                "operationId": "d125d14895e717b2240dcff02dc2ab01",
+                "responses": {
+                    "200": {
+                        "description": "Document categories retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/documents/types": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Get document types",
+                "description": "Document Types options for Upload Bottom Sheet (3x3 grid).",
+                "operationId": "aff747de415d2a0ede2f4ce05152242a",
+                "parameters": [
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "category_code",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Document types retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/documents/letters": {
+            "get": {
+                "tags": [
+                    "Documents - Letters"
+                ],
+                "summary": "Get employee letter requests list",
+                "description": "Letter Requests List (Matching iPhone 16 Plus - 12).",
+                "operationId": "757df955729bd244985f8260b24d2072",
+                "responses": {
+                    "200": {
+                        "description": "Letter requests retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Documents - Letters"
+                ],
+                "summary": "Submit a new letter request",
+                "description": "Submit Letter Request (NOC, Salary Certificate, Salary Transfer Letter, Pay Slip).",
+                "operationId": "d3d2a25c46a55dc55f4c55497a7f6f0f",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "document_type_id",
+                                    "purpose"
+                                ],
+                                "properties": {
+                                    "document_type_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "document_template_id": {
+                                        "type": "integer",
+                                        "nullable": true
+                                    },
+                                    "organisation_id": {
+                                        "type": "integer",
+                                        "nullable": true
+                                    },
+                                    "purpose": {
+                                        "type": "string",
+                                        "example": "Employment Visa Process"
+                                    },
+                                    "details": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "to_address": {
+                                        "type": "string",
+                                        "nullable": true
+                                    },
+                                    "visa_designation": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Letter request submitted successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/documents/letters/{id}": {
+            "get": {
+                "tags": [
+                    "Documents - Letters"
+                ],
+                "summary": "Get letter request details",
+                "description": "Letter Request Details Bottom Sheet (Matching iPhone 16 Plus - 13).",
+                "operationId": "7fbbe1c059a10c1a7a69158f41fab7ea",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Letter request details retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee or letter request not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/employees": {
+            "get": {
+                "tags": [
+                    "Employees"
+                ],
+                "summary": "Get employees list with search and filters",
+                "description": "Get a listing of employees (with search, filtering, and pagination support).",
+                "operationId": "326f2e86fa40a9ba88b1cb5f2d4b62b8",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "department_id",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "exclude_me",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "with_profile",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "all",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Employees retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/employees/{id}": {
+            "get": {
+                "tags": [
+                    "Employees"
+                ],
+                "summary": "Get employee details by ID",
+                "description": "Get single employee details.",
+                "operationId": "b7cb6100cedcac60d8c23d3f9d7c3251",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "with_profile",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Employee details retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/events": {
+            "get": {
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Get events list",
+                "description": "List events with date and type filters.",
+                "operationId": "1845dc9126717378ecce57f9863a2775",
+                "responses": {
+                    "200": {
+                        "description": "Events retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/ideas": {
+            "get": {
+                "tags": [
+                    "Ideas"
+                ],
+                "summary": "Get ideas list",
+                "description": "Get a listing of the user's ideas.",
+                "operationId": "2ad930e5eef261c1f35e7d1db3db3ea1",
+                "responses": {
+                    "200": {
+                        "description": "Ideas retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/leaves/meta": {
+            "get": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Get leave metadata (types, balances, policies)",
+                "description": "Get the metadata for the leave application screen.",
+                "operationId": "93d84abf31d19719395029d6428d8117",
+                "responses": {
+                    "200": {
+                        "description": "Leave metadata retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/leaves": {
+            "get": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Get leave requests history",
+                "description": "Get the leave history (requests) for the authenticated employee.",
+                "operationId": "cf3dbd0161e5e14d0e14c12e8e928fe3",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "year",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Leave requests retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Submit a new leave request",
+                "description": "Submit a new leave request.",
+                "operationId": "dcca8df053754c49c6d66bfee9cee011",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "leave_type_id",
+                                    "start_date",
+                                    "end_date"
+                                ],
+                                "properties": {
+                                    "leave_type_id": {
+                                        "type": "integer"
+                                    },
+                                    "start_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "end_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "reason": {
+                                        "type": "string"
+                                    },
+                                    "handover_person_id": {
+                                        "type": "integer"
+                                    },
+                                    "handover_description": {
+                                        "type": "string"
+                                    },
+                                    "files": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "format": "binary"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Leave request submitted successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/leaves/{id}": {
+            "get": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Get leave request details",
+                "description": "Get details of a single leave request for the authenticated employee.",
+                "operationId": "09ea3dc7d6f6995a9be3de0a2d588afc",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Leave request details retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Leave request not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/rewards/categories": {
+            "get": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Get reward categories",
+                "description": "Get list of active reward categories.",
+                "operationId": "6a9684e7551bc5e5cef433c44d9575df",
+                "responses": {
+                    "200": {
+                        "description": "Reward categories retrieved successfully"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/socials": {
+            "get": {
+                "tags": [
+                    "Social Media"
+                ],
+                "summary": "Get social media feed",
+                "description": "Get social feed (published posts).",
+                "operationId": "3850a86d292ae921d7cccec027f76274",
+                "responses": {
+                    "200": {
+                        "description": "Social feed retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Social Media"
+                ],
+                "summary": "Create a new social post",
+                "description": "Create a new social post.",
+                "operationId": "390cacd8148dfb3a12b129ac0c01884a",
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "content": {
+                                        "type": "string"
+                                    },
+                                    "media": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "format": "binary"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Social post created successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "sanctum": {
+                "type": "http",
+                "description": "Enter your Bearer token in the format: Bearer {token}",
+                "bearerFormat": "JWT",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Assets",
+            "description": "Assets"
+        },
+        {
+            "name": "Authentication",
+            "description": "Authentication"
+        },
+        {
+            "name": "Documents",
+            "description": "Documents"
+        },
+        {
+            "name": "Documents - Letters",
+            "description": "Documents - Letters"
+        },
+        {
+            "name": "Employees",
+            "description": "Employees"
+        },
+        {
+            "name": "Events",
+            "description": "Events"
+        },
+        {
+            "name": "Ideas",
+            "description": "Ideas"
+        },
+        {
+            "name": "Leave Management",
+            "description": "Leave Management"
+        },
+        {
+            "name": "Rewards",
+            "description": "Rewards"
+        },
+        {
+            "name": "Social Media",
+            "description": "Social Media"
+        }
+    ]
+}

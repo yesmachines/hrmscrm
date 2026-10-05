@@ -16,12 +16,24 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use OpenApi\Attributes as OA;
 
 class LeaveController extends Controller
 {
     /**
      * Get the metadata for the leave application screen.
      */
+    #[OA\Get(
+        path: '/api/v1/leaves/meta',
+        summary: 'Get leave metadata (types, balances, policies)',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave metadata retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee not found'),
+        ]
+    )]
     public function meta(Request $request)
     {
         $user = $request->user();
@@ -234,6 +246,35 @@ class LeaveController extends Controller
     /**
      * Submit a new leave request.
      */
+    #[OA\Post(
+        path: '/api/v1/leaves',
+        summary: 'Submit a new leave request',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\MediaType(
+                mediaType: 'multipart/form-data',
+                schema: new OA\Schema(
+                    required: ['leave_type_id', 'start_date', 'end_date'],
+                    properties: [
+                        new OA\Property(property: 'leave_type_id', type: 'integer'),
+                        new OA\Property(property: 'start_date', type: 'string', format: 'date'),
+                        new OA\Property(property: 'end_date', type: 'string', format: 'date'),
+                        new OA\Property(property: 'reason', type: 'string'),
+                        new OA\Property(property: 'handover_person_id', type: 'integer'),
+                        new OA\Property(property: 'handover_description', type: 'string'),
+                        new OA\Property(property: 'files', type: 'array', items: new OA\Items(type: 'string', format: 'binary')),
+                    ]
+                )
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Leave request submitted successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
     public function store(Request $request, LeaveValidationService $validationService)
     {
         $user = $request->user();
@@ -393,6 +434,20 @@ class LeaveController extends Controller
     /**
      * Get the leave history (requests) for the authenticated employee.
      */
+    #[OA\Get(
+        path: '/api/v1/leaves',
+        summary: 'Get leave requests history',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        parameters: [
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'year', in: 'query', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave requests retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request)
     {
         $user = $request->user();
@@ -446,6 +501,20 @@ class LeaveController extends Controller
     /**
      * Get details of a single leave request for the authenticated employee.
      */
+    #[OA\Get(
+        path: '/api/v1/leaves/{id}',
+        summary: 'Get leave request details',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave request details retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Leave request not found'),
+        ]
+    )]
     public function show(Request $request, int|string $id)
     {
         $user = $request->user();

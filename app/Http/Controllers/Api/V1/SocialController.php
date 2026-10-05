@@ -14,11 +14,23 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
+use OpenApi\Attributes as OA;
+
 class SocialController extends Controller
 {
     /**
      * Get social feed (published posts).
      */
+    #[OA\Get(
+        path: '/api/v1/socials',
+        summary: 'Get social media feed',
+        security: [['sanctum' => []]],
+        tags: ['Social Media'],
+        responses: [
+            new OA\Response(response: 200, description: 'Social feed retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $posts = SocialPost::with([
@@ -37,6 +49,28 @@ class SocialController extends Controller
     /**
      * Create a new social post.
      */
+    #[OA\Post(
+        path: '/api/v1/socials',
+        summary: 'Create a new social post',
+        security: [['sanctum' => []]],
+        tags: ['Social Media'],
+        requestBody: new OA\RequestBody(
+            content: new OA\MediaType(
+                mediaType: 'multipart/form-data',
+                schema: new OA\Schema(
+                    properties: [
+                        new OA\Property(property: 'content', type: 'string'),
+                        new OA\Property(property: 'media', type: 'array', items: new OA\Items(type: 'string', format: 'binary')),
+                    ]
+                )
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Social post created successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();

@@ -11,12 +11,23 @@ use App\Models\SalesCrm\Employee;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use OpenApi\Attributes as OA;
 
 class AssetController extends Controller
 {
     /**
      * List all assets assigned to the authenticated employee (or all inventory for HR/Admin with ?all=1).
      */
+    #[OA\Get(
+        path: '/api/v1/assets',
+        summary: 'Get assets list',
+        security: [['sanctum' => []]],
+        tags: ['Assets'],
+        responses: [
+            new OA\Response(response: 200, description: 'Assets retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();

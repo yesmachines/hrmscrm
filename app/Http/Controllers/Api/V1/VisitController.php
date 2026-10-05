@@ -10,6 +10,8 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+use OpenApi\Attributes as OA;
+
 class VisitController extends Controller
 {
     /**

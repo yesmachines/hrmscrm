@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use OpenApi\Attributes as OA;
 
 class DocumentController extends Controller
 {
@@ -41,6 +42,17 @@ class DocumentController extends Controller
     /**
      * Categories Hub (Matching Figma Main Documents Hub).
      */
+    #[OA\Get(
+        path: '/api/v1/documents/categories',
+        summary: 'Get document categories with counts',
+        security: [['sanctum' => []]],
+        tags: ['Documents'],
+        responses: [
+            new OA\Response(response: 200, description: 'Document categories retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee not found'),
+        ]
+    )]
     public function categories(Request $request): JsonResponse
     {
         $employee = $this->getEmployee($request);
@@ -81,6 +93,20 @@ class DocumentController extends Controller
     /**
      * Document Types options for Upload Bottom Sheet (3x3 grid).
      */
+    #[OA\Get(
+        path: '/api/v1/documents/types',
+        summary: 'Get document types',
+        security: [['sanctum' => []]],
+        tags: ['Documents'],
+        parameters: [
+            new OA\Parameter(name: 'category_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'category_code', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Document types retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function types(Request $request): JsonResponse
     {
         $query = DocumentType::query()->with([
@@ -590,6 +616,17 @@ class DocumentController extends Controller
     /**
      * Letter Requests List (Matching iPhone 16 Plus - 12).
      */
+    #[OA\Get(
+        path: '/api/v1/documents/letters',
+        summary: 'Get employee letter requests list',
+        security: [['sanctum' => []]],
+        tags: ['Documents - Letters'],
+        responses: [
+            new OA\Response(response: 200, description: 'Letter requests retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee not found'),
+        ]
+    )]
     public function letters(Request $request): JsonResponse
     {
         $employee = $this->getEmployee($request);
@@ -633,6 +670,33 @@ class DocumentController extends Controller
     /**
      * Submit Letter Request (NOC, Salary Certificate, Salary Transfer Letter, Pay Slip).
      */
+    #[OA\Post(
+        path: '/api/v1/documents/letters',
+        summary: 'Submit a new letter request',
+        security: [['sanctum' => []]],
+        tags: ['Documents - Letters'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['document_type_id', 'purpose'],
+                properties: [
+                    new OA\Property(property: 'document_type_id', type: 'integer', example: 1),
+                    new OA\Property(property: 'document_template_id', type: 'integer', nullable: true),
+                    new OA\Property(property: 'organisation_id', type: 'integer', nullable: true),
+                    new OA\Property(property: 'purpose', type: 'string', example: 'Employment Visa Process'),
+                    new OA\Property(property: 'details', type: 'string', nullable: true),
+                    new OA\Property(property: 'to_address', type: 'string', nullable: true),
+                    new OA\Property(property: 'visa_designation', type: 'string', nullable: true),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Letter request submitted successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee not found'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
     public function requestLetter(Request $request): JsonResponse
     {
         $employee = $this->getEmployee($request);
@@ -708,6 +772,20 @@ class DocumentController extends Controller
     /**
      * Letter Request Details Bottom Sheet (Matching iPhone 16 Plus - 13).
      */
+    #[OA\Get(
+        path: '/api/v1/documents/letters/{id}',
+        summary: 'Get letter request details',
+        security: [['sanctum' => []]],
+        tags: ['Documents - Letters'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Letter request details retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee or letter request not found'),
+        ]
+    )]
     public function letterDetails(Request $request, int $id): JsonResponse
     {
         $employee = $this->getEmployee($request);

@@ -12,6 +12,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+use OpenApi\Attributes as OA;
+
 class EventController extends Controller
 {
     use ApiResponse;
@@ -20,6 +22,16 @@ class EventController extends Controller
     /**
      * List events with date and type filters.
      */
+    #[OA\Get(
+        path: '/api/v1/events',
+        summary: 'Get events list',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        responses: [
+            new OA\Response(response: 200, description: 'Events retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $query = Event::query()

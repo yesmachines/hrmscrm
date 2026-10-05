@@ -8,11 +8,23 @@ use App\Models\SalesCrm\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+use OpenApi\Attributes as OA;
+
 class IdeaController extends Controller
 {
     /**
      * Get a listing of the user's ideas.
      */
+    #[OA\Get(
+        path: '/api/v1/ideas',
+        summary: 'Get ideas list',
+        security: [['sanctum' => []]],
+        tags: ['Ideas'],
+        responses: [
+            new OA\Response(response: 200, description: 'Ideas retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();

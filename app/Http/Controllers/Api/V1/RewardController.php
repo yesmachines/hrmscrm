@@ -10,11 +10,22 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
+use OpenApi\Attributes as OA;
+
 class RewardController extends Controller
 {
     /**
      * Get list of active reward categories.
      */
+    #[OA\Get(
+        path: '/api/v1/rewards/categories',
+        summary: 'Get reward categories',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        responses: [
+            new OA\Response(response: 200, description: 'Reward categories retrieved successfully'),
+        ]
+    )]
     public function categories(): JsonResponse
     {
         $categories = RewardCategory::where('status', 1)
