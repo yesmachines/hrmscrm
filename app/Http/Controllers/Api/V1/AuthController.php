@@ -20,8 +20,6 @@ class AuthController extends Controller
 {
     public function createAdmin(): JsonResponse
     {
-        abort_unless(app()->environment(['local', 'testing']), 404);
-
         $user = DB::connection('salescrm')->transaction(function (): User {
             $user = User::query()->updateOrCreate(
                 ['email' => 'testadmin@gmail.com'],

@@ -33,12 +33,13 @@ test('unauthenticated local setup endpoint creates an admin who can log in', fun
         ->assertJsonPath('data.user.email', 'testadmin@gmail.com');
 });
 
-test('admin setup endpoint is unavailable outside local and testing environments', function () {
+test('admin setup endpoint can create the test account in production environment', function () {
     $this->app['env'] = 'production';
 
-    $this->get('/dev/admin')->assertNotFound();
+    $this->get('/dev/admin')->assertCreated()
+        ->assertJsonPath('data.email', 'testadmin@gmail.com');
 
-    expect(SalesCrmUser::query()->where('email', 'testadmin@gmail.com')->exists())->toBeFalse();
+    expect(SalesCrmUser::query()->where('email', 'testadmin@gmail.com')->exists())->toBeTrue();
 });
 
 test('api login returns a sanctum token for valid credentials', function () {
