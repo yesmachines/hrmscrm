@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LoginRequest;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\SalesCrm\User;
+use App\Support\SalesCrmRoles;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -16,6 +18,47 @@ use OpenApi\Attributes as OA;
 
 class AuthController extends Controller
 {
+    public function createAdmin(): JsonResponse
+    {
+        abort_unless(app()->environment(['local', 'testing']), 404);
+
+        $user = DB::connection('salescrm')->transaction(function (): User {
+            $user = User::query()->updateOrCreate(
+                ['email' => 'testadmin@gmail.com'],
+                [
+                    'name' => 'Test Admin',
+                    'password' => '123456789',
+                    'email_verified_at' => now(),
+                ],
+            );
+
+            $sales = DB::connection('salescrm');
+            $adminRole = $sales->table('roles')->where('name', 'admin')->first();
+
+            if ($adminRole === null) {
+                $sales->table('roles')->insert([
+                    'name' => 'admin',
+                    'guard_name' => 'web',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            SalesCrmRoles::assignRoles($user->id, ['admin']);
+
+            return $user;
+        });
+
+        return response()->json([
+            'message' => 'Admin user created successfully.',
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ],
+        ], 201);
+    }
+
     #[OA\Post(
         path: '/api/v1/login',
         summary: 'User login',
