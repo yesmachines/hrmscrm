@@ -161,12 +161,25 @@ class AssetController extends Controller
     {
         $categories = AssetCategory::query()
             ->where('status', 1)
+            ->withCount(['assets as count'])
             ->select('id', 'category', 'shortcode')
             ->orderBy('category')
             ->get();
 
+            $totalCategories = $categories->count();
+
+        $payload = $categories->map(function ($c) {
+            return [
+                'id' => $c->id,
+                'category' => $c->category,
+                'shortcode' => $c->shortcode,
+                'asset_count' => (int) $c->count,
+            ];
+        });
+
         return $this->successResponse([
-            'categories' => $categories,
+            'categories_count' => (int) $totalCategories,
+            'categories' => $payload,
         ]);
     }
 

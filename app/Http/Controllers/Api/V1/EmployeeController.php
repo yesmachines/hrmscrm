@@ -7,6 +7,7 @@ use App\Models\EmployeeProfile;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Division;
 use App\Models\SalesCrm\Employee;
+use App\Models\AssetAssignment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -89,12 +90,42 @@ class EmployeeController extends Controller
             $query->orderBy('id', 'asc');
         }
 
+        // Optional filter: type=assigned|unassigned
+        if ($request->filled('type')) {
+            $type = strtolower($request->input('type'));
+
+            // Get employee ids who currently have assigned assets
+            $assignedIds = AssetAssignment::query()
+                ->where('status', 'Assigned')
+                ->distinct()
+                ->pluck('assigned_to')
+                ->filter()
+                ->all();
+
+            if ($type === 'assigned') {
+                // If none assigned, make query return empty
+                if (empty($assignedIds)) {
+                    $query->whereIn('id', [0]);
+                } else {
+                    $query->whereIn('id', $assignedIds);
+                }
+            } elseif ($type === 'unassigned') {
+                // If there are assigned ids, exclude them; if none, leave as-is (all are unassigned)
+                if (! empty($assignedIds)) {
+                    $query->whereNotIn('id', $assignedIds);
+                }
+            }
+        }
+
         // Return non-paginated list if requested (e.g. for dropdowns)
         if ($request->boolean('all') || $request->input('paginate') === 'false') {
             $employees = $query->get();
             $data = $this->transformCollection($employees, $request->boolean('with_profile'));
 
-            return $this->successResponse(['employees' => $data]);
+            return $this->successResponse([
+                'employees_count' => (int) $employees->count(),
+                'employees' => $data,
+            ]);
         }
 
         // Default: Paginated response
@@ -103,17 +134,13 @@ class EmployeeController extends Controller
 
         $paginator = $query->paginate($perPage);
 
-        $profiles = $request->boolean('with_profile')
-            ? Employee::profilesFor($paginator->getCollection())
-            : collect();
-
-        $transformedItems = $paginator->getCollection()->map(function (Employee $emp) use ($profiles, $request) {
-            return $this->formatEmployee($emp, $request->boolean('with_profile') ? $profiles->get($emp->id) : null);
-        });
+    // Reuse transformCollection which computes profiles and asset counts in bulk
+    $transformedItems = $this->transformCollection($paginator->getCollection(), $request->boolean('with_profile'));
 
         return response()->json([
             'success' => true,
             'data' => [
+                'employees_count' => (int) $paginator->total(),
                 'employees' => $transformedItems,
                 'pagination' => [
                     'current_page' => $paginator->currentPage(),
@@ -237,7 +264,7 @@ class EmployeeController extends Controller
     /**
      * Format a single employee model.
      */
-    private function formatEmployee(Employee $emp, ?EmployeeProfile $profile = null): array
+    private function formatEmployee(Employee $emp, ?EmployeeProfile $profile = null, int $assetCount = 0): array
     {
         $item = [
             'id' => $emp->id,
@@ -257,6 +284,7 @@ class EmployeeController extends Controller
                 'id' => $emp->department->id,
                 'name' => $emp->department->name,
             ] : null,
+            'asset_count' => $assetCount,
         ];
 
         if ($profile) {
@@ -284,8 +312,21 @@ class EmployeeController extends Controller
     {
         $profiles = $withProfile ? Employee::profilesFor($employees) : collect();
 
-        return $employees->map(function (Employee $emp) use ($profiles, $withProfile) {
-            return $this->formatEmployee($emp, $withProfile ? $profiles->get($emp->id) : null);
+        // compute asset counts for the collection in bulk
+        $employeeIds = $employees->pluck('id')->all();
+        $assetCounts = collect();
+        if (! empty($employeeIds)) {
+            $assetCounts = AssetAssignment::query()
+                ->whereIn('assigned_to', $employeeIds)
+                ->where('status', 'Assigned')
+                ->selectRaw('assigned_to, COUNT(*) AS count')
+                ->groupBy('assigned_to')
+                ->pluck('count', 'assigned_to');
+        }
+
+        return $employees->map(function (Employee $emp) use ($profiles, $withProfile, $assetCounts) {
+            $assetCount = isset($assetCounts[$emp->id]) ? (int) $assetCounts[$emp->id] : 0;
+            return $this->formatEmployee($emp, $withProfile ? $profiles->get($emp->id) : null, $assetCount);
         })->all();
     }
 
