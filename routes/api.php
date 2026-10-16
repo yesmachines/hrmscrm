@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\RewardController;
 use App\Http\Controllers\Api\V1\SocialController;
 use App\Http\Controllers\Api\V1\VisitController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\V1\AssetDashboardController;
 
 Route::prefix('v1')->group(function () {
     Route::post('login', [AuthController::class, 'login'])
@@ -98,4 +99,11 @@ Route::prefix('v1')->group(function () {
         Route::post('socials/{post}/react', [SocialController::class, 'react'])->name('api.v1.socials.react');
         Route::delete('socials/{post}/react', [SocialController::class, 'unreact'])->name('api.v1.socials.react.destroy');
     });
+});
+
+// HR APIs 
+Route::middleware('auth:sanctum')->prefix('v1/hr')->group(function () {
+    // Assets dashboard for HR
+    Route::get('assets/dashboard', [AssetDashboardController::class, 'index'])
+        ->name('api.hr.assets.dashboard');
 });
