@@ -2,7 +2,6 @@
 
 use App\Models\SalesCrm\PersonalAccessToken;
 use App\Models\SalesCrm\User as SalesCrmUser;
-use App\Support\SalesCrmRoles;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -12,34 +11,8 @@ beforeEach(function () {
     DB::connection('salescrm')->table('users')->delete();
 });
 
-test('unauthenticated local setup endpoint creates an admin who can log in', function () {
-    DB::connection('salescrm')->table('roles')->updateOrInsert(
-        ['name' => 'admin', 'guard_name' => 'web'],
-        ['created_at' => now(), 'updated_at' => now()],
-    );
-
-    $this->get('/dev/admin')->assertCreated()
-        ->assertJsonPath('data.email', 'testadmin@gmail.com');
-
-    $user = SalesCrmUser::query()->where('email', 'testadmin@gmail.com')->firstOrFail();
-
-    expect(SalesCrmRoles::userHasLoginAccess($user->id))->toBeTrue()
-        ->and(Hash::check('123456789', $user->password))->toBeTrue();
-
-    $this->postJson('/api/v1/login', [
-        'email' => 'testadmin@gmail.com',
-        'password' => '123456789',
-    ])->assertOk()
-        ->assertJsonPath('data.user.email', 'testadmin@gmail.com');
-});
-
-test('admin setup endpoint can create the test account in production environment', function () {
-    $this->app['env'] = 'production';
-
-    $this->get('/dev/admin')->assertCreated()
-        ->assertJsonPath('data.email', 'testadmin@gmail.com');
-
-    expect(SalesCrmUser::query()->where('email', 'testadmin@gmail.com')->exists())->toBeTrue();
+test('temporary admin setup endpoint is no longer available', function () {
+    $this->get('/dev/admin')->assertNotFound();
 });
 
 test('api login returns a sanctum token for valid credentials', function () {

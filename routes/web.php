@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Assets\AssetCategoryController;
 use App\Http\Controllers\Assets\AssetController;
 use App\Http\Controllers\Assets\AssetRequestController;
@@ -39,9 +38,6 @@ Route::get('/', function () {
         ? redirect()->route('dashboard')
         : redirect()->route('login');
 })->name('home');
-
-Route::get('dev/admin', [AuthController::class, 'createAdmin'])
-    ->name('dev.admin');
 
 Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
