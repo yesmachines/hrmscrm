@@ -105,6 +105,7 @@ class AssetDashboardController extends Controller
             });
 
         return $this->successResponse([
+            'today' => Carbon::now()->format('D, F j'),
             'assets_summary' => $assetsSummary,
             'requests' => [
                 'pending_count' => $pendingCount,
