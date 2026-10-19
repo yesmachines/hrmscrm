@@ -40,6 +40,11 @@ class VisitController extends Controller
             }
         }
 
+        $pendingRequestsCount = (clone $query)
+            ->reorder()
+            ->where('status', 'pending')
+            ->count();
+
         // Filter by status
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
@@ -131,7 +136,7 @@ class VisitController extends Controller
 
         $visits = $query->orderBy('expected_start_date', 'desc')->paginate(15);
 
-        return $this->successPaginatedResponse($visits, 'visits');
+        return $this->successPaginatedResponse($visits, 'visits', 'Success', 200, ['pending_requests_count' => $pendingRequestsCount]);
     }
 
     /**
