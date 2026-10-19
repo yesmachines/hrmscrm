@@ -78,11 +78,18 @@ class AuthController extends Controller
         $data->access_token = $token;
         $data->token = $token;
         $data->token_type = 'Bearer';
+
+        $role = null;
+        if (method_exists($user, 'roleNames')) {
+            $names = $user->roleNames();
+            $role = is_array($names) && count($names) ? $names[0] : null;
+        }
+
         $data->user = [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'roles' => method_exists($user, 'roleNames') ? $user->roleNames() : [],
+            'role' => $role,
         ];
 
         return $this->successResponse($data);
