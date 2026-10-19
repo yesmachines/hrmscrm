@@ -44,50 +44,40 @@ class AssetController extends Controller
                 return $this->errorResponse('Unauthorized. You do not have permission to view other employee assets.', 403);
             }
 
-            $employeeId = $request->input('employee_id');
+            $employeeId = (int) $request->input('employee_id');
             $employee = Employee::query()->find($employeeId);
             if (! $employee) {
                 return $this->errorResponse('Employee record not found.', 404);
             }
 
-            $query = AssetAssignment::with([
-                'asset:id,category_id,referenceno,asset_name,details,condition,status,attachment',
-                'asset.category:id,category,shortcode',
-            ])
-                ->where('assigned_to', $employee->id)
-                ->where('status', 'Assigned')
-                ->orderBy('assigned_date', 'desc');
+            $query = Asset::with([
+                'category:id,category,shortcode',
+                'currentAssignment.assignee.user:id,name,email',
+            ])->whereHas('assignments', function ($q) use ($employee) {
+                $q->where('assigned_to', $employee->id)
+                    ->where('status', 'Assigned');
+            });
 
-            $assignments = $query->paginate(15);
+            if ($request->filled('status')) {
+                $query->where('status', $request->input('status'));
+            }
 
-            $transformed = $assignments->getCollection()->map(function ($assignment) use ($employee) {
-                $asset = $assignment->asset;
+            if ($request->filled('category_id')) {
+                $query->where('category_id', $request->input('category_id'));
+            }
 
-                return [
-                    'assignment_id' => $assignment->id,
-                    'asset_id' => $asset?->id,
-                    'asset_name' => $asset?->asset_name,
-                    'referenceno' => $asset?->referenceno,
-                    'category' => $asset?->category?->category,
-                    'category_shortcode' => $asset?->category?->shortcode,
-                    'details' => $asset?->details,
-                    'condition' => $asset?->condition,
-                    'status' => $asset?->status,
-                    'attachment_url' => $asset?->attachment ? asset('storage/'.$asset->attachment) : null,
-                    'assigned_date' => $assignment->assigned_date?->format('Y-m-d'),
-                    'condition_during_assign' => $assignment->note,
-                    'assigned_to' => [
-                        'id' => $employee->id,
-                        'name' => $employee->user?->name,
-                        'employee_code' => $employee->employee_code ?? $employee->emp_num,
-                    ],
-                ];
-            })->values();
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('asset_name', 'like', "%{$search}%")
+                        ->orWhere('referenceno', 'like', "%{$search}%")
+                        ->orWhere('details', 'like', "%{$search}%");
+                });
+            }
 
-            // replace paginator collection with transformed items
-            $assignments->setCollection($transformed);
+            $assets = $query->orderBy('id', 'desc')->paginate(15);
 
-            return $this->successPaginatedResponse($assignments, 'assets');
+            return $this->successPaginatedResponse($assets, 'assets');
         }
 
         // If HR/Admin requests all inventory
