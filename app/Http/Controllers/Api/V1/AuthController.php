@@ -82,7 +82,7 @@ class AuthController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'roles' => $user->roles ?? [],
+            'roles' => method_exists($user, 'roleNames') ? $user->roleNames() : [],
         ];
 
         return $this->successResponse($data);

@@ -38,6 +38,58 @@ class AssetController extends Controller
         $employee = Employee::where('user_id', $user->id)->first();
         $isHrOrAdmin = SalesCrmRoles::userHasLoginAccess((int) $user->id);
 
+        // If an HR/Admin is requesting assets for a specific employee via query param
+        if ($request->filled('employee_id')) {
+            if (! $isHrOrAdmin) {
+                return $this->errorResponse('Unauthorized. You do not have permission to view other employee assets.', 403);
+            }
+
+            $employeeId = $request->input('employee_id');
+            $employee = Employee::query()->find($employeeId);
+            if (! $employee) {
+                return $this->errorResponse('Employee record not found.', 404);
+            }
+
+            $query = AssetAssignment::with([
+                'asset:id,category_id,referenceno,asset_name,details,condition,status,attachment',
+                'asset.category:id,category,shortcode',
+            ])
+                ->where('assigned_to', $employee->id)
+                ->where('status', 'Assigned')
+                ->orderBy('assigned_date', 'desc');
+
+            $assignments = $query->paginate(15);
+
+            $transformed = $assignments->getCollection()->map(function ($assignment) use ($employee) {
+                $asset = $assignment->asset;
+
+                return [
+                    'assignment_id' => $assignment->id,
+                    'asset_id' => $asset?->id,
+                    'asset_name' => $asset?->asset_name,
+                    'referenceno' => $asset?->referenceno,
+                    'category' => $asset?->category?->category,
+                    'category_shortcode' => $asset?->category?->shortcode,
+                    'details' => $asset?->details,
+                    'condition' => $asset?->condition,
+                    'status' => $asset?->status,
+                    'attachment_url' => $asset?->attachment ? asset('storage/'.$asset->attachment) : null,
+                    'assigned_date' => $assignment->assigned_date?->format('Y-m-d'),
+                    'condition_during_assign' => $assignment->note,
+                    'assigned_to' => [
+                        'id' => $employee->id,
+                        'name' => $employee->user?->name,
+                        'employee_code' => $employee->employee_code ?? $employee->emp_num,
+                    ],
+                ];
+            })->values();
+
+            // replace paginator collection with transformed items
+            $assignments->setCollection($transformed);
+
+            return $this->successPaginatedResponse($assignments, 'assets');
+        }
+
         // If HR/Admin requests all inventory
         if ($isHrOrAdmin && ($request->boolean('all') || $request->has('all'))) {
             $query = Asset::with([
@@ -336,6 +388,20 @@ class AssetController extends Controller
             } else {
                 $query->where('requested_by', 0);
             }
+        }
+
+        // Support HR filtering requests by a single employee ID (employee_id)
+        if ($request->filled('employee_id')) {
+            if (! $isHrOrAdmin) {
+                return $this->errorResponse('Unauthorized. You do not have permission to view other employees\' requests.', 403);
+            }
+
+            $employeeId = (int) $request->input('employee_id');
+            if ($employeeId <= 0) {
+                return $this->errorResponse('Invalid employee_id provided.', 422);
+            }
+
+            $query->where('requested_by', $employeeId);
         }
 
         if ($request->filled('status')) {
