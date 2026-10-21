@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\EventType;
+use App\Support\SalesCrmRoles;
 use App\Traits\ApiResponse;
 use App\Traits\FiltersEventsByDate;
 use Illuminate\Database\Eloquent\Builder;
@@ -164,5 +165,20 @@ class EventController extends Controller
             'Event created successfully.',
             201
         );
+    }
+
+    /**
+     * Soft delete an event. Only HR and Admin users may delete events.
+     */
+    public function destroy(Request $request, Event $event): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        $event->delete();
+
+        return $this->successResponse(null, 'Event deleted successfully.');
     }
 }
