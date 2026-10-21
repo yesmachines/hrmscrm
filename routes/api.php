@@ -5,7 +5,6 @@ use App\Http\Controllers\Api\V1\AssetDashboardController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DocumentController;
-use App\Http\Controllers\Api\V1\EmployeeAssetController;
 use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\EventController;
 use App\Http\Controllers\Api\V1\IdeaController;
@@ -107,7 +106,7 @@ Route::prefix('v1')->group(function () {
 Route::middleware('auth:sanctum')->prefix('v1/hr')->group(function () {
     // Assets dashboard for HR
     Route::get('assets/dashboard', [AssetDashboardController::class, 'index'])->name('api.v1.hr.assets.dashboard');
-    Route::get('assets/categories/{category}', [AssetController::class, 'categoryAssets'])->name('api.v1.hr.assets.categories');
+    Route::get('assets/', [AssetController::class, 'listAssets'])->name('api.v1.hr.assets.index');
     Route::put('events/{event}', [EventController::class, 'update'])->name('api.v1.hr.events.update');
     Route::delete('events/{event}', [EventController::class, 'destroy'])->name('api.v1.hr.events.destroy');
 });

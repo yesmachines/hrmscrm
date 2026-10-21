@@ -226,12 +226,13 @@ class AssetController extends Controller
     }
 
     #[OA\Get(
-        path: '/api/v1/hr/categories/{category}/assets',
-        summary: 'List inventory assets in a selected category',
+        path: '/api/v1/hr/assets',
+        summary: 'List inventory assets for a selected category or employee',
         security: [['sanctum' => []]],
         tags: ['Assets'],
         parameters: [
-            new OA\Parameter(name: 'category', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'category_id', in: 'query', schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'employee_id', in: 'query', schema: new OA\Schema(type: 'integer')),
             new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string')),
             new OA\Parameter(name: 'search', in: 'query', schema: new OA\Schema(type: 'string')),
             new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer')),
@@ -239,35 +240,51 @@ class AssetController extends Controller
         responses: [
             new OA\Response(response: 200, description: 'Assets retrieved with 15-item pagination'),
             new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 404, description: 'Asset category not found'),
+            new OA\Response(response: 403, description: 'Only HR/Admin can filter assets by employee'),
+            new OA\Response(response: 422, description: 'Invalid filter'),
         ]
     )]
-    public function categoryAssets(Request $request, AssetCategory $category): JsonResponse
+    public function listAssets(Request $request): JsonResponse
     {
-        return $this->inventoryResponse($request, $category);
-    }
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
 
-    private function inventoryResponse(Request $request, ?AssetCategory $category = null): JsonResponse
-    {
+        $validated = $request->validate([
+            'category_id' => ['sometimes', 'nullable', 'integer', 'exists:asset_categories,id'],
+            'employee_id' => ['sometimes', 'nullable', 'integer', 'exists:salescrm.employees,id'],
+            'status' => ['sometimes', 'nullable', 'string'],
+            'search' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        if (isset($validated['employee_id']) && ! SalesCrmRoles::userHasLoginAccess((int) $user->id)) {
+            return $this->errorResponse('Unauthorized. You do not have permission to view other employee assets.', 403);
+        }
+
         $query = Asset::with([
             'category:id,category,shortcode',
             'currentAssignment.assignee.user:id,name,email',
         ]);
 
-        if ($category !== null) {
-            $query->where('category_id', $category->id);
+        if (isset($validated['category_id'])) {
+            $query->where('category_id', $validated['category_id']);
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
+        if (isset($validated['employee_id'])) {
+            $query->whereHas('assignments', function ($assignmentQuery) use ($validated): void {
+                $assignmentQuery
+                    ->where('assigned_to', $validated['employee_id'])
+                    ->where('status', 'Assigned');
+            });
         }
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->input('category_id'));
+        if (isset($validated['status'])) {
+            $query->where('status', $validated['status']);
         }
 
-        if ($request->filled('search')) {
-            $search = $request->input('search');
+        if (isset($validated['search'])) {
+            $search = $validated['search'];
             $query->where(function ($q) use ($search) {
                 $q->where('asset_name', 'like', "%{$search}%")
                     ->orWhere('referenceno', 'like', "%{$search}%")
