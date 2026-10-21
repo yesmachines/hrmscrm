@@ -108,5 +108,6 @@ Route::middleware('auth:sanctum')->prefix('v1/hr')->group(function () {
     // Assets dashboard for HR
     Route::get('assets/dashboard', [AssetDashboardController::class, 'index'])->name('api.v1.hr.assets.dashboard');
     Route::get('assets/categories/{category}', [AssetController::class, 'categoryAssets'])->name('api.v1.hr.assets.categories');
+    Route::put('events/{event}', [EventController::class, 'update'])->name('api.v1.hr.events.update');
     Route::delete('events/{event}', [EventController::class, 'destroy'])->name('api.v1.hr.events.destroy');
 });

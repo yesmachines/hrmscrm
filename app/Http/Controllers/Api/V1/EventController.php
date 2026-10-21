@@ -11,6 +11,7 @@ use App\Traits\FiltersEventsByDate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
 
@@ -164,6 +165,48 @@ class EventController extends Controller
             $event->fresh(['eventType', 'organisation']),
             'Event created successfully.',
             201
+        );
+    }
+
+    /**
+     * Update an event via the HR API.
+     */
+    public function update(Request $request, Event $event): JsonResponse
+    {
+        $user = $request->user();
+        if (! SalesCrmRoles::userHasAnyRole((int) $user->id, ['admin', 'hr'])) {
+            return $this->errorResponse('Unauthorized. Only HR or Admin can update events.', 403);
+        }
+
+        $validated = $request->validate([
+            'event_type_id' => ['required', 'exists:event_types,id'],
+            'organisation_id' => ['nullable', 'exists:organisations,id'],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'start_datetime' => ['required', 'date'],
+            'end_datetime' => ['nullable', 'date', 'after_or_equal:start_datetime'],
+            'external_link' => ['nullable', 'url', 'max:255'],
+            'status' => ['required', Rule::in(['draft', 'published', 'cancelled'])],
+            'employee_id' => ['nullable', 'exists:salescrm.employees,id'],
+            'show_dashboard' => ['nullable', 'boolean'],
+            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+
+        if ($request->hasFile('file')) {
+            if ($event->file_path && Storage::disk('public')->exists($event->file_path)) {
+                Storage::disk('public')->delete($event->file_path);
+            }
+
+            $validated['file_path'] = $request->file('file')->store('events', 'public');
+        }
+
+        $validated['show_dashboard'] = $request->boolean('show_dashboard', $event->show_dashboard);
+
+        $event->update($validated);
+
+        return $this->successResponse(
+            $event->fresh(['eventType', 'organisation']),
+            'Event updated successfully.'
         );
     }
 
