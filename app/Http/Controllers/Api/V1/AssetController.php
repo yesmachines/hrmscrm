@@ -225,6 +225,61 @@ class AssetController extends Controller
         ]);
     }
 
+    #[OA\Get(
+        path: '/api/v1/hr/categories/{category}/assets',
+        summary: 'List inventory assets in a selected category',
+        security: [['sanctum' => []]],
+        tags: ['Assets'],
+        parameters: [
+            new OA\Parameter(name: 'category', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'search', in: 'query', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Assets retrieved with 15-item pagination'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Asset category not found'),
+        ]
+    )]
+    public function categoryAssets(Request $request, AssetCategory $category): JsonResponse
+    {
+        return $this->inventoryResponse($request, $category);
+    }
+
+    private function inventoryResponse(Request $request, ?AssetCategory $category = null): JsonResponse
+    {
+        $query = Asset::with([
+            'category:id,category,shortcode',
+            'currentAssignment.assignee.user:id,name,email',
+        ]);
+
+        if ($category !== null) {
+            $query->where('category_id', $category->id);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->input('category_id'));
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('asset_name', 'like', "%{$search}%")
+                    ->orWhere('referenceno', 'like', "%{$search}%")
+                    ->orWhere('details', 'like', "%{$search}%");
+            });
+        }
+
+        $assets = $query->orderBy('id', 'desc')->paginate(15);
+
+        return $this->successPaginatedResponse($assets, 'assets');
+    }
+
     /**
      * List assets currently assigned to the authenticated employee for dropdown selection.
      */

@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AssetController;
+use App\Http\Controllers\Api\V1\AssetDashboardController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DocumentController;
+use App\Http\Controllers\Api\V1\EmployeeAssetController;
 use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\EventController;
 use App\Http\Controllers\Api\V1\IdeaController;
@@ -12,7 +14,6 @@ use App\Http\Controllers\Api\V1\RewardController;
 use App\Http\Controllers\Api\V1\SocialController;
 use App\Http\Controllers\Api\V1\VisitController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\V1\AssetDashboardController;
 
 Route::prefix('v1')->group(function () {
     Route::post('login', [AuthController::class, 'login'])
@@ -101,9 +102,10 @@ Route::prefix('v1')->group(function () {
     });
 });
 
-// HR APIs 
+// HR APIs
+// Route::middleware(['auth:sanctum', 'role:hr'])->prefix('v1/hr')->group(function () {
 Route::middleware('auth:sanctum')->prefix('v1/hr')->group(function () {
     // Assets dashboard for HR
-    Route::get('assets/dashboard', [AssetDashboardController::class, 'index'])
-        ->name('api.hr.assets.dashboard');
+    Route::get('assets/dashboard', [AssetDashboardController::class, 'index'])->name('api.v1.hr.assets.dashboard');
+    Route::get('assets/categories/{category}', [AssetController::class, 'categoryAssets'])->name('api.v1.hr.assets.categories');
 });
