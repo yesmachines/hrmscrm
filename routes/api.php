@@ -69,13 +69,13 @@ Route::prefix('v1')->group(function () {
         Route::get('assets/requests', [AssetController::class, 'requests'])->name('api.v1.assets.requests');
         Route::post('assets/requests', [AssetController::class, 'submitRequest'])->name('api.v1.assets.submit-request');
         Route::get('assets/requests/{asset_request}', [AssetController::class, 'requestDetails'])->name('api.v1.assets.requests.show');
-        Route::post('assets/requests/{asset_request}/approve', [AssetController::class, 'approveRequest'])->name('api.v1.assets.requests.approve');
-        Route::post('assets/requests/{asset_request}/reject', [AssetController::class, 'rejectRequest'])->name('api.v1.assets.requests.reject');
-        Route::post('assets/requests/{asset_request}/status', [AssetController::class, 'updateRequestStatus'])->name('api.v1.assets.requests.status');
-        Route::post('assets/requests/{asset_request}/assign', [AssetController::class, 'assignRequestAsset'])->name('api.v1.assets.requests.assign');
+        // Route::post('assets/requests/{asset_request}/approve', [AssetController::class, 'approveRequest'])->name('api.v1.assets.requests.approve');
+        // Route::post('assets/requests/{asset_request}/reject', [AssetController::class, 'rejectRequest'])->name('api.v1.assets.requests.reject');
+        // Route::post('assets/requests/{asset_request}/status', [AssetController::class, 'updateRequestStatus'])->name('api.v1.assets.requests.status');
+        // Route::post('assets/requests/{asset_request}/assign', [AssetController::class, 'assignRequestAsset'])->name('api.v1.assets.requests.assign');
         Route::get('assets/{asset}', [AssetController::class, 'show'])->name('api.v1.assets.show');
-        Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('api.v1.assets.assign');
-        Route::post('assets/{asset}/return', [AssetController::class, 'returnAsset'])->name('api.v1.assets.return');
+        // Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('api.v1.assets.assign');
+        // Route::post('assets/{asset}/return', [AssetController::class, 'returnAsset'])->name('api.v1.assets.return');
 
         // Events Endpoints
         Route::get('events', [EventController::class, 'index'])->name('api.v1.events.index');
@@ -102,11 +102,91 @@ Route::prefix('v1')->group(function () {
 });
 
 // HR APIs
-// Route::middleware(['auth:sanctum', 'role:hr'])->prefix('v1/hr')->group(function () {
-Route::middleware('auth:sanctum')->prefix('v1/hr')->group(function () {
+Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->group(function () {
     // Assets dashboard for HR
     Route::get('assets/dashboard', [AssetDashboardController::class, 'index'])->name('api.v1.hr.assets.dashboard');
     Route::get('assets/', [AssetController::class, 'listAssets'])->name('api.v1.hr.assets.index');
     Route::put('events/{event}', [EventController::class, 'update'])->name('api.v1.hr.events.update');
     Route::delete('events/{event}', [EventController::class, 'destroy'])->name('api.v1.hr.events.destroy');
+
+    // --
+    // HR API duplicates
+    // Mirrored from the general API; the original employee endpoints remain available.
+
+    // Departments
+    Route::get('departments', [DepartmentController::class, 'index'])->name('api.v1.hr.departments.index');
+    Route::get('departments/{id}', [DepartmentController::class, 'show'])->name('api.v1.hr.departments.show');
+
+    // Employees
+    Route::get('employees', [EmployeeController::class, 'index'])->name('api.v1.hr.employees.index');
+    Route::get('employees/{id}', [EmployeeController::class, 'show'])->name('api.v1.hr.employees.show');
+
+    // Ideas
+    Route::get('ideas', [IdeaController::class, 'index'])->name('api.v1.hr.ideas.index');
+    Route::post('ideas', [IdeaController::class, 'store'])->name('api.v1.hr.ideas.store');
+
+    // Leaves
+    Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.hr.leaves.index');
+    Route::get('leaves/meta', [LeaveController::class, 'meta'])->name('api.v1.hr.leaves.meta');
+    Route::get('leaves/festivals', [LeaveController::class, 'festivals'])->name('api.v1.hr.leaves.festivals');
+    Route::get('leaves/holidays', [LeaveController::class, 'festivals'])->name('api.v1.hr.leaves.holidays');
+    Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.hr.leaves.store');
+    Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.hr.leaves.show');
+
+    // Documents
+    Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.hr.documents.categories');
+    Route::get('documents/types', [DocumentController::class, 'types'])->name('api.v1.hr.documents.types');
+    Route::get('documents/types/{document_type}/blank-form', [DocumentController::class, 'blankForm'])->name('api.v1.hr.documents.blank-form');
+    Route::get('documents', [DocumentController::class, 'index'])->name('api.v1.hr.documents.index');
+    Route::post('documents', [DocumentController::class, 'store'])->name('api.v1.hr.documents.store');
+    Route::get('documents/policies', [DocumentController::class, 'policies'])->name('api.v1.hr.documents.policies');
+    Route::get('documents/letters', [DocumentController::class, 'letters'])->name('api.v1.hr.documents.letters');
+    Route::post('documents/letters', [DocumentController::class, 'requestLetter'])->name('api.v1.hr.documents.request-letter');
+    Route::get('documents/letters/{id}', [DocumentController::class, 'letterDetails'])->name('api.v1.hr.documents.letter-details');
+    Route::get('documents/{id}', [DocumentController::class, 'show'])->name('api.v1.hr.documents.show');
+    Route::put('documents/{id}', [DocumentController::class, 'update'])->name('api.v1.hr.documents.update');
+
+    // Visits
+    Route::get('visits', [VisitController::class, 'index'])->name('api.v1.hr.visits.index');
+    Route::post('visits', [VisitController::class, 'store'])->name('api.v1.hr.visits.store');
+    Route::get('visits/{visit}', [VisitController::class, 'show'])->name('api.v1.hr.visits.show');
+    Route::post('visits/{visit}/approve', [VisitController::class, 'approve'])->name('api.v1.hr.visits.approve');
+    Route::post('visits/{visit}/reject', [VisitController::class, 'reject'])->name('api.v1.hr.visits.reject');
+    Route::post('visits/{visit}/status', [VisitController::class, 'updateStatus'])->name('api.v1.hr.visits.status');
+
+    // Assets (the existing HR inventory endpoint owns GET /assets)
+    Route::get('assets/my-assigned', [AssetController::class, 'assignedDropdown'])->name('api.v1.hr.assets.my-assigned');
+    Route::get('assets/categories', [AssetController::class, 'categories'])->name('api.v1.hr.assets.categories');
+    Route::get('assets/requests', [AssetController::class, 'requests'])->name('api.v1.hr.assets.requests');
+    Route::post('assets/requests', [AssetController::class, 'submitRequest'])->name('api.v1.hr.assets.submit-request');
+    Route::get('assets/requests/{asset_request}', [AssetController::class, 'requestDetails'])->name('api.v1.hr.assets.requests.show');
+    Route::post('assets/requests/{asset_request}/approve', [AssetController::class, 'approveRequest'])->name('api.v1.hr.assets.requests.approve');
+    Route::post('assets/requests/{asset_request}/reject', [AssetController::class, 'rejectRequest'])->name('api.v1.hr.assets.requests.reject');
+    Route::post('assets/requests/{asset_request}/status', [AssetController::class, 'updateRequestStatus'])->name('api.v1.hr.assets.requests.status');
+    Route::post('assets/requests/{asset_request}/assign', [AssetController::class, 'assignRequestAsset'])->name('api.v1.hr.assets.requests.assign');
+    Route::get('assets/{asset}', [AssetController::class, 'show'])->name('api.v1.hr.assets.show');
+    Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('api.v1.hr.assets.assign');
+    Route::post('assets/{asset}/return', [AssetController::class, 'returnAsset'])->name('api.v1.hr.assets.return');
+
+    // Events
+    Route::get('events', [EventController::class, 'index'])->name('api.v1.hr.events.index');
+    Route::get('events/today', [EventController::class, 'today'])->name('api.v1.hr.events.today');
+    Route::get('events/types', [EventController::class, 'types'])->name('api.v1.hr.events.types');
+    Route::post('events', [EventController::class, 'store'])->name('api.v1.hr.events.store');
+    Route::get('events/{id}', [EventController::class, 'show'])->name('api.v1.hr.events.show');
+
+    // Rewards
+    Route::get('rewards/categories', [RewardController::class, 'categories'])->name('api.v1.hr.rewards.categories');
+    Route::get('rewards', [RewardController::class, 'index'])->name('api.v1.hr.rewards.index');
+    Route::post('rewards', [RewardController::class, 'store'])->name('api.v1.hr.rewards.store');
+    Route::get('rewards/{id}', [RewardController::class, 'show'])->name('api.v1.hr.rewards.show');
+
+    // Socials
+    Route::get('socials', [SocialController::class, 'index'])->name('api.v1.hr.socials.index');
+    Route::post('socials', [SocialController::class, 'store'])->name('api.v1.hr.socials.store');
+    Route::match(['put', 'patch', 'post'], 'socials/{post}', [SocialController::class, 'update'])->name('api.v1.hr.socials.update');
+    Route::delete('socials/{post}', [SocialController::class, 'destroy'])->name('api.v1.hr.socials.destroy');
+    Route::delete('socials/{post}/media/{media}', [SocialController::class, 'destroyMedia'])->name('api.v1.hr.socials.media.destroy');
+    Route::post('socials/{post}/react', [SocialController::class, 'react'])->name('api.v1.hr.socials.react');
+    Route::delete('socials/{post}/react', [SocialController::class, 'unreact'])->name('api.v1.hr.socials.react.destroy');
 });
