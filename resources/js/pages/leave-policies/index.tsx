@@ -45,8 +45,8 @@ export default function LeavePoliciesIndex({
                     </Button>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-                    <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
+                    <table className="w-full min-w-[640px] text-left text-sm">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3 font-medium">
@@ -55,7 +55,7 @@ export default function LeavePoliciesIndex({
                                 <th className="px-4 py-3 font-medium">
                                     Organisation
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium md:table-cell">
+                                <th className="px-4 py-3 font-medium md:table-cell">
                                     Carry forward
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
@@ -93,7 +93,7 @@ export default function LeavePoliciesIndex({
                                         <td className="px-4 py-3">
                                             {row.organisation?.name ?? '—'}
                                         </td>
-                                        <td className="hidden px-4 py-3 md:table-cell">
+                                        <td className="px-4 py-3 md:table-cell">
                                             {row.carry_forward === 1
                                                 ? 'Yes'
                                                 : 'No'}

@@ -31,7 +31,7 @@ export default function LeaveHistoriesIndex({ histories }: { histories: Paginate
         <>
             <Head title="Leave Histories" />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1400px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title="Leave Histories"

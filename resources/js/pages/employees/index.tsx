@@ -70,19 +70,19 @@ export default function EmployeesIndex({
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-                    <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
+                    <table className="w-full min-w-[640px] text-left text-sm">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
                                 <th className="px-4 py-3 font-medium">Emp #</th>
-                                <th className="hidden px-4 py-3 font-medium md:table-cell">
+                                <th className="px-4 py-3 font-medium md:table-cell">
                                     Designation
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                                <th className="px-4 py-3 font-medium lg:table-cell">
                                     Department
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className="px-4 py-3 font-medium sm:table-cell">
                                     Status
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
@@ -121,13 +121,13 @@ export default function EmployeesIndex({
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">{row.emp_num}</td>
-                                        <td className="hidden px-4 py-3 md:table-cell">
+                                        <td className=" px-4 py-3 md:table-cell">
                                             {row.designation}
                                         </td>
-                                        <td className="hidden px-4 py-3 lg:table-cell">
+                                        <td className=" px-4 py-3 lg:table-cell">
                                             {row.division}
                                         </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                        <td className=" px-4 py-3 sm:table-cell">
                                             <span
                                                 className={
                                                     row.status === 1

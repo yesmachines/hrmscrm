@@ -44,22 +44,22 @@ export default function LeaveTypesIndex({
                     </Button>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-                    <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
+                    <table className="w-full min-w-[640px] text-left text-sm">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
                                 <th className="px-4 py-3 font-medium">Code</th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className="px-4 py-3 font-medium sm:table-cell">
                                     Paid
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium md:table-cell">
+                                <th className="px-4 py-3 font-medium md:table-cell">
                                     Approval
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                                <th className="px-4 py-3 font-medium lg:table-cell">
                                     Religion
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className="px-4 py-3 font-medium sm:table-cell">
                                     Status
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
@@ -93,15 +93,15 @@ export default function LeaveTypesIndex({
                                             {row.leave_name}
                                         </td>
                                         <td className="px-4 py-3">{row.code}</td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                        <td className="px-4 py-3 sm:table-cell">
                                             {row.is_paid === 1 ? 'Yes' : 'No'}
                                         </td>
-                                        <td className="hidden px-4 py-3 md:table-cell">
+                                        <td className="px-4 py-3 md:table-cell">
                                             {row.requires_approval === 1
                                                 ? 'Required'
                                                 : 'Not required'}
                                         </td>
-                                        <td className="hidden px-4 py-3 lg:table-cell">
+                                        <td className="px-4 py-3 lg:table-cell">
                                             {row.religion ? (
                                                 <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
                                                     {row.religion}
@@ -110,7 +110,7 @@ export default function LeaveTypesIndex({
                                                 <span className="text-xs text-muted-foreground">Universal</span>
                                             )}
                                         </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                        <td className="px-4 py-3 sm:table-cell">
                                             <span
                                                 className={
                                                     row.status === 1

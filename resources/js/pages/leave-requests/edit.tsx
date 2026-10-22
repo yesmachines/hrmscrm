@@ -263,7 +263,7 @@ export default function LeaveRequestsEdit({
         <>
             <Head title={`Edit Leave Request #${leaveRequest.id}`} />
 
-            <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full flex-1 flex-col gap-6 p-6 md:p-8">
                 {/* Header */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-3">

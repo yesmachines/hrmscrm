@@ -102,7 +102,7 @@ export default function EmployeesEdit({
         <>
             <Head title={`Edit ${employee.name ?? 'employee'}`} />
 
-            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8">
+            <div className="mx-auto flex w-full flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-foreground">

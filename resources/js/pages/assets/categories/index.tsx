@@ -38,7 +38,9 @@ interface Props {
 
 export default function AssetCategoriesIndex({ categories, filters }: Props) {
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
-    const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
+    const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(
+        null,
+    );
     const [showCreateModal, setShowCreateModal] = useState(false);
 
     const createForm = useForm({
@@ -92,7 +94,7 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                         title="Asset Categories"
                         description="Manage hardware, device, key, and accessories classification categories"
                     />
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button variant="outline" asChild>
                             <Link href="/assets">
                                 <Laptop className="mr-2 size-4" />
@@ -109,50 +111,79 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                 {/* Create Category Modal */}
                 {showCreateModal && (
                     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
                                 <FolderTree className="size-5 text-primary" />
                                 Add Asset Category
                             </h3>
-                            <Button variant="ghost" size="sm" onClick={() => setShowCreateModal(false)}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowCreateModal(false)}
+                            >
                                 <X className="size-4" />
                             </Button>
                         </div>
                         <form onSubmit={handleCreate} className="space-y-4">
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 <div className="space-y-2">
-                                    <Label htmlFor="create_category">Category Name *</Label>
+                                    <Label htmlFor="create_category">
+                                        Category Name *
+                                    </Label>
                                     <Input
                                         id="create_category"
                                         placeholder="e.g. Laptop, Keyboard, Safety Shoes"
                                         value={createForm.data.category}
-                                        onChange={(e) => createForm.setData('category', e.target.value)}
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'category',
+                                                e.target.value,
+                                            )
+                                        }
                                         required
                                     />
                                     {createForm.errors.category && (
-                                        <p className="text-sm text-destructive">{createForm.errors.category}</p>
+                                        <p className="text-sm text-destructive">
+                                            {createForm.errors.category}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="create_shortcode">Shortcode *</Label>
+                                    <Label htmlFor="create_shortcode">
+                                        Shortcode *
+                                    </Label>
                                     <Input
                                         id="create_shortcode"
                                         placeholder="e.g. LPT, KBD, PPE"
                                         value={createForm.data.shortcode}
-                                        onChange={(e) => createForm.setData('shortcode', e.target.value.toUpperCase())}
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'shortcode',
+                                                e.target.value.toUpperCase(),
+                                            )
+                                        }
                                         required
                                     />
                                     {createForm.errors.shortcode && (
-                                        <p className="text-sm text-destructive">{createForm.errors.shortcode}</p>
+                                        <p className="text-sm text-destructive">
+                                            {createForm.errors.shortcode}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="create_status">Status</Label>
+                                    <Label htmlFor="create_status">
+                                        Status
+                                    </Label>
                                     <select
                                         id="create_status"
                                         value={createForm.data.status}
-                                        onChange={(e) => createForm.setData('status', e.target.value)}
-                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'status',
+                                                e.target.value,
+                                            )
+                                        }
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                                     >
                                         <option value="1">Active</option>
                                         <option value="0">Inactive</option>
@@ -160,10 +191,17 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                                 </div>
                             </div>
                             <div className="flex justify-end gap-2 pt-2">
-                                <Button variant="outline" type="button" onClick={() => setShowCreateModal(false)}>
+                                <Button
+                                    variant="outline"
+                                    type="button"
+                                    onClick={() => setShowCreateModal(false)}
+                                >
                                     Cancel
                                 </Button>
-                                <Button type="submit" disabled={createForm.processing}>
+                                <Button
+                                    type="submit"
+                                    disabled={createForm.processing}
+                                >
                                     Save Category
                                 </Button>
                             </div>
@@ -174,39 +212,61 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                 {/* Edit Category Modal */}
                 {editingCategory && (
                     <div className="rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
                                 <Edit className="size-5 text-primary" />
                                 Edit Category: {editingCategory.category}
                             </h3>
-                            <Button variant="ghost" size="sm" onClick={() => setEditingCategory(null)}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingCategory(null)}
+                            >
                                 <X className="size-4" />
                             </Button>
                         </div>
                         <form onSubmit={handleEdit} className="space-y-4">
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 <div className="space-y-2">
-                                    <Label htmlFor="edit_category">Category Name *</Label>
+                                    <Label htmlFor="edit_category">
+                                        Category Name *
+                                    </Label>
                                     <Input
                                         id="edit_category"
                                         value={editForm.data.category}
-                                        onChange={(e) => editForm.setData('category', e.target.value)}
+                                        onChange={(e) =>
+                                            editForm.setData(
+                                                'category',
+                                                e.target.value,
+                                            )
+                                        }
                                         required
                                     />
                                     {editForm.errors.category && (
-                                        <p className="text-sm text-destructive">{editForm.errors.category}</p>
+                                        <p className="text-sm text-destructive">
+                                            {editForm.errors.category}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="edit_shortcode">Shortcode *</Label>
+                                    <Label htmlFor="edit_shortcode">
+                                        Shortcode *
+                                    </Label>
                                     <Input
                                         id="edit_shortcode"
                                         value={editForm.data.shortcode}
-                                        onChange={(e) => editForm.setData('shortcode', e.target.value.toUpperCase())}
+                                        onChange={(e) =>
+                                            editForm.setData(
+                                                'shortcode',
+                                                e.target.value.toUpperCase(),
+                                            )
+                                        }
                                         required
                                     />
                                     {editForm.errors.shortcode && (
-                                        <p className="text-sm text-destructive">{editForm.errors.shortcode}</p>
+                                        <p className="text-sm text-destructive">
+                                            {editForm.errors.shortcode}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="space-y-2">
@@ -214,8 +274,13 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                                     <select
                                         id="edit_status"
                                         value={editForm.data.status}
-                                        onChange={(e) => editForm.setData('status', e.target.value)}
-                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        onChange={(e) =>
+                                            editForm.setData(
+                                                'status',
+                                                e.target.value,
+                                            )
+                                        }
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                                     >
                                         <option value="1">Active</option>
                                         <option value="0">Inactive</option>
@@ -223,10 +288,17 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                                 </div>
                             </div>
                             <div className="flex justify-end gap-2 pt-2">
-                                <Button variant="outline" type="button" onClick={() => setEditingCategory(null)}>
+                                <Button
+                                    variant="outline"
+                                    type="button"
+                                    onClick={() => setEditingCategory(null)}
+                                >
                                     Cancel
                                 </Button>
-                                <Button type="submit" disabled={editForm.processing}>
+                                <Button
+                                    type="submit"
+                                    disabled={editForm.processing}
+                                >
                                     Update Category
                                 </Button>
                             </div>
@@ -235,32 +307,48 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                 )}
 
                 {/* Table */}
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-                    <table className="w-full text-left text-sm">
-                        <thead className="border-b border-border bg-muted/40 text-muted-foreground text-xs uppercase">
+                <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                        <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground uppercase">
                             <tr>
-                                <th className="px-4 py-3 font-medium">Category Name</th>
-                                <th className="px-4 py-3 font-medium">Shortcode</th>
-                                <th className="px-4 py-3 font-medium">Total Assets</th>
-                                <th className="px-4 py-3 font-medium">Status</th>
-                                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                                <th className="px-4 py-3 font-medium">
+                                    Category Name
+                                </th>
+                                <th className="px-4 py-3 font-medium">
+                                    Shortcode
+                                </th>
+                                <th className="px-4 py-3 font-medium">
+                                    Total Assets
+                                </th>
+                                <th className="px-4 py-3 font-medium">
+                                    Status
+                                </th>
+                                <th className="px-4 py-3 text-right font-medium">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {categories.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td
+                                        colSpan={5}
+                                        className="px-4 py-12 text-center text-muted-foreground"
+                                    >
                                         No asset categories found.
                                     </td>
                                 </tr>
                             ) : (
                                 categories.data.map((cat) => (
-                                    <tr key={cat.id} className="hover:bg-muted/10 transition-colors">
+                                    <tr
+                                        key={cat.id}
+                                        className="transition-colors hover:bg-muted/10"
+                                    >
                                         <td className="px-4 py-3 font-semibold text-foreground">
                                             {cat.category}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded font-semibold text-foreground">
+                                            <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs font-semibold text-foreground">
                                                 {cat.shortcode}
                                             </span>
                                         </td>
@@ -268,15 +356,25 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                                             {cat.assets_count} items
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                                cat.status === 1 ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'
-                                            }`}>
-                                                {cat.status === 1 ? 'Active' : 'Inactive'}
+                                            <span
+                                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                                    cat.status === 1
+                                                        ? 'bg-emerald-100 text-emerald-800'
+                                                        : 'bg-gray-100 text-gray-700'
+                                                }`}
+                                            >
+                                                {cat.status === 1
+                                                    ? 'Active'
+                                                    : 'Inactive'}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-right">
-                                            <Button variant="ghost" size="sm" onClick={() => openEdit(cat)}>
-                                                <Edit className="size-3.5 mr-1" />
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => openEdit(cat)}
+                                            >
+                                                <Edit className="mr-1 size-3.5" />
                                                 Edit
                                             </Button>
                                         </td>
@@ -300,15 +398,19 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                                             ? 'border-primary bg-primary text-primary-foreground'
                                             : 'border-border bg-white text-foreground hover:bg-muted'
                                     }`}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: link.label,
+                                    }}
                                 />
                             ) : (
                                 <span
                                     key={i}
                                     className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground opacity-50"
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: link.label,
+                                    }}
                                 />
-                            )
+                            ),
                         )}
                     </div>
                 )}

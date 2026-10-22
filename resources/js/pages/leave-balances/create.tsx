@@ -30,7 +30,7 @@ export default function LeaveBalancesCreate({ employees, leaveTypes }: { employe
         <>
             <Head title="Add Leave Balance" />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1200px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" size="icon" asChild>
                         <Link href={index.url()}>

@@ -45,22 +45,22 @@ export default function FestivalsIndex({
                     </Button>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-                    <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
+                    <table className="w-full min-w-[640px] text-left text-sm">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
                                 <th className="px-4 py-3 font-medium">Type</th>
-                                <th className="hidden px-4 py-3 font-medium md:table-cell">
+                                <th className="px-4 py-3 font-medium md:table-cell">
                                     Religion
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className="px-4 py-3 font-medium sm:table-cell">
                                     Shortcode
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className="px-4 py-3 font-medium sm:table-cell">
                                     Dates
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className="px-4 py-3 font-medium sm:table-cell">
                                     Status
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
@@ -104,7 +104,7 @@ export default function FestivalsIndex({
                                                 {row.type}
                                             </span>
                                         </td>
-                                        <td className="hidden px-4 py-3 md:table-cell">
+                                        <td className="px-4 py-3 md:table-cell">
                                             {row.religion ? (
                                                 <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                                                     {row.religion}
@@ -113,7 +113,7 @@ export default function FestivalsIndex({
                                                 <span className="text-xs text-muted-foreground">All</span>
                                             )}
                                         </td>
-                                        <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">
+                                        <td className="px-4 py-3 text-muted-foreground sm:table-cell">
                                             {row.shortcode}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">

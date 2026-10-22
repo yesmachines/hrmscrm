@@ -60,16 +60,16 @@ export default function DocumentTypesIndex({
                     </Button>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+                <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
                     <table className="w-full text-left text-sm">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
                                 <th className="px-4 py-3 font-medium">Code</th>
-                                <th className="hidden px-4 py-3 font-medium md:table-cell">
+                                <th className="px-4 py-3 font-medium md:table-cell">
                                     Category
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className="px-4 py-3 font-medium sm:table-cell">
                                     Record source
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
@@ -105,10 +105,10 @@ export default function DocumentTypesIndex({
                                         <td className="px-4 py-3">
                                             {row.document_code}
                                         </td>
-                                        <td className="hidden px-4 py-3 md:table-cell">
+                                        <td className="px-4 py-3 md:table-cell">
                                             {row.category?.name ?? '—'}
                                         </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                        <td className="px-4 py-3 sm:table-cell">
                                             {formatRecordSource(
                                                 row.record_source,
                                             )}

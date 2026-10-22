@@ -45,7 +45,7 @@ export default function OrganisationsIndex({
                     </Button>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+                <div className="overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
                     <table className="w-full text-left text-sm">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
@@ -54,7 +54,7 @@ export default function OrganisationsIndex({
                                 <th className="px-4 py-3 font-medium">
                                     Short name
                                 </th>
-                                <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                                <th className=" px-4 py-3 font-medium sm:table-cell">
                                     Status
                                 </th>
                                 <th className="px-4 py-3 text-right font-medium">
@@ -103,7 +103,7 @@ export default function OrganisationsIndex({
                                         <td className="px-4 py-3">
                                             {row.short_name}
                                         </td>
-                                        <td className="hidden px-4 py-3 sm:table-cell">
+                                        <td className=" px-4 py-3 sm:table-cell">
                                             <span
                                                 className={
                                                     row.status === 1

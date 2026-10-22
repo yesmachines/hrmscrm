@@ -112,7 +112,7 @@ export default function VisitsShow({ visit }: Props) {
         <>
             <Head title={`Visit #${visit.id} - ${visit.company}`} />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1200px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8">
                 {/* Header */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
