@@ -86,13 +86,13 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
         <>
             <Head title="Asset Categories" />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1400px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title="Asset Categories"
                         description="Manage hardware, device, key, and accessories classification categories"
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <Button variant="outline" asChild>
                             <Link href="/assets">
                                 <Laptop className="mr-2 size-4" />

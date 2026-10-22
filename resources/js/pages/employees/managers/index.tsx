@@ -434,11 +434,11 @@ export default function EmployeeManagersIndex({
                 {/* Tabs & Filter Bar */}
                 <div className="space-y-3">
                     {/* View Tabs */}
-                    <div className="flex items-center gap-2 border-b border-border/80 pb-2">
+                    <div className="flex items-center gap-2 overflow-x-auto border-b border-border/80 pb-2">
                         <button
                             type="button"
                             onClick={() => handleTabChange('all')}
-                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                                 currentTab === 'all'
                                     ? 'bg-primary text-primary-foreground'
                                     : 'text-muted-foreground hover:bg-muted'
@@ -451,7 +451,7 @@ export default function EmployeeManagersIndex({
                         <button
                             type="button"
                             onClick={() => handleTabChange('assigned')}
-                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                                 currentTab === 'assigned'
                                     ? 'bg-emerald-600 text-white'
                                     : 'text-muted-foreground hover:bg-muted'
@@ -464,7 +464,7 @@ export default function EmployeeManagersIndex({
                         <button
                             type="button"
                             onClick={() => handleTabChange('unassigned')}
-                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                                 currentTab === 'unassigned'
                                     ? 'bg-amber-600 text-white'
                                     : 'text-muted-foreground hover:bg-muted'

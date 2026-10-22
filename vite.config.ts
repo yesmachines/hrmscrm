@@ -8,9 +8,7 @@ import { defineConfig } from 'vite';
 
 const phpBinary =
     process.env.PHP_BINARY ||
-    (process.platform === 'win32'
-        ? '"C:/laragon/bin/php/php-8.5/php.exe"'
-        : 'php');
+    'php';
 
 export default defineConfig({
     plugins: [
