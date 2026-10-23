@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Organisation\StoreOrganisationRequest;
 use App\Http\Requests\Organisation\UpdateOrganisationRequest;
 use App\Models\Organisation;
+use App\Support\SalesCrmRoles;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,6 +28,7 @@ class OrganisationController extends Controller
 
         return Inertia::render('organisations/index', [
             'organisations' => $organisations,
+            'canDelete' => $this->canDeleteOrganisations(),
         ]);
     }
 
@@ -57,6 +59,7 @@ class OrganisationController extends Controller
     {
         return Inertia::render('organisations/show', [
             'organisation' => $this->organisationPayload($organisation),
+            'canDelete' => $this->canDeleteOrganisations(),
         ]);
     }
 
@@ -90,6 +93,8 @@ class OrganisationController extends Controller
 
     public function destroy(Organisation $organisation): RedirectResponse
     {
+        abort_unless($this->canDeleteOrganisations(), 403);
+
         if ($organisation->officeLocations()->exists()) {
             Inertia::flash('toast', [
                 'type' => 'error',
@@ -99,7 +104,6 @@ class OrganisationController extends Controller
             return back();
         }
 
-        $this->storeOrganisationLogo->delete($organisation->logo);
         $organisation->delete();
 
         Inertia::flash('toast', [
@@ -108,6 +112,17 @@ class OrganisationController extends Controller
         ]);
 
         return to_route('organisations.index');
+    }
+
+    private function canDeleteOrganisations(): bool
+    {
+        $user = request()->user();
+
+        return $user !== null
+            && SalesCrmRoles::userHasAnyRole(
+                (int) $user->getAuthIdentifier(),
+                ['admin', 'superadmin'],
+            );
     }
 
     /**

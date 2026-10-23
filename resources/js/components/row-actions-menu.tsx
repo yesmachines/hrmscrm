@@ -15,6 +15,7 @@ import {
 type Props = {
     viewHref?: InertiaLinkProps['href'];
     editHref: NonNullable<InertiaLinkProps['href']>;
+    canDelete?: boolean;
     destroyForm: {
         action: string;
         method: string;
@@ -27,6 +28,7 @@ type Props = {
 export default function RowActionsMenu({
     viewHref,
     editHref,
+    canDelete = true,
     destroyForm,
     deleteTitle,
     deleteDescription,
@@ -61,13 +63,17 @@ export default function RowActionsMenu({
                             Edit
                         </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => setDeleteOpen(true)}
-                    >
-                        Delete
-                    </DropdownMenuItem>
+                    {canDelete && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => setDeleteOpen(true)}
+                            >
+                                Delete
+                            </DropdownMenuItem>
+                        </>
+                    )}
                 </DropdownMenuContent>
             </DropdownMenu>
 

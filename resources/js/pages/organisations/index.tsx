@@ -21,8 +21,10 @@ type PaginatedOrganisations = {
 
 export default function OrganisationsIndex({
     organisations,
+    canDelete,
 }: {
     organisations: PaginatedOrganisations;
+    canDelete: boolean;
 }) {
     return (
         <>
@@ -124,11 +126,12 @@ export default function OrganisationsIndex({
                                                 editHref={OrganisationController.edit.url(
                                                     row.id,
                                                 )}
+                                                canDelete={canDelete}
                                                 destroyForm={OrganisationController.destroy.form(
                                                     row.id,
                                                 )}
                                                 deleteTitle="Delete organisation?"
-                                                deleteDescription={`This will permanently delete ${row.org_name}. This cannot be undone.`}
+                                                deleteDescription={`This will archive ${row.org_name}. Its record and logo will be retained.`}
                                                 deleteConfirmLabel="Delete organisation"
                                             />
                                         </td>

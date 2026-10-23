@@ -51,8 +51,10 @@ function Section({
 
 export default function OrganisationsShow({
     organisation,
+    canDelete,
 }: {
     organisation: Organisation;
+    canDelete: boolean;
 }) {
     setLayoutProps({
         breadcrumbs: [
@@ -89,14 +91,16 @@ export default function OrganisationsShow({
                                 Edit
                             </Link>
                         </Button>
-                        <DeleteConfirmDialog
-                            form={OrganisationController.destroy.form(
-                                organisation.id,
-                            )}
-                            title="Delete organisation?"
-                            description={`This will permanently delete ${organisation.org_name}. This cannot be undone.`}
-                            confirmLabel="Delete organisation"
-                        />
+                        {canDelete && (
+                            <DeleteConfirmDialog
+                                form={OrganisationController.destroy.form(
+                                    organisation.id,
+                                )}
+                                title="Delete organisation?"
+                                description={`This will archive ${organisation.org_name}. Its record and logo will be retained.`}
+                                confirmLabel="Delete organisation"
+                            />
+                        )}
                     </div>
                 </div>
 
