@@ -28,6 +28,7 @@ type DesignationOption = {
 type OrganisationOption = {
     id: number;
     name: string;
+    value: string;
     short_name: string;
 };
 

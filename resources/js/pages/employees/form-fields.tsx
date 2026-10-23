@@ -2,6 +2,7 @@ import { type ReactNode, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 type Errors = Record<string, string>;
 
@@ -27,6 +28,7 @@ type DesignationOption = {
 type OrganisationOption = {
     id: number;
     name: string;
+    value: string;
     short_name: string;
 };
 
@@ -211,19 +213,12 @@ export default function EmployeeProfileFormFields({
         return match ? match.value : defaults.division;
     })();
 
-    const matchedVisaFrom = (() => {
-        if (!profileDefaults.visa_from) {
-            return '';
-        }
-        const normalized = profileDefaults.visa_from.toLowerCase().trim();
-        if (normalized === 'yes machinery' || normalized === 'yes machinary') {
-            return 'Yes Machinery';
-        }
-        if (normalized === 'yes automation') {
-            return 'Yes Automation';
-        }
-        return profileDefaults.visa_from;
-    })();
+    const normalizedVisaFrom = profileDefaults.visa_from?.trim().toLowerCase();
+    const matchedVisaFrom =
+        organisations.find(
+            (organisation) =>
+                organisation.value.toLowerCase() === normalizedVisaFrom,
+        )?.value ?? '';
 
     return (
         <div className="space-y-6">
@@ -291,9 +286,9 @@ export default function EmployeeProfileFormFields({
 
             <Section
                 title="Employment details"
-                description="Designation, department, branch, and company placement"
+                description="Designation, department, division, branch, and company placement"
             >
-                <Field label="Employee number" name="emp_num" error={errors.emp_num} required>
+                <Field label="Employee reference number" name="emp_num" error={errors.emp_num} required>
                     <Input
                         id="emp_num"
                         name="emp_num"
@@ -302,6 +297,7 @@ export default function EmployeeProfileFormFields({
                         defaultValue={defaults.emp_num ?? ''}
                     />
                 </Field>
+                {
                 <Field
                     label="Employee code"
                     name="employee_code"
@@ -313,6 +309,26 @@ export default function EmployeeProfileFormFields({
                         placeholder="Internal code / badge"
                         defaultValue={defaults.employee_code ?? ''}
                     />
+                </Field>
+                }
+                <Field
+                    label="Department"
+                    name="department_id"
+                    error={errors.department_id}
+                >
+                    <select
+                        id="department_id"
+                        name="department_id"
+                        defaultValue={defaults.department_id ?? ''}
+                        className={fieldClass}
+                    >
+                        <option value="">Select department</option>
+                        {departments.map((department) => (
+                            <option key={department.id} value={department.id}>
+                                {department.name}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
                 <Field
                     label="Designation"
@@ -347,7 +363,7 @@ export default function EmployeeProfileFormFields({
                             )}
                     </select>
                 </Field>
-                <Field label="Department" name="division" error={errors.division} required>
+                <Field label="Division" name="division" error={errors.division} required>
                     <select
                         id="division"
                         name="division"
@@ -355,7 +371,7 @@ export default function EmployeeProfileFormFields({
                         defaultValue={matchedDivisionValue}
                         className={fieldClass}
                     >
-                        <option value="">Select department</option>
+                        <option value="">Select division</option>
                         {divisions.map((division) => (
                             <option key={division.id} value={division.value}>
                                 {division.name} ({division.code})
@@ -379,7 +395,9 @@ export default function EmployeeProfileFormFields({
                         id="phone"
                         name="phone"
                         type="tel"
-                        placeholder="e.g. +971 4 123 4567"
+                        placeholder="e.g. +97141234567"
+                        pattern="[+]?[0-9]+"
+                        maxLength={20}
                         defaultValue={defaults.phone ?? ''}
                     />
                 </Field>
@@ -473,19 +491,21 @@ export default function EmployeeProfileFormFields({
                         onChange={(e) => setJoiningDate(e.target.value)}
                     />
                 </Field>
-                <Field
-                    label="Resignation date"
-                    name="resignation_date"
-                    error={errors.resignation_date}
-                >
-                    <Input
-                        id="resignation_date"
-                        type="date"
+                {isEdit && (
+                    <Field
+                        label="Resignation date"
                         name="resignation_date"
-                        defaultValue={defaults.resignation_date ?? ''}
-                        min={joiningDate}
-                    />
-                </Field>
+                        error={errors.resignation_date}
+                    >
+                        <Input
+                            id="resignation_date"
+                            type="date"
+                            name="resignation_date"
+                            defaultValue={defaults.resignation_date ?? ''}
+                            min={joiningDate}
+                        />
+                    </Field>
+                )}
                 <Field
                     label="Profile photo"
                     name="image_url"
@@ -635,7 +655,9 @@ export default function EmployeeProfileFormFields({
                         id="personal_mobile"
                         name="personal_mobile"
                         type="tel"
-                        placeholder="e.g. +971 50 123 4567"
+                        placeholder="e.g. +971501234567"
+                        pattern="[+]?[0-9]+"
+                        maxLength={20}
                         defaultValue={profileDefaults.personal_mobile ?? ''}
                     />
                 </Field>
@@ -644,9 +666,10 @@ export default function EmployeeProfileFormFields({
                     name="address_uae"
                     error={errors.address_uae}
                 >
-                    <Input
+                    <Textarea
                         id="address_uae"
                         name="address_uae"
+                        rows={4}
                         placeholder="Apartment, Street, City / Emirate"
                         defaultValue={profileDefaults.address_uae ?? ''}
                     />
@@ -686,7 +709,9 @@ export default function EmployeeProfileFormFields({
                         id="emergency_mobile"
                         name="emergency_mobile"
                         type="tel"
-                        placeholder="e.g. +971 55 987 6543"
+                        placeholder="e.g. +971559876543"
+                        pattern="[+]?[0-9]+"
+                        maxLength={20}
                         defaultValue={profileDefaults.emergency_mobile ?? ''}
                     />
                 </Field>
@@ -724,7 +749,9 @@ export default function EmployeeProfileFormFields({
                         id="home_mobile"
                         name="home_mobile"
                         type="tel"
-                        placeholder="Country code & number"
+                        placeholder="e.g. +919876543210"
+                        pattern="[+]?[0-9]+"
+                        maxLength={20}
                         defaultValue={profileDefaults.home_mobile ?? ''}
                     />
                 </Field>
@@ -733,9 +760,10 @@ export default function EmployeeProfileFormFields({
                     name="address_home"
                     error={errors.address_home}
                 >
-                    <Input
+                    <Textarea
                         id="address_home"
                         name="address_home"
+                        rows={4}
                         placeholder="Permanent home address"
                         defaultValue={profileDefaults.address_home ?? ''}
                     />
@@ -777,7 +805,9 @@ export default function EmployeeProfileFormFields({
                         id="home_emergency_mobile"
                         name="home_emergency_mobile"
                         type="tel"
-                        placeholder="Emergency phone number"
+                        placeholder="e.g. +919876543210"
+                        pattern="[+]?[0-9]+"
+                        maxLength={20}
                         defaultValue={
                             profileDefaults.home_emergency_mobile ?? ''
                         }
@@ -816,17 +846,12 @@ export default function EmployeeProfileFormFields({
                         defaultValue={matchedVisaFrom}
                         className={fieldClass}
                     >
-                        <option value="">Select visa company</option>
-                        <option value="Yes Machinery">Yes Machinery</option>
-                        <option value="Yes Automation">Yes Automation</option>
-                        {profileDefaults.visa_from &&
-                            !['Yes Machinery', 'Yes Automation'].includes(
-                                matchedVisaFrom,
-                            ) && (
-                                <option value={profileDefaults.visa_from}>
-                                    {profileDefaults.visa_from}
-                                </option>
-                            )}
+                        <option value="">Select organisation</option>
+                        {organisations.map((organisation) => (
+                            <option key={organisation.id} value={organisation.value}>
+                                {organisation.name}
+                            </option>
+                        ))}
                     </select>
                 </Field>
                 <Field

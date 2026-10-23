@@ -28,6 +28,7 @@ type DesignationOption = {
 type OrganisationOption = {
     id: number;
     name: string;
+    value: string;
     short_name: string;
 };
 
@@ -57,6 +58,7 @@ type Employee = {
     joining_date: string | null;
     resignation_date: string | null;
     division: string;
+    division_name: string | null;
     image_url: string | null;
     status: number;
     has_report: boolean;

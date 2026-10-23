@@ -50,6 +50,7 @@ type Employee = {
     joining_date: string | null;
     resignation_date: string | null;
     division: string;
+    division_name: string | null;
     image_url: string | null;
     status: number;
     has_report: boolean;
@@ -188,14 +189,12 @@ export default function EmployeesShow({
                 </div>
 
                 <Section title="Employee">
-                    <Detail label="Employee number" value={employee.emp_num} />
-                    <Detail
-                        label="Employee code"
-                        value={employee.employee_code}
-                    />
+                    <Detail label="Employee reference number" value={employee.emp_num} />
+                    <Detail label="Employee code" value={employee.employee_code}/>
                     <Detail label="ACL / Role" value={employee.roles} />
+                    <Detail label="Department" value={employee.department?.name} />
                     <Detail label="Designation" value={employee.designation} />
-                    <Detail label="Department" value={employee.division} />
+                    <Detail label="Division" value={employee.division_name ?? employee.division} />
                     <Detail label="Phone" value={employee.phone} />
                     <Detail
                         label="Employment status"

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 type Errors = Record<string, string>;
 
@@ -141,10 +142,11 @@ export default function OfficeLocationFormFields({
 
                 <div className="sm:col-span-2">
                     <Field label="Address" name="address" error={errors.address}>
-                        <Input
+                        <Textarea
                             id="address"
                             name="address"
                             required
+                            rows={4}
                             defaultValue={defaults.address ?? ''}
                         />
                     </Field>

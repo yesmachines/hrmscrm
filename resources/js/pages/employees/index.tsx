@@ -11,6 +11,7 @@ import { dashboard } from '@/routes';
 type EmployeeRow = {
     id: number;
     emp_num: string;
+    joining_date: string | null;
     designation: string;
     division: string;
     phone: string | null;
@@ -75,12 +76,15 @@ export default function EmployeesIndex({
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
                                 <th className="px-4 py-3 font-medium">Name</th>
-                                <th className="px-4 py-3 font-medium">Emp #</th>
+                                <th className="px-4 py-3 font-medium">Reference number</th>
                                 <th className="hidden px-4 py-3 font-medium md:table-cell">
                                     Designation
                                 </th>
                                 <th className="hidden px-4 py-3 font-medium lg:table-cell">
                                     Department
+                                </th>
+                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                                    Joining date
                                 </th>
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     Status
@@ -94,7 +98,7 @@ export default function EmployeesIndex({
                             {employees.data.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={6}
+                                        colSpan={7}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
                                         No employees found.{' '}
@@ -125,7 +129,10 @@ export default function EmployeesIndex({
                                             {row.designation}
                                         </td>
                                         <td className="hidden px-4 py-3 lg:table-cell">
-                                            {row.division}
+                                            {row.department?.name ?? '—'}
+                                        </td>
+                                        <td className="hidden px-4 py-3 lg:table-cell">
+                                            {row.joining_date ?? '—'}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <span

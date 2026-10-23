@@ -364,7 +364,7 @@ class EmployeeController extends Controller
     /**
      * HRMS organisations for employee assignment.
      *
-     * @return list<array{id: int, name: string, short_name: string}>
+     * @return list<array{id: int, name: string, value: string, short_name: string}>
      */
     private function organisations(): array
     {
@@ -377,6 +377,7 @@ class EmployeeController extends Controller
                 'name' => $organisation->status === 1
                     ? $organisation->org_name
                     : $organisation->org_name.' (Inactive)',
+                'value' => $organisation->org_name,
                 'short_name' => $organisation->short_name,
             ])
             ->all();
@@ -432,6 +433,9 @@ class EmployeeController extends Controller
     private function employeePayload(Employee $employee): array
     {
         $profile = $employee->profile();
+        $divisionName = Division::query()
+            ->whereRaw('LOWER(code) = ?', [strtolower($employee->division)])
+            ->value('name');
 
         $roleNames = $employee->user_id
             ? SalesCrmRoles::roleNamesForUser((int) $employee->user_id)
@@ -487,6 +491,7 @@ class EmployeeController extends Controller
             'joining_date' => $employee->joining_date?->format('Y-m-d'),
             'resignation_date' => $employee->resignation_date?->format('Y-m-d'),
             'division' => $employee->division,
+            'division_name' => $divisionName,
             'image_url' => $employee->image_url
                 ? (str_starts_with($employee->image_url, 'http://') || str_starts_with($employee->image_url, 'https://')
                     ? $employee->image_url
