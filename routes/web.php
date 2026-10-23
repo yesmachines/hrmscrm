@@ -42,19 +42,26 @@ Route::get('/', function () {
 Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::resource('employees', EmployeeController::class);
+    Route::patch('employees/{employee}/status', [EmployeeController::class, 'updateStatus'])->name('employees.update-status');
     Route::resource('employee-managers', EmployeeManagerController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::post('employees/{employee}/managers', [EmployeeController::class, 'storeManager'])->name('employees.managers.store');
     Route::delete('employees/{employee}/managers/{manager}', [EmployeeController::class, 'destroyManager'])->name('employees.managers.destroy');
     Route::resource('departments', DepartmentController::class);
+    Route::patch('departments/{department}/status', [DepartmentController::class, 'updateStatus'])->name('departments.update-status');
     Route::resource('designations', DesignationController::class);
+    Route::patch('designations/{designation}/status', [DesignationController::class, 'updateStatus'])->name('designations.update-status');
     Route::resource('organisations', OrganisationController::class);
+    Route::patch('organisations/{organisation}/status', [OrganisationController::class, 'updateStatus'])->name('organisations.update-status');
     Route::resource('office-locations', OfficeLocationController::class);
+    Route::patch('office-locations/{office_location}/status', [OfficeLocationController::class, 'updateStatus'])->name('office-locations.update-status');
 
     // Documents CRM & Config
     Route::resource('document-categories', DocumentCategoryController::class);
+    Route::patch('document-categories/{document_category}/status', [DocumentCategoryController::class, 'updateStatus'])->name('document-categories.update-status');
     Route::resource('document-types', DocumentTypeController::class);
     Route::get('document-types/{document_type}/blank-form', [DocumentTypeController::class, 'downloadBlankForm'])->name('document-types.blank-form');
     Route::resource('document-templates', DocumentTemplateController::class);
+    Route::patch('document-templates/{document_template}/status', [DocumentTemplateController::class, 'updateStatus'])->name('document-templates.update-status');
 
     Route::resource('employee-documents', EmployeeDocumentController::class);
     Route::get('employee-documents/{employee_document}/file', [EmployeeDocumentController::class, 'file'])->name('employee-documents.file');
@@ -73,8 +80,10 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::get('document-reminders', [DocumentReminderController::class, 'index'])->name('document-reminders.index');
 
     Route::resource('leave-types', LeaveTypeController::class);
+    Route::patch('leave-types/{leave_type}/status', [LeaveTypeController::class, 'updateStatus'])->name('leave-types.update-status');
     Route::resource('leave-policies', LeavePolicyController::class);
     Route::resource('festivals', FestivalController::class);
+    Route::patch('festivals/{festival}/status', [FestivalController::class, 'updateStatus'])->name('festivals.update-status');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'show', 'edit', 'update', 'create', 'store']);
     Route::post('leave-requests/{leave_request}/cancel', [LeaveRequestController::class, 'cancel'])->name('leave-requests.cancel');
     Route::resource('leave-balances', LeaveBalanceController::class);
@@ -91,6 +100,7 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
 
     // Assets Management
     Route::resource('asset-categories', AssetCategoryController::class);
+    Route::patch('asset-categories/{asset_category}/status', [AssetCategoryController::class, 'updateStatus'])->name('asset-categories.update-status');
     Route::resource('assets', AssetController::class);
     Route::post('assets/{asset}/assign', [AssetController::class, 'assign'])->name('assets.assign');
     Route::post('assets-assigned/{assignment}/return', [AssetController::class, 'returnAsset'])->name('assets.return');
@@ -103,6 +113,7 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
 
     // Events Module
     Route::resource('event-types', EventTypeController::class);
+    Route::patch('event-types/{event_type}/status', [EventTypeController::class, 'updateStatus'])->name('event-types.update-status');
     Route::resource('events', EventController::class);
 
     // Rewards Module
@@ -111,6 +122,7 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::post('rewards/{reward}/status', [RewardController::class, 'updateStatus'])->name('rewards.update-status');
     Route::resource('rewards', RewardController::class)->only(['index', 'store', 'destroy']);
     Route::resource('reward-categories', RewardCategoryController::class);
+    Route::patch('reward-categories/{reward_category}/status', [RewardCategoryController::class, 'updateStatus'])->name('reward-categories.update-status');
 
     // Socials Module (Moderation)
     Route::get('socials/moderation', [SocialController::class, 'moderation'])->name('socials.moderation');

@@ -3,6 +3,7 @@ import { Plus, Search, FolderTree } from 'lucide-react';
 import { useState } from 'react';
 import DepartmentController from '@/actions/App/Http/Controllers/Organisation/DepartmentController';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
@@ -124,15 +125,11 @@ export default function DepartmentsIndex({
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span
-                                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                                        dept.status === 1
-                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
-                                                            : 'bg-muted text-muted-foreground'
-                                                    }`}
-                                                >
-                                                    {dept.status === 1 ? 'Active' : 'Inactive'}
-                                                </span>
+                                                <StatusToggle
+                                                    status={dept.status}
+                                                    url={DepartmentController.updateStatus.url(dept.id)}
+                                                    label={`${dept.name} status`}
+                                                />
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <RowActionsMenu

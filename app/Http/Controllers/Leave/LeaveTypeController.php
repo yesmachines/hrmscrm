@@ -7,6 +7,7 @@ use App\Http\Requests\Leave\StoreLeaveTypeRequest;
 use App\Http\Requests\Leave\UpdateLeaveTypeRequest;
 use App\Models\LeaveType;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -107,6 +108,14 @@ class LeaveTypeController extends Controller
         ]);
 
         return to_route('leave-types.index');
+    }
+
+    public function updateStatus(Request $request, LeaveType $leave_type): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $leave_type->update(['status' => (int) $validated['status']]);
+
+        return back();
     }
 
     /**

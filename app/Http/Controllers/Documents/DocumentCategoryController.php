@@ -7,6 +7,7 @@ use App\Http\Requests\Documents\StoreDocumentCategoryRequest;
 use App\Http\Requests\Documents\UpdateDocumentCategoryRequest;
 use App\Models\DocumentCategory;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -106,6 +107,14 @@ class DocumentCategoryController extends Controller
         ]);
 
         return to_route('document-categories.index');
+    }
+
+    public function updateStatus(Request $request, DocumentCategory $document_category): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $document_category->update(['status' => (int) $validated['status']]);
+
+        return back();
     }
 
     /**

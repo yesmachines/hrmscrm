@@ -13,7 +13,9 @@ import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import StatusToggle from '@/components/status-toggle';
 import { dashboard } from '@/routes';
+import { updateStatus as updateAssetCategoryStatus } from '@/routes/asset-categories';
 
 interface CategoryItem {
     id: number;
@@ -268,11 +270,11 @@ export default function AssetCategoriesIndex({ categories, filters }: Props) {
                                             {cat.assets_count} items
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                                cat.status === 1 ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'
-                                            }`}>
-                                                {cat.status === 1 ? 'Active' : 'Inactive'}
-                                            </span>
+                                            <StatusToggle
+                                                status={cat.status}
+                                                url={updateAssetCategoryStatus.url(cat.id)}
+                                                label={`${cat.category} status`}
+                                            />
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <Button variant="ghost" size="sm" onClick={() => openEdit(cat)}>

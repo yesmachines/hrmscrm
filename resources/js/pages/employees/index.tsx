@@ -4,6 +4,7 @@ import { useState } from 'react';
 import EmployeeController from '@/actions/App/Http/Controllers/Employees/EmployeeController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
@@ -135,17 +136,11 @@ export default function EmployeesIndex({
                                             {row.joining_date ?? '—'}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
-                                            <span
-                                                className={
-                                                    row.status === 1
-                                                        ? 'text-primary'
-                                                        : 'text-muted-foreground'
-                                                }
-                                            >
-                                                {row.status === 1
-                                                    ? 'Active'
-                                                    : 'Inactive'}
-                                            </span>
+                                            <StatusToggle
+                                                status={row.status}
+                                                url={EmployeeController.updateStatus.url(row.id)}
+                                                label={`${row.user?.name ?? 'Employee'} status`}
+                                            />
                                         </td>
                                         <td className="px-4 py-3">
                                             <RowActionsMenu

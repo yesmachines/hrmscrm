@@ -5,15 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['organisation_id', 'office_name', 'country_id', 'city', 'address'])]
+#[Fillable(['organisation_id', 'office_name', 'country_id', 'city', 'address', 'status'])]
 class OfficeLocation extends Model
 {
+    use SoftDeletes;
+
     protected $connection = 'mysql';
 
     protected $table = 'office_locations';
-
-    public $timestamps = false;
 
     /**
      * @return array<string, string>
@@ -23,6 +24,7 @@ class OfficeLocation extends Model
         return [
             'organisation_id' => 'integer',
             'country_id' => 'integer',
+            'status' => 'integer',
         ];
     }
 

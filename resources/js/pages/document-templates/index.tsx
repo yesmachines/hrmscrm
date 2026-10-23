@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import DocumentTemplateController from '@/actions/App/Http/Controllers/Documents/DocumentTemplateController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -125,15 +126,11 @@ export default function DocumentTemplatesIndex({
                                             )}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
-                                            <span
-                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                    row.status === 1
-                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                                        : 'bg-neutral-100 text-neutral-600 border border-neutral-200'
-                                                }`}
-                                            >
-                                                {row.status === 1 ? 'Active' : 'Inactive'}
-                                            </span>
+                                            <StatusToggle
+                                                status={row.status}
+                                                url={DocumentTemplateController.updateStatus.url(row.id)}
+                                                label={`${row.template_name} status`}
+                                            />
                                         </td>
                                         <td className="px-4 py-3">
                                             <RowActionsMenu

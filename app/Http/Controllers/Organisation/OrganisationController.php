@@ -9,6 +9,7 @@ use App\Http\Requests\Organisation\UpdateOrganisationRequest;
 use App\Models\Organisation;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -112,6 +113,14 @@ class OrganisationController extends Controller
         ]);
 
         return to_route('organisations.index');
+    }
+
+    public function updateStatus(Request $request, Organisation $organisation): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $organisation->update(['status' => (int) $validated['status']]);
+
+        return back();
     }
 
     private function canDeleteOrganisations(): bool

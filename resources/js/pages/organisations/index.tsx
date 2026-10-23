@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import OrganisationController from '@/actions/App/Http/Controllers/Organisation/OrganisationController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -106,17 +107,11 @@ export default function OrganisationsIndex({
                                             {row.short_name}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
-                                            <span
-                                                className={
-                                                    row.status === 1
-                                                        ? 'text-primary'
-                                                        : 'text-muted-foreground'
-                                                }
-                                            >
-                                                {row.status === 1
-                                                    ? 'Active'
-                                                    : 'Inactive'}
-                                            </span>
+                                            <StatusToggle
+                                                status={row.status}
+                                                url={OrganisationController.updateStatus.url(row.id)}
+                                                label={`${row.org_name} status`}
+                                            />
                                         </td>
                                         <td className="px-4 py-3">
                                             <RowActionsMenu

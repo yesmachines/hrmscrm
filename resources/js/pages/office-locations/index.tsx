@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import OfficeLocationController from '@/actions/App/Http/Controllers/Organisation/OfficeLocationController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -11,6 +12,9 @@ type OfficeLocationRow = {
     office_name: string;
     city: string;
     address: string;
+    status: number;
+    created_at: string | null;
+    updated_at: string | null;
     organisation: { id: number; name: string; short_name: string } | null;
     country: { id: number; name: string; code: string } | null;
 };
@@ -60,6 +64,13 @@ export default function OfficeLocationsIndex({
                                 <th className="hidden px-4 py-3 font-medium sm:table-cell">
                                     City
                                 </th>
+                                <th className="px-4 py-3 font-medium">Status</th>
+                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                                    Created
+                                </th>
+                                <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                                    Updated
+                                </th>
                                 <th className="px-4 py-3 text-right font-medium">
                                     Actions
                                 </th>
@@ -69,7 +80,7 @@ export default function OfficeLocationsIndex({
                             {officeLocations.data.length === 0 ? (
                                 <tr>
                                     <td
-                                        colSpan={5}
+                                        colSpan={8}
                                         className="px-4 py-10 text-center text-muted-foreground"
                                     >
                                         No office locations found.{' '}
@@ -100,6 +111,19 @@ export default function OfficeLocationsIndex({
                                             {row.city}
                                         </td>
                                         <td className="px-4 py-3">
+                                            <StatusToggle
+                                                status={row.status}
+                                                url={OfficeLocationController.updateStatus.url(row.id)}
+                                                label={`${row.office_name} status`}
+                                            />
+                                        </td>
+                                        <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
+                                            {row.created_at ?? '—'}
+                                        </td>
+                                        <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
+                                            {row.updated_at ?? '—'}
+                                        </td>
+                                        <td className="px-4 py-3">
                                             <RowActionsMenu
                                                 viewHref={OfficeLocationController.show.url(
                                                     row.id,
@@ -111,7 +135,7 @@ export default function OfficeLocationsIndex({
                                                     row.id,
                                                 )}
                                                 deleteTitle="Delete office location?"
-                                                deleteDescription={`This will permanently delete ${row.office_name}. This cannot be undone.`}
+                                                deleteDescription={`${row.office_name} will be moved to deleted office locations and can be restored from the database.`}
                                                 deleteConfirmLabel="Delete office location"
                                             />
                                         </td>

@@ -67,6 +67,17 @@ class RewardCategoryController extends Controller
             ->with('success', 'Reward category updated successfully.');
     }
 
+    public function updateStatus(Request $request, RewardCategory $rewardCategory): RedirectResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', Rule::in([0, 1])],
+        ]);
+
+        $rewardCategory->update(['status' => (int) $validated['status']]);
+
+        return back();
+    }
+
     /**
      * Remove the specified category.
      */

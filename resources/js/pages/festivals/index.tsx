@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import FestivalController from '@/actions/App/Http/Controllers/Leave/FestivalController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -122,15 +123,11 @@ export default function FestivalsIndex({
                                                 : `${row.start_date} to ${row.end_date}`}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span
-                                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                                    row.is_active
-                                                        ? 'bg-emerald-100 text-emerald-700'
-                                                        : 'bg-zinc-100 text-zinc-600'
-                                                }`}
-                                            >
-                                                {row.is_active ? 'Active' : 'Inactive'}
-                                            </span>
+                                            <StatusToggle
+                                                status={row.is_active}
+                                                url={FestivalController.updateStatus.url(row.id)}
+                                                label={`${row.name} status`}
+                                            />
                                         </td>
                                         <td className="px-4 py-3">
                                             <RowActionsMenu

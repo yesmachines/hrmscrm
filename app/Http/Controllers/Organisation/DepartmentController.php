@@ -8,6 +8,7 @@ use App\Http\Requests\Organisation\UpdateDepartmentRequest;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Employee;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -105,6 +106,14 @@ class DepartmentController extends Controller
         ]);
 
         return to_route('departments.index');
+    }
+
+    public function updateStatus(Request $request, Department $department): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $department->update(['status' => (int) $validated['status']]);
+
+        return back();
     }
 
     /**

@@ -261,6 +261,14 @@ class EmployeeController extends Controller
         return to_route('employees.show', $employee);
     }
 
+    public function updateStatus(Request $request, Employee $employee): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $employee->update(['status' => (int) $validated['status']]);
+
+        return back();
+    }
+
     public function destroy(
         Employee $employee,
         DeleteEmployee $deleteEmployee,

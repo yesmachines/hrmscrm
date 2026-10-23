@@ -75,4 +75,12 @@ class AssetCategoryController extends Controller
 
         return back()->with('success', 'Asset category deleted successfully.');
     }
+
+    public function updateStatus(Request $request, AssetCategory $asset_category): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $asset_category->update(['status' => (int) $validated['status']]);
+
+        return back();
+    }
 }

@@ -9,6 +9,7 @@ use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Country;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -113,6 +114,14 @@ class OfficeLocationController extends Controller
         return to_route('office-locations.index');
     }
 
+    public function updateStatus(Request $request, OfficeLocation $office_location): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $office_location->update(['status' => (int) $validated['status']]);
+
+        return back();
+    }
+
     /**
      * @return list<array{id: int, name: string, short_name: string}>
      */
@@ -198,6 +207,9 @@ class OfficeLocationController extends Controller
             'country_id' => $location->country_id,
             'city' => $location->city,
             'address' => $location->address,
+            'status' => (int) $location->status,
+            'created_at' => $location->created_at?->format('Y-m-d H:i'),
+            'updated_at' => $location->updated_at?->format('Y-m-d H:i'),
             'organisation' => $location->organisation
                 ? [
                     'id' => $location->organisation->id,

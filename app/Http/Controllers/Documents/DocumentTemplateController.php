@@ -9,6 +9,7 @@ use App\Models\DocumentTemplate;
 use App\Models\DocumentType;
 use App\Models\Organisation;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -92,6 +93,14 @@ class DocumentTemplateController extends Controller
         ]);
 
         return to_route('document-templates.index');
+    }
+
+    public function updateStatus(Request $request, DocumentTemplate $document_template): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $document_template->update(['status' => (int) $validated['status']]);
+
+        return back();
     }
 
     /**

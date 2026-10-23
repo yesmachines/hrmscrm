@@ -7,6 +7,7 @@ use App\Http\Requests\Leave\StoreFestivalRequest;
 use App\Http\Requests\Leave\UpdateFestivalRequest;
 use App\Models\Festival;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -120,6 +121,14 @@ class FestivalController extends Controller
         ]);
 
         return to_route('festivals.index');
+    }
+
+    public function updateStatus(Request $request, Festival $festival): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $festival->update(['is_active' => (int) $validated['status']]);
+
+        return back();
     }
 
     /**

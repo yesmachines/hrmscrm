@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import LeaveTypeController from '@/actions/App/Http/Controllers/Leave/LeaveTypeController';
 import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -111,17 +112,11 @@ export default function LeaveTypesIndex({
                                             )}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
-                                            <span
-                                                className={
-                                                    row.status === 1
-                                                        ? 'text-primary'
-                                                        : 'text-muted-foreground'
-                                                }
-                                            >
-                                                {row.status === 1
-                                                    ? 'Active'
-                                                    : 'Inactive'}
-                                            </span>
+                                            <StatusToggle
+                                                status={row.status}
+                                                url={LeaveTypeController.updateStatus.url(row.id)}
+                                                label={`${row.leave_name} status`}
+                                            />
                                         </td>
                                         <td className="px-4 py-3">
                                             <RowActionsMenu

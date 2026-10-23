@@ -97,7 +97,7 @@ export default function OfficeLocationsShow({
                                 officeLocation.id,
                             )}
                             title="Delete office location?"
-                            description={`This will permanently delete ${officeLocation.office_name}. This cannot be undone.`}
+                            description={`${officeLocation.office_name} will be moved to deleted office locations.`}
                             confirmLabel="Delete office location"
                         />
                     </div>

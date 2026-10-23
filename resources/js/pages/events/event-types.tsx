@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -32,6 +33,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { dashboard } from '@/routes';
+import { updateStatus as updateEventTypeStatus } from '@/routes/event-types';
 
 interface EventTypeRow {
     id: number;
@@ -208,12 +210,11 @@ export default function EventTypesIndex({ eventTypes }: Props) {
                                             </Badge>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <Badge
-                                                variant={t.status === 1 ? 'default' : 'outline'}
-                                                className="text-[11px]"
-                                            >
-                                                {t.status === 1 ? 'Active' : 'Inactive'}
-                                            </Badge>
+                                            <StatusToggle
+                                                status={t.status}
+                                                url={updateEventTypeStatus.url(t.id)}
+                                                label={`${t.event_name} status`}
+                                            />
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">

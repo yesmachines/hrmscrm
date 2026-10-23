@@ -74,6 +74,17 @@ class EventTypeController extends Controller
         return redirect()->route('event-types.index')->with('success', 'Event type updated successfully.');
     }
 
+    public function updateStatus(Request $request, EventType $eventType): RedirectResponse
+    {
+        $validated = $request->validate([
+            'status' => ['required', 'integer', Rule::in([0, 1])],
+        ]);
+
+        $eventType->update(['status' => $validated['status']]);
+
+        return back();
+    }
+
     /**
      * Remove the specified event type.
      */

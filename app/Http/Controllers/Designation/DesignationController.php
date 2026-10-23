@@ -8,6 +8,7 @@ use App\Http\Requests\Designation\UpdateDesignationRequest;
 use App\Models\Designation;
 use App\Models\SalesCrm\Division;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -124,6 +125,14 @@ class DesignationController extends Controller
         ]);
 
         return to_route('designations.index');
+    }
+
+    public function updateStatus(Request $request, Designation $designation): RedirectResponse
+    {
+        $validated = $request->validate(['status' => 'required|in:0,1']);
+        $designation->update(['status' => (int) $validated['status']]);
+
+        return back();
     }
 
     /**

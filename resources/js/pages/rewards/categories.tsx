@@ -12,6 +12,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import Heading from '@/components/heading';
+import StatusToggle from '@/components/status-toggle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,6 +35,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { dashboard } from '@/routes';
+import { updateStatus as updateRewardCategoryStatus } from '@/routes/reward-categories';
 
 interface RewardCategoryItem {
     id: number;
@@ -246,21 +248,11 @@ export default function RewardCategoriesIndex({ categories }: Props) {
                                                 </Badge>
                                             </td>
                                             <td className="px-5 py-3.5">
-                                                {cat.status === 1 ? (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="border-emerald-400 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 font-medium"
-                                                    >
-                                                        Active
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="border-muted bg-muted text-muted-foreground font-medium"
-                                                    >
-                                                        Inactive
-                                                    </Badge>
-                                                )}
+                                                <StatusToggle
+                                                    status={cat.status}
+                                                    url={updateRewardCategoryStatus.url(cat.id)}
+                                                    label={`${cat.reward_name} status`}
+                                                />
                                             </td>
                                             <td className="px-5 py-3.5 text-right">
                                                 <div className="flex items-center justify-end gap-1">

@@ -3,6 +3,7 @@ import { Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 import DesignationController from '@/actions/App/Http/Controllers/Designation/DesignationController';
 import RowActionsMenu from '@/components/row-actions-menu';
+import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
@@ -130,15 +131,11 @@ export default function DesignationsIndex({
                                                     : '—'}
                                             </td>
                                             <td className="px-5 py-3.5">
-                                                <span
-                                                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                                        row.status === 1
-                                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
-                                                            : 'bg-muted text-muted-foreground'
-                                                    }`}
-                                                >
-                                                    {row.status === 1 ? 'Active' : 'Inactive'}
-                                                </span>
+                                                <StatusToggle
+                                                    status={row.status}
+                                                    url={DesignationController.updateStatus.url(row.id)}
+                                                    label={`${row.title} status`}
+                                                />
                                             </td>
                                             <td className="px-5 py-3.5 text-right">
                                                 <RowActionsMenu
