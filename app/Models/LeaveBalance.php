@@ -6,6 +6,7 @@ use App\Models\SalesCrm\Employee;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'employee_id',
@@ -22,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 ])]
 class LeaveBalance extends Model
 {
+    use SoftDeletes;
+
     public $timestamps = false;
 
     protected function casts(): array

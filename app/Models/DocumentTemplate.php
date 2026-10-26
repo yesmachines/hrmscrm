@@ -6,10 +6,13 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable(['document_type_id', 'organisation_id', 'template_name', 'template_code', 'status'])]
 class DocumentTemplate extends Model
 {
+    use SoftDeletes;
+
     public $timestamps = false;
 
     /**

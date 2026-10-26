@@ -6,6 +6,7 @@ use Database\Factories\DesignationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
@@ -23,7 +24,7 @@ use Illuminate\Support\Carbon;
 class Designation extends Model
 {
     /** @use HasFactory<DesignationFactory> */
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * @return array<string, string>

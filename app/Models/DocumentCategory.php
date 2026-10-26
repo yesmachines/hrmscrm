@@ -6,10 +6,13 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable(['category_name', 'short_code', 'status', 'parent_id'])]
 class DocumentCategory extends Model
 {
+    use SoftDeletes;
+
     public $timestamps = false;
 
     /**
