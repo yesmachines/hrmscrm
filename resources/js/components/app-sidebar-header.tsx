@@ -1,9 +1,9 @@
-import { Moon, Sun } from 'lucide-react';
+// import { Moon, Sun } from 'lucide-react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { HeaderUser } from '@/components/header-user';
-import { Button } from '@/components/ui/button';
+// import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { useAppearance } from '@/hooks/use-appearance';
+// import { useAppearance } from '@/hooks/use-appearance';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
 
 export function AppSidebarHeader({
@@ -11,8 +11,8 @@ export function AppSidebarHeader({
 }: {
     breadcrumbs?: BreadcrumbItemType[];
 }) {
-    const { appearance, updateAppearance } = useAppearance();
-    const isDark = appearance === 'dark';
+    // const { appearance, updateAppearance } = useAppearance();
+    // const isDark = appearance === 'dark';
 
     return (
         <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-background px-4 transition-[width,height] ease-linear md:rounded-t-xl md:px-6">
@@ -22,6 +22,7 @@ export function AppSidebarHeader({
             </div>
 
             <div className="flex items-center gap-2">
+                {/*
                 <Button
                     type="button"
                     variant="ghost"
@@ -38,6 +39,7 @@ export function AppSidebarHeader({
                         <Moon aria-hidden="true" />
                     )}
                 </Button>
+                */}
                 <HeaderUser />
             </div>
         </header>
