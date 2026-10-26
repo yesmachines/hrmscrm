@@ -4,13 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\DocumentCategory;
-use App\Models\DocumentReminder;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
 use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
 use App\Models\EmployeeRequestDetail;
 use App\Models\SalesCrm\Employee;
+use App\Services\EmployeeDocumentService;
 use App\Traits\ApiResponse;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -336,7 +336,7 @@ class DocumentController extends Controller
     /**
      * Upload / Submit New Document.
      */
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, EmployeeDocumentService $employeeDocumentService): JsonResponse
     {
         $employee = $this->getEmployee($request);
         if (! $employee) {
@@ -361,13 +361,14 @@ class DocumentController extends Controller
 
         $docType = DocumentType::query()->findOrFail($request->input('document_type_id'));
 
-        return DB::transaction(function () use ($request, $employee, $docType) {
-            $initialStatus = $docType->requires_hr_approval ? 'submitted' : 'approved';
-            $organisationId = $request->input('organisation_id') ?? $employee->organisation_id;
-            $templateId = $request->input('document_template_id')
-                ?? $docType->resolveTemplate($organisationId)?->id;
+        $initialStatus = $docType->requires_hr_approval ? 'submitted' : 'approved';
+        $organisationId = $request->input('organisation_id') ?? $employee->organisation_id;
+        $templateId = $request->input('document_template_id')
+            ?? $docType->resolveTemplate($organisationId)?->id;
 
-            $document = EmployeeDocument::query()->create([
+        $document = $employeeDocumentService->create(
+            $docType,
+            [
                 'employee_id' => $employee->id,
                 'organisation_id' => $organisationId,
                 'document_type_id' => $docType->id,
@@ -380,48 +381,17 @@ class DocumentController extends Controller
                 'current_version' => '1.0',
                 'created_by' => $request->user()?->id,
                 'status' => $initialStatus,
-            ]);
+            ],
+            $request->file('file'),
+            $request->user()?->id,
+            false,
+        );
 
-            // Save File
-            if ($request->hasFile('file')) {
-                $filePath = $request->file('file')->store('employee_documents', 'public');
-                EmployeeDocumentFile::query()->create([
-                    'employee_document_id' => $document->id,
-                    'version_no' => '1.0',
-                    'file_path' => $filePath,
-                    'uploaded_by' => $request->user()?->id,
-                    'uploaded_date' => Carbon::now(),
-                    'change_notes' => 'Initial upload',
-                ]);
-            }
-
-            // Record History
-            EmployeeDocumentHistory::query()->create([
-                'employee_document_id' => $document->id,
-                'action_type' => $initialStatus,
-                'remarks' => 'Document submitted by employee',
-                'done_by' => $request->user()?->id,
-                'action_on' => Carbon::now(),
-            ]);
-
-            // Set 3-month reminder if applicable
-            if ($docType->requires_reminder && $request->filled('expiry_date')) {
-                $expiryDate = Carbon::parse($request->input('expiry_date'));
-                $reminderDate = (clone $expiryDate)->subDays(90);
-
-                DocumentReminder::query()->create([
-                    'employee_document_id' => $document->id,
-                    'reminder_date' => $reminderDate,
-                    'days_before' => 90,
-                ]);
-            }
-
-            return $this->successResponse([
-                'id' => $document->id,
-                'status' => $document->status,
-                'message' => 'Document uploaded successfully.',
-            ], 'Document uploaded successfully.', 201);
-        });
+        return $this->successResponse([
+            'id' => $document->id,
+            'status' => $document->status,
+            'message' => 'Document uploaded successfully.',
+        ], 'Document uploaded successfully.', 201);
     }
 
     /**

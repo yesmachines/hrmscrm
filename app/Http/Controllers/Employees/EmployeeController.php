@@ -15,6 +15,7 @@ use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Division;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\EmployeeManager;
+use App\Services\EmployeeService;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,28 +25,14 @@ use Inertia\Response;
 
 class EmployeeController extends Controller
 {
-    public function index(): Response
+    public function index(EmployeeService $employeeService): Response
     {
-        $search = request('search');
-
-        $employees = Employee::query()
-            ->with(['user:id,name,email', 'department:id,name'])
-            ->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('emp_num', 'like', "%{$search}%")
-                        ->orWhere('employee_code', 'like', "%{$search}%")
-                        ->orWhere('designation', 'like', "%{$search}%")
-                        ->orWhere('division', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%")
-                        ->orWhereHas('user', function ($q) use ($search) {
-                            $q->where('name', 'like', "%{$search}%")
-                                ->orWhere('email', 'like', "%{$search}%");
-                        });
-                });
-            })
-            ->orderByDesc('id')
-            ->paginate(10)
-            ->withQueryString();
+        $employees = $employeeService->list([
+            'search' => request('search'),
+            'sort_by' => 'id',
+            'sort_order' => 'desc',
+        ], 10);
+        $employees->withQueryString();
 
         $profiles = Employee::profilesFor($employees->getCollection());
         $countryIds = $profiles->pluck('nationality')

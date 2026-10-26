@@ -7,6 +7,7 @@ use App\Http\Requests\Organisation\StoreDepartmentRequest;
 use App\Http\Requests\Organisation\UpdateDepartmentRequest;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Employee;
+use App\Services\DepartmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,20 +15,12 @@ use Inertia\Response;
 
 class DepartmentController extends Controller
 {
-    public function index(): Response
+    public function index(DepartmentService $departmentService): Response
     {
-        $search = request('search');
-
-        $departments = Department::query()
-            ->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
-                        ->orWhere('code', 'like', "%{$search}%");
-                });
-            })
-            ->orderBy('name')
-            ->paginate(15)
-            ->withQueryString();
+        $departments = $departmentService->list(
+            ['search' => request('search')],
+        );
+        $departments->withQueryString();
 
         $departments->setCollection(
             $departments->getCollection()->map(fn (Department $dept): array => $this->departmentPayload($dept))

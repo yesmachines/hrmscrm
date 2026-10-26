@@ -4,13 +4,11 @@ namespace App\Http\Controllers\Documents;
 
 use App\Http\Controllers\Controller;
 use App\Models\DocumentCategory;
-use App\Models\DocumentReminder;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
-use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
-use App\Models\EmployeeProfile;
 use App\Models\SalesCrm\Employee;
+use App\Services\EmployeeDocumentService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -138,7 +136,7 @@ class EmployeeDocumentController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, EmployeeDocumentService $employeeDocumentService): RedirectResponse
     {
         $request->validate([
             'employee_id' => 'required|integer',
@@ -165,8 +163,9 @@ class EmployeeDocumentController extends Controller
             $status = $docType->requires_hr_approval ? 'submitted' : 'approved';
         }
 
-        DB::transaction(function () use ($request, $docType, $status, $organisationId, $templateId) {
-            $document = EmployeeDocument::query()->create([
+        $employeeDocumentService->create(
+            $docType,
+            [
                 'employee_id' => $request->input('employee_id'),
                 'organisation_id' => $organisationId,
                 'document_type_id' => $docType->id,
@@ -179,40 +178,11 @@ class EmployeeDocumentController extends Controller
                 'current_version' => '1.0',
                 'created_by' => $request->user()?->id,
                 'status' => $status,
-            ]);
-
-            $filePath = $request->file('file')->store('employee_documents', 'public');
-            EmployeeDocumentFile::query()->create([
-                'employee_document_id' => $document->id,
-                'version_no' => '1.0',
-                'file_path' => $filePath,
-                'uploaded_by' => $request->user()?->id,
-                'uploaded_date' => Carbon::now(),
-                'change_notes' => $status === 'submitted' ? 'Uploaded document awaiting HR approval' : 'Uploaded by HR',
-            ]);
-
-            EmployeeDocumentHistory::query()->create([
-                'employee_document_id' => $document->id,
-                'action_type' => $status,
-                'remarks' => $status === 'submitted' ? 'Document uploaded and awaiting HR approval' : 'Document uploaded and approved by HR',
-                'done_by' => $request->user()?->id,
-                'action_on' => Carbon::now(),
-            ]);
-
-            if ($status === 'approved') {
-                $this->syncWithProfile($document);
-            }
-
-            if ($docType->requires_reminder && $request->filled('expiry_date')) {
-                $expiryDate = Carbon::parse($request->input('expiry_date'));
-                DocumentReminder::query()->create([
-                    'employee_document_id' => $document->id,
-                    'reminder_date' => (clone $expiryDate)->subDays(90),
-                    'days_before' => 90,
-                    'status' => 'pending',
-                ]);
-            }
-        });
+            ],
+            $request->file('file'),
+            $request->user()?->id,
+            true,
+        );
 
         $message = $status === 'submitted'
             ? 'Document uploaded successfully and queued for HR approval.'
@@ -240,13 +210,12 @@ class EmployeeDocumentController extends Controller
         ]);
     }
 
-    public function approve(Request $request, EmployeeDocument $employeeDocument): RedirectResponse
-    {
+    public function approve(Request $request, EmployeeDocument $employeeDocument, EmployeeDocumentService $employeeDocumentService,): RedirectResponse {
         $request->validate([
             'remarks' => 'nullable|string|max:500',
         ]);
 
-        DB::transaction(function () use ($request, $employeeDocument) {
+        DB::transaction(function () use ($request, $employeeDocument, $employeeDocumentService) {
             $employeeDocument->update([
                 'status' => 'approved',
             ]);
@@ -259,7 +228,7 @@ class EmployeeDocumentController extends Controller
                 'action_on' => Carbon::now(),
             ]);
 
-            $this->syncWithProfile($employeeDocument);
+            $employeeDocumentService->syncWithProfile($employeeDocument);
         });
 
         return back()->with('toast', ['type' => 'success', 'message' => 'Document approved successfully.']);
@@ -320,25 +289,6 @@ class EmployeeDocumentController extends Controller
         $filename = Str::slug($employeeDocument->document_title ?: $employeeDocument->documentType?->document_name ?: 'document').'.'.$ext;
 
         return response()->download(Storage::disk('public')->path($latestFile->file_path), $filename);
-    }
-
-    /**
-     * Auto-sync approved document metadata with the employee profile.
-     */
-    protected function syncWithProfile(EmployeeDocument $doc): void
-    {
-        $profile = EmployeeProfile::query()->where('employee_id', $doc->employee_id)->first();
-        if (! $profile) {
-            return;
-        }
-
-        $code = $doc->documentType?->document_code;
-
-        if ($code === 'passport' && $doc->expiry_date) {
-            $profile->update(['dob_passport' => $doc->issue_date]);
-        } elseif ($code === 'education') {
-            $profile->update(['highest_education' => $doc->document_title]);
-        }
     }
 
     protected function renderDocumentHtml(EmployeeDocument $doc, ?Employee $employee): ?string

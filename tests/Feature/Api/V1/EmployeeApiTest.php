@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,50 @@ test('unauthenticated request to employee details returns 401', function () {
     $response = $this->getJson('/api/v1/employees/1');
 
     $response->assertUnauthorized();
+});
+
+test('employee listing shares search and API filters', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Listing API User',
+        'email' => 'employee.list.api@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $department = Department::query()->create([
+        'name' => 'Listing Department',
+        'code' => 'LIST',
+        'status' => 1,
+    ]);
+
+    foreach ([
+        ['emp_num' => 'LIST-001', 'status' => 1],
+        ['emp_num' => 'LIST-002', 'status' => 0],
+    ] as $employeeData) {
+        $employeeUser = SalesCrmUser::query()->create([
+            'name' => $employeeData['emp_num'],
+            'email' => strtolower($employeeData['emp_num']).'@example.com',
+            'password' => Hash::make('Password123!'),
+            'email_verified_at' => now(),
+        ]);
+
+        Employee::query()->create([
+            'user_id' => $employeeUser->id,
+            'department_id' => $department->id,
+            'emp_num' => $employeeData['emp_num'],
+            'designation' => 'Team Member',
+            'division' => 'Operations',
+            'status' => $employeeData['status'],
+        ]);
+    }
+
+    $response = $this->withToken($token)
+        ->getJson('/api/v1/employees?search=LIST-&department_id='.$department->id.'&status=1');
+
+    $response->assertOk()
+        ->assertJsonPath('data.employees_count', 1)
+        ->assertJsonPath('data.employees.0.emp_num', 'LIST-001');
 });
 
 test('employee details returns top_level and low_level hierarchy using cm_employee_managers', function () {

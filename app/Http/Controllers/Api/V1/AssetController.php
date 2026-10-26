@@ -8,6 +8,7 @@ use App\Models\AssetAssignment;
 use App\Models\AssetCategory;
 use App\Models\AssetRequest;
 use App\Models\SalesCrm\Employee;
+use App\Services\AssetService;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class AssetController extends Controller
             new OA\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, AssetService $assetService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -50,61 +51,22 @@ class AssetController extends Controller
                 return $this->errorResponse('Employee record not found.', 404);
             }
 
-            $query = Asset::with([
-                'category:id,category,shortcode',
-                'currentAssignment.assignee.user:id,name,email',
-            ])->whereHas('assignments', function ($q) use ($employee) {
-                $q->where('assigned_to', $employee->id)
-                    ->where('status', 'Assigned');
-            });
-
-            if ($request->filled('status')) {
-                $query->where('status', $request->input('status'));
-            }
-
-            if ($request->filled('category_id')) {
-                $query->where('category_id', $request->input('category_id'));
-            }
-
-            if ($request->filled('search')) {
-                $search = $request->input('search');
-                $query->where(function ($q) use ($search) {
-                    $q->where('asset_name', 'like', "%{$search}%")
-                        ->orWhere('referenceno', 'like', "%{$search}%")
-                        ->orWhere('details', 'like', "%{$search}%");
-                });
-            }
-
-            $assets = $query->orderBy('id', 'desc')->paginate(15);
+            $assets = $assetService->listInventory(
+                $request->only(['status', 'category_id', 'search']),
+                (int) $employee->id,
+                true,
+            );
 
             return $this->successPaginatedResponse($assets, 'assets');
         }
 
         // If HR/Admin requests all inventory
         if ($isHrOrAdmin && ($request->boolean('all') || $request->has('all'))) {
-            $query = Asset::with([
-                'category:id,category,shortcode',
-                'currentAssignment.assignee.user:id,name,email',
-            ]);
-
-            if ($request->filled('status')) {
-                $query->where('status', $request->input('status'));
-            }
-
-            if ($request->filled('category_id')) {
-                $query->where('category_id', $request->input('category_id'));
-            }
-
-            if ($request->filled('search')) {
-                $search = $request->input('search');
-                $query->where(function ($q) use ($search) {
-                    $q->where('asset_name', 'like', "%{$search}%")
-                        ->orWhere('referenceno', 'like', "%{$search}%")
-                        ->orWhere('details', 'like', "%{$search}%");
-                });
-            }
-
-            $assets = $query->orderBy('id', 'desc')->paginate(15);
+            $assets = $assetService->listInventory(
+                $request->only(['status', 'category_id', 'search']),
+                null,
+                true,
+            );
 
             return $this->successPaginatedResponse($assets, 'assets');
         }
@@ -208,7 +170,7 @@ class AssetController extends Controller
             ->orderBy('category')
             ->get();
 
-            $totalCategories = $categories->count();
+        $totalCategories = $categories->count();
 
         $payload = $categories->map(function ($c) {
             return [
@@ -614,7 +576,7 @@ class AssetController extends Controller
     /**
      * Admin assigns an asset to an employee.
      */
-    public function assign(Request $request, Asset $asset): JsonResponse
+    public function assign(Request $request, Asset $asset, AssetService $assetService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -632,43 +594,12 @@ class AssetController extends Controller
             'note' => 'nullable|string',
         ]);
 
-        // Mark any previous active assignments as Returned
-        AssetAssignment::where('asset_id', $asset->id)
-            ->where('status', 'Assigned')
-            ->update([
-                'status' => 'Returned',
-                'returned_date' => now()->toDateString(),
-            ]);
-
-        $assignment = AssetAssignment::create([
-            'asset_id' => $asset->id,
-            'assigned_to' => $validated['employee_id'],
-            'assigned_date' => $validated['assigned_date'],
-            'note' => $validated['condition_during_assign'] ?? $validated['note'] ?? null,
-            'status' => 'Assigned',
-        ]);
-
-        $asset->update(['status' => 'Active']);
-
-        // When assign an asset, change matching open asset request status to Completed
-        $openRequest = AssetRequest::where('requested_by', $validated['employee_id'])
-            ->whereIn('status', ['Approved', 'In Progress', 'Pending', 'Under Review'])
-            ->where(function ($q) use ($asset) {
-                $q->where('asset_id', $asset->id)
-                    ->orWhere(function ($q2) use ($asset) {
-                        $q2->whereNull('asset_id')
-                            ->where('category_id', $asset->category_id);
-                    });
-            })
-            ->latest()
-            ->first();
-
-        if ($openRequest) {
-            $openRequest->update([
-                'status' => 'Completed',
-                'asset_id' => $asset->id,
-            ]);
-        }
+        $assignment = $assetService->assignToEmployee(
+            $asset,
+            (int) $validated['employee_id'],
+            $validated['assigned_date'],
+            $validated['condition_during_assign'] ?? $validated['note'] ?? null,
+        );
 
         return $this->successResponse([
             'assignment' => $assignment->load('assignee.user'),
@@ -679,7 +610,7 @@ class AssetController extends Controller
     /**
      * Admin assigns an asset to fulfill an asset request, marking request Completed.
      */
-    public function assignRequestAsset(Request $request, AssetRequest $asset_request): JsonResponse
+    public function assignRequestAsset(Request $request, AssetRequest $asset_request, AssetService $assetService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -697,32 +628,14 @@ class AssetController extends Controller
         ]);
 
         $asset = Asset::query()->findOrFail($validated['asset_id']);
-
-        // Mark any previous active assignments as Returned
-        AssetAssignment::where('asset_id', $asset->id)
-            ->where('status', 'Assigned')
-            ->update([
-                'status' => 'Returned',
-                'returned_date' => now()->toDateString(),
-            ]);
-
-        $assignment = AssetAssignment::create([
-            'asset_id' => $asset->id,
-            'assigned_to' => $asset_request->requested_by,
-            'assigned_date' => $validated['assigned_date'],
-            'note' => $validated['note'] ?? null,
-            'status' => 'Assigned',
-        ]);
-
-        $asset->update(['status' => 'Active']);
-
-        $asset_request->update([
-            'asset_id' => $asset->id,
-            'status' => 'Completed',
-            'admin_notes' => $asset_request->admin_notes
-                ? $asset_request->admin_notes."\nAssigned asset {$asset->referenceno} on {$validated['assigned_date']}."
-                : "Assigned asset {$asset->referenceno} on {$validated['assigned_date']}.",
-        ]);
+        $assignment = $assetService->assignToEmployee(
+            $asset,
+            (int) $asset_request->requested_by,
+            $validated['assigned_date'],
+            $validated['note'] ?? null,
+            (int) $asset_request->id,
+            "Assigned asset {$asset->referenceno} on {$validated['assigned_date']}.",
+        );
 
         return $this->successResponse([
             'assignment' => $assignment->load('assignee.user'),
@@ -734,7 +647,7 @@ class AssetController extends Controller
     /**
      * Admin marks an assigned asset as returned.
      */
-    public function returnAsset(Request $request, Asset $asset): JsonResponse
+    public function returnAsset(Request $request, Asset $asset, AssetService $assetService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -751,23 +664,12 @@ class AssetController extends Controller
             'note' => 'nullable|string',
         ]);
 
-        $activeAssignment = AssetAssignment::where('asset_id', $asset->id)
-            ->where('status', 'Assigned')
-            ->first();
-
-        if ($activeAssignment) {
-            $activeAssignment->update([
-                'status' => 'Returned',
-                'returned_date' => $validated['returned_date'] ?? now()->toDateString(),
-                'note' => $validated['note'] ?? $activeAssignment->note,
-            ]);
-        }
-
-        $assetUpdates = ['status' => 'Returned'];
-        if (! empty($validated['return_condition'])) {
-            $assetUpdates['condition'] = $validated['return_condition'];
-        }
-        $asset->update($assetUpdates);
+        $assetService->returnAsset(
+            $asset,
+            $validated['returned_date'] ?? now()->toDateString(),
+            $validated['return_condition'] ?? null,
+            $validated['note'] ?? null,
+        );
 
         return $this->successResponse([
             'asset' => $asset->fresh(['category']),

@@ -7,7 +7,8 @@ use App\Models\EmployeeProfile;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Division;
 use App\Models\SalesCrm\Employee;
-use App\Models\AssetAssignment;
+use App\Services\EmployeeService;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -38,88 +39,26 @@ class EmployeeController extends Controller
             new OA\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, EmployeeService $employeeService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
             return $this->errorResponse('Unauthenticated.', 401);
         }
 
-        $query = Employee::query()
-            ->with(['user:id,name,email', 'department:id,name']);
-
-        // Filter: Search across multiple employee & user fields
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('emp_num', 'like', "%{$search}%")
-                    ->orWhere('employee_code', 'like', "%{$search}%")
-                    ->orWhere('designation', 'like', "%{$search}%")
-                    ->orWhere('division', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%")
-                    ->orWhereHas('user', function ($uq) use ($search) {
-                        $uq->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        // Filter: Department
-        if ($request->filled('department_id')) {
-            $query->where('department_id', $request->input('department_id'));
-        }
-
-        // Filter: Status (e.g., status=1 for active)
-        if ($request->filled('status')) {
-            $query->where('status', (int) $request->input('status'));
-        }
-
-        // Filter: Exclude current employee (useful for handover person selection)
-        if ($request->boolean('exclude_me')) {
-            $query->where('user_id', '!=', $user->id);
-        }
-
-        // Sorting
-        $sortBy = $request->input('sort_by', 'id');
-        $sortOrder = $request->input('sort_order', 'asc');
-        $allowedSort = ['id', 'emp_num', 'employee_code', 'designation', 'joining_date', 'status'];
-
-        if (in_array($sortBy, $allowedSort, true)) {
-            $query->orderBy($sortBy, $sortOrder === 'desc' ? 'desc' : 'asc');
-        } else {
-            $query->orderBy('id', 'asc');
-        }
-
-        // Optional filter: type=assigned|unassigned
-        if ($request->filled('type')) {
-            $type = strtolower($request->input('type'));
-
-            // Get employee ids who currently have assigned assets
-            $assignedIds = AssetAssignment::query()
-                ->where('status', 'Assigned')
-                ->distinct()
-                ->pluck('assigned_to')
-                ->filter()
-                ->all();
-
-            if ($type === 'assigned') {
-                // If none assigned, make query return empty
-                if (empty($assignedIds)) {
-                    $query->whereIn('id', [0]);
-                } else {
-                    $query->whereIn('id', $assignedIds);
-                }
-            } elseif ($type === 'unassigned') {
-                // If there are assigned ids, exclude them; if none, leave as-is (all are unassigned)
-                if (! empty($assignedIds)) {
-                    $query->whereNotIn('id', $assignedIds);
-                }
-            }
-        }
-
         // Return non-paginated list if requested (e.g. for dropdowns)
-        if ($request->boolean('all') || $request->input('paginate') === 'false') {
-            $employees = $query->get();
+        $all = $request->boolean('all') || $request->input('paginate') === 'false';
+        $employees = $employeeService->list(
+            array_merge(
+                $request->only(['search', 'department_id', 'status', 'type', 'sort_by', 'sort_order']),
+                ['exclude_me' => $request->boolean('exclude_me')],
+            ),
+            (int) $request->input('per_page', 15),
+            $all,
+            (int) $user->id,
+        );
+
+        if ($employees instanceof Collection) {
             $data = $this->transformCollection($employees, $request->boolean('with_profile'));
 
             return $this->successResponse([
@@ -128,14 +67,11 @@ class EmployeeController extends Controller
             ]);
         }
 
-        // Default: Paginated response
-        $perPage = (int) $request->input('per_page', 15);
-        $perPage = min(max($perPage, 1), 100);
+        /** @var LengthAwarePaginator $paginator */
+        $paginator = $employees;
 
-        $paginator = $query->paginate($perPage);
-
-    // Reuse transformCollection which computes profiles and asset counts in bulk
-    $transformedItems = $this->transformCollection($paginator->getCollection(), $request->boolean('with_profile'));
+        // Reuse transformCollection which computes profiles and asset counts in bulk
+        $transformedItems = $this->transformCollection($paginator->getCollection(), $request->boolean('with_profile'));
 
         return response()->json([
             'success' => true,
@@ -326,6 +262,7 @@ class EmployeeController extends Controller
 
         return $employees->map(function (Employee $emp) use ($profiles, $withProfile, $assetCounts) {
             $assetCount = isset($assetCounts[$emp->id]) ? (int) $assetCounts[$emp->id] : 0;
+
             return $this->formatEmployee($emp, $withProfile ? $profiles->get($emp->id) : null, $assetCount);
         })->all();
     }

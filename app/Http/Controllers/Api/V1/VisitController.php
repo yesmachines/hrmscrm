@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\SalesCrm\Employee;
 use App\Models\Visit;
+use App\Services\VisitService;
 use App\Support\SalesCrmRoles;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,7 +15,7 @@ class VisitController extends Controller
     /**
      * List visit history / requests.
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, VisitService $visitService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -25,118 +25,21 @@ class VisitController extends Controller
         $employee = Employee::where('user_id', $user->id)->first();
         $isHrOrAdmin = SalesCrmRoles::userHasLoginAccess((int) $user->id);
 
-        $query = Visit::query()->with([
-            'creator:id,user_id,employee_code,emp_num,designation',
-            'creator.user:id,name,email',
-            'latestApproval.approver:id,name',
-        ]);
-
         // Non-HR users can only see visits they created
+        $creatorId = null;
         if (! $isHrOrAdmin || (! $request->boolean('all') && ! $request->has('all'))) {
-            if ($employee) {
-                $query->where('created_by', $employee->id);
-            } else {
-                $query->where('created_by', $user->id);
-            }
+            $creatorId = $employee?->id ?? (int) $user->id;
         }
 
-        $pendingRequestsCount = (clone $query)
-            ->reorder()
-            ->where('status', 'pending')
-            ->count();
+        $listing = $visitService->list($request, $creatorId, true);
 
-        // Filter by status
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
-        }
-
-        // Filter by date (e.g. today / current_day, tomorrow, day_after_tomorrow, before_today, after_today, or specific date YYYY-MM-DD)
-        $dateFilter = $request->query('date_filter')
-            ?? $request->query('day')
-            ?? $request->query('date')
-            ?? $request->query('filter')
-            ?? $request->input('date_filter')
-            ?? $request->input('day')
-            ?? $request->input('date')
-            ?? $request->input('filter');
-
-        if (! empty($dateFilter)) {
-            $normalized = strtolower(trim(str_replace(['_', '-'], ' ', (string) $dateFilter)));
-            $normalized = preg_replace('/\s+/', ' ', $normalized);
-
-            if (in_array($normalized, ['before today', 'before', 'past'])) {
-                $today = now()->toDateString();
-                $query->where(function ($q) use ($today) {
-                    $q->where(function ($sub) use ($today) {
-                        $sub->whereNotNull('expected_end_date')
-                            ->whereDate('expected_end_date', '<', $today);
-                    })->orWhere(function ($sub) use ($today) {
-                        $sub->whereNull('expected_end_date')
-                            ->whereDate('expected_start_date', '<', $today);
-                    });
-                });
-            } elseif (in_array($normalized, ['after today', 'after', 'future', 'upcoming'])) {
-                $today = now()->toDateString();
-                $query->whereDate('expected_start_date', '>', $today);
-            } else {
-                $targetDate = null;
-                if (in_array($normalized, ['today', 'current day', 'current'])) {
-                    $targetDate = now()->toDateString();
-                } elseif (in_array($normalized, ['tomorrow', 'tomorow'])) {
-                    $targetDate = now()->addDay()->toDateString();
-                } elseif (in_array($normalized, ['day after tomorrow', 'day after tommarow'])) {
-                    $targetDate = now()->addDays(2)->toDateString();
-                } elseif ($normalized === 'yesterday') {
-                    $targetDate = now()->subDay()->toDateString();
-                } else {
-                    try {
-                        $targetDate = Carbon::parse($dateFilter)->toDateString();
-                    } catch (\Throwable) {
-                        $targetDate = null;
-                    }
-                }
-
-                if ($targetDate) {
-                    $query->where(function ($q) use ($targetDate) {
-                        $q->whereDate('expected_start_date', $targetDate)
-                            ->orWhere(function ($sub) use ($targetDate) {
-                                $sub->whereNotNull('expected_end_date')
-                                    ->whereDate('expected_start_date', '<=', $targetDate)
-                                    ->whereDate('expected_end_date', '>=', $targetDate);
-                            });
-                    });
-                }
-            }
-        }
-
-        if ($request->filled('start_date') && $request->filled('end_date')) {
-            $startDate = Carbon::parse($request->input('start_date'))->toDateString();
-            $endDate = Carbon::parse($request->input('end_date'))->toDateString();
-
-            $query->where(function ($q) use ($startDate, $endDate) {
-                $q->whereBetween('expected_start_date', [$startDate.' 00:00:00', $endDate.' 23:59:59'])
-                    ->orWhere(function ($sub) use ($startDate, $endDate) {
-                        $sub->whereNotNull('expected_end_date')
-                            ->whereDate('expected_start_date', '<=', $endDate)
-                            ->whereDate('expected_end_date', '>=', $startDate);
-                    });
-            });
-        }
-
-        // Search by visitor name, company, location, purpose
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('company', 'like', "%{$search}%")
-                    ->orWhere('location', 'like', "%{$search}%")
-                    ->orWhere('purpose', 'like', "%{$search}%")
-                    ->orWhere('visitor_details', 'like', "%{$search}%");
-            });
-        }
-
-        $visits = $query->orderBy('expected_start_date', 'desc')->paginate(15);
-
-        return $this->successPaginatedResponse($visits, 'visits', 'Success', 200, ['pending_requests_count' => $pendingRequestsCount]);
+        return $this->successPaginatedResponse(
+            $listing['visits'],
+            'visits',
+            'Success',
+            200,
+            ['pending_requests_count' => $listing['pending_requests_count']],
+        );
     }
 
     /**
@@ -209,7 +112,7 @@ class VisitController extends Controller
     /**
      * Approve visit request by HR.
      */
-    public function approve(Request $request, Visit $visit): JsonResponse
+    public function approve(Request $request, Visit $visit, VisitService $visitService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -220,14 +123,7 @@ class VisitController extends Controller
             'instructions' => 'nullable|string',
         ]);
 
-        $visit->update([
-            'status' => 'approved',
-        ]);
-
-        $approval = $visit->approvals()->create([
-            'approver_id' => $user->id,
-            'instructions' => $validated['instructions'] ?? null,
-        ]);
+        $approval = $visitService->approve($visit, (int) $user->id, $validated['instructions'] ?? null);
 
         return $this->successResponse([
             'visit' => $visit->fresh([
@@ -241,7 +137,7 @@ class VisitController extends Controller
     /**
      * Reject visit request by HR.
      */
-    public function reject(Request $request, Visit $visit): JsonResponse
+    public function reject(Request $request, Visit $visit, VisitService $visitService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -252,14 +148,7 @@ class VisitController extends Controller
             'rejected_reason' => 'required|string',
         ]);
 
-        $visit->update([
-            'status' => 'rejected',
-        ]);
-
-        $approval = $visit->approvals()->create([
-            'approver_id' => $user->id,
-            'rejected_reason' => $validated['rejected_reason'],
-        ]);
+        $approval = $visitService->reject($visit, (int) $user->id, $validated['rejected_reason']);
 
         return $this->successResponse([
             'visit' => $visit->fresh([
@@ -273,15 +162,13 @@ class VisitController extends Controller
     /**
      * Update visit status to completed or cancelled.
      */
-    public function updateStatus(Request $request, Visit $visit): JsonResponse
+    public function updateStatus(Request $request, Visit $visit, VisitService $visitService): JsonResponse
     {
         $validated = $request->validate([
             'status' => 'required|in:completed,cancelled',
         ]);
 
-        $visit->update([
-            'status' => $validated['status'],
-        ]);
+        $visitService->updateStatus($visit, $validated['status']);
 
         return $this->successResponse([
             'visit' => $visit->fresh(),

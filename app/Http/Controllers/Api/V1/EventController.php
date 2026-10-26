@@ -5,20 +5,17 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\EventType;
+use App\Services\EventService;
 use App\Support\SalesCrmRoles;
 use App\Traits\ApiResponse;
-use App\Traits\FiltersEventsByDate;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
 
 class EventController extends Controller
 {
     use ApiResponse;
-    use FiltersEventsByDate;
 
     /**
      * List events with date and type filters.
@@ -33,40 +30,14 @@ class EventController extends Controller
             new OA\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, EventService $eventService): JsonResponse
     {
-        $query = Event::query()
-            ->with([
-                'eventType:id,event_code,event_name,event_source,priority,icon_path',
-                'organisation:id,org_name,short_name',
-                'employee:id,user_id,emp_num,designation',
-                'employee.user:id,name',
-            ])
-            ->where('status', 'published');
-
-        // Filter by Event Type
-        if ($request->filled('event_type_id')) {
-            $query->where('event_type_id', $request->input('event_type_id'));
-        }
-
-        // Filter by event source (system or manual)
-        if ($request->filled('source')) {
-            $source = $request->input('source');
-            $query->whereHas('eventType', function (Builder $q) use ($source): void {
-                $q->where('event_source', $source);
-            });
-        }
-
-        // Filter by dashboard flag
-        if ($request->has('dashboard')) {
-            $query->where('show_dashboard', $request->boolean('dashboard'));
-        }
-
-        // Apply flexible date and month/year filters
-        $this->applyDateAndMonthFilters($query, $request);
-
-        $perPage = (int) $request->input('per_page', 20);
-        $events = $query->orderBy('start_datetime')->paginate($perPage);
+        $events = $eventService->list($request, [
+            'eventType:id,event_code,event_name,event_source,priority,icon_path',
+            'organisation:id,org_name,short_name',
+            'employee:id,user_id,emp_num,designation',
+            'employee.user:id,name',
+        ], (int) $request->input('per_page', 20), ['published', 'event_type_id', 'source', 'dashboard', 'date']);
 
         return $this->successPaginatedResponse($events, 'events', 'Events retrieved successfully.');
     }
@@ -135,7 +106,7 @@ class EventController extends Controller
     /**
      * Create an event via API.
      */
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, EventService $eventService): JsonResponse
     {
         $validated = $request->validate([
             'event_type_id' => ['required', 'exists:event_types,id'],
@@ -151,15 +122,11 @@ class EventController extends Controller
             'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
-        if ($request->hasFile('file')) {
-            $validated['file_path'] = $request->file('file')->store('events', 'public');
-        }
-
         $validated['created_by'] = $request->user()?->id;
         $validated['status'] = $validated['status'] ?? 'published';
         $validated['show_dashboard'] = $request->boolean('show_dashboard', true);
 
-        $event = Event::query()->create($validated);
+        $event = $eventService->create($validated, $request->file('file'));
 
         return $this->successResponse(
             $event->fresh(['eventType', 'organisation']),
@@ -171,7 +138,7 @@ class EventController extends Controller
     /**
      * Update an event via the HR API.
      */
-    public function update(Request $request, Event $event): JsonResponse
+    public function update(Request $request, Event $event, EventService $eventService): JsonResponse
     {
         $user = $request->user();
         if (! SalesCrmRoles::userHasAnyRole((int) $user->id, ['admin', 'hr'])) {
@@ -192,17 +159,9 @@ class EventController extends Controller
             'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
-        if ($request->hasFile('file')) {
-            if ($event->file_path && Storage::disk('public')->exists($event->file_path)) {
-                Storage::disk('public')->delete($event->file_path);
-            }
-
-            $validated['file_path'] = $request->file('file')->store('events', 'public');
-        }
-
         $validated['show_dashboard'] = $request->boolean('show_dashboard', $event->show_dashboard);
 
-        $event->update($validated);
+        $eventService->update($event, $validated, $request->file('file'));
 
         return $this->successResponse(
             $event->fresh(['eventType', 'organisation']),
@@ -213,14 +172,14 @@ class EventController extends Controller
     /**
      * Soft delete an event. Only HR and Admin users may delete events.
      */
-    public function destroy(Request $request, Event $event): JsonResponse
+    public function destroy(Request $request, Event $event, EventService $eventService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
             return $this->errorResponse('Unauthenticated.', 401);
         }
 
-        $event->delete();
+        $eventService->delete($event);
 
         return $this->successResponse(null, 'Event deleted successfully.');
     }

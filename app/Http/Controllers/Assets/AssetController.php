@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\AssetAssignment;
 use App\Models\AssetCategory;
-use App\Models\AssetRequest;
 use App\Models\SalesCrm\Employee;
+use App\Services\AssetService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,35 +15,11 @@ use Inertia\Response;
 
 class AssetController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, AssetService $assetService): Response
     {
-        $query = Asset::with([
-            'category:id,category,shortcode',
-            'currentAssignment.assignee.user:id,name',
-        ]);
-
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->input('category_id'));
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
-        }
-
-        if ($request->filled('condition')) {
-            $query->where('condition', $request->input('condition'));
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('asset_name', 'like', "%{$search}%")
-                    ->orWhere('referenceno', 'like', "%{$search}%")
-                    ->orWhere('details', 'like', "%{$search}%");
-            });
-        }
-
-        $assets = $query->orderBy('id', 'desc')->paginate(15)->withQueryString();
+        $assets = $assetService->listInventory(
+            $request->only(['category_id', 'status', 'condition', 'search']),
+        )->withQueryString();
 
         $categories = AssetCategory::query()->where('status', 1)->select('id', 'category')->orderBy('category')->get();
 
@@ -156,7 +132,7 @@ class AssetController extends Controller
         return back()->with('success', 'Asset updated successfully.');
     }
 
-    public function assign(Request $request, Asset $asset): RedirectResponse
+    public function assign(Request $request, Asset $asset, AssetService $assetService): RedirectResponse
     {
         $validated = $request->validate([
             'assigned_to' => 'required|exists:salescrm.employees,id',
@@ -165,55 +141,19 @@ class AssetController extends Controller
             'asset_request_id' => 'nullable|exists:asset_requests,id',
         ]);
 
-        // Close any previous open assignment
-        $asset->assignments()->where('status', 'Assigned')->update([
-            'returned_date' => now()->toDateString(),
-            'status' => 'Returned',
-        ]);
-
-        $asset->assignments()->create([
-            'assigned_to' => $validated['assigned_to'],
-            'assigned_date' => $validated['assigned_date'],
-            'note' => $validated['note'] ?? null,
-            'status' => 'Assigned',
-        ]);
-
-        $asset->update(['status' => 'Active']);
-
-        // When assign an asset, change matching open asset request status to Completed
-        if (! empty($validated['asset_request_id'])) {
-            AssetRequest::where('id', $validated['asset_request_id'])->update([
-                'status' => 'Completed',
-                'asset_id' => $asset->id,
-            ]);
-        } else {
-            $openRequest = AssetRequest::where('requested_by', $validated['assigned_to'])
-                ->whereIn('status', ['Approved', 'In Progress', 'Pending', 'Under Review'])
-                ->where(function ($q) use ($asset) {
-                    $q->where('asset_id', $asset->id)
-                        ->orWhere(function ($q2) use ($asset) {
-                            $q2->whereNull('asset_id')
-                                ->where('category_id', $asset->category_id);
-                        });
-                })
-                ->latest()
-                ->first();
-
-            if ($openRequest) {
-                $openRequest->update([
-                    'status' => 'Completed',
-                    'asset_id' => $asset->id,
-                    'admin_notes' => $openRequest->admin_notes
-                        ? $openRequest->admin_notes."\nFulfillment: Asset assigned on {$validated['assigned_date']}."
-                        : "Fulfillment: Asset assigned on {$validated['assigned_date']}.",
-                ]);
-            }
-        }
+        $assetService->assignToEmployee(
+            $asset,
+            (int) $validated['assigned_to'],
+            $validated['assigned_date'],
+            $validated['note'] ?? null,
+            isset($validated['asset_request_id']) ? (int) $validated['asset_request_id'] : null,
+            isset($validated['asset_request_id']) ? null : "Fulfillment: Asset assigned on {$validated['assigned_date']}.",
+        );
 
         return back()->with('success', 'Asset assigned to employee successfully.');
     }
 
-    public function returnAsset(Request $request, AssetAssignment $assignment): RedirectResponse
+    public function returnAsset(Request $request, AssetAssignment $assignment, AssetService $assetService): RedirectResponse
     {
         $validated = $request->validate([
             'returned_date' => 'required|date',
@@ -221,20 +161,18 @@ class AssetController extends Controller
             'note' => 'nullable|string',
         ]);
 
-        $assignment->update([
-            'returned_date' => $validated['returned_date'],
-            'note' => $validated['note'] ? ($assignment->note ? $assignment->note."\nReturn Note: ".$validated['note'] : $validated['note']) : $assignment->note,
-            'status' => 'Returned',
-        ]);
-
         $asset = $assignment->asset;
-        if ($asset) {
-            $assetUpdate = ['status' => 'Returned'];
-            if (! empty($validated['return_condition'])) {
-                $assetUpdate['condition'] = $validated['return_condition'];
-            }
-            $asset->update($assetUpdate);
-        }
+        $note = $validated['note']
+            ? ($assignment->note ? $assignment->note."\nReturn Note: ".$validated['note'] : $validated['note'])
+            : $assignment->note;
+
+        $assetService->returnAsset(
+            $asset,
+            $validated['returned_date'],
+            $validated['return_condition'] ?? null,
+            $note,
+            $assignment,
+        );
 
         return back()->with('success', 'Asset marked as returned successfully.');
     }
