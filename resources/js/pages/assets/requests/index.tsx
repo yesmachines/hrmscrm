@@ -15,6 +15,7 @@ import {
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 interface RequestItem {
@@ -279,7 +280,7 @@ export default function AssetRequestsIndex({ requests, filters }: Props) {
                                                 {getStatusBadge(req.status)}
                                             </td>
                                             <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
-                                                {req.requested_date}
+                                                {formatDate(req.requested_date)}
                                             </td>
                                             <td className="px-4 py-3.5 text-right whitespace-nowrap">
                                                 <Button variant="outline" size="sm" asChild>

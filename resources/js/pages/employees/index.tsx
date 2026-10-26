@@ -7,6 +7,7 @@ import RowActionsMenu from '@/components/row-actions-menu';
 import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type EmployeeRow = {
@@ -133,7 +134,7 @@ export default function EmployeesIndex({
                                             {row.department?.name ?? '—'}
                                         </td>
                                         <td className="hidden px-4 py-3 lg:table-cell">
-                                            {row.joining_date ?? '—'}
+                                            {row.joining_date ? formatDate(row.joining_date) : '—'}
                                         </td>
                                         <td className="hidden px-4 py-3 sm:table-cell">
                                             <StatusToggle

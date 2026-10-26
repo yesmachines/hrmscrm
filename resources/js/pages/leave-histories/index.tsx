@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { index, create } from '@/actions/App/Http/Controllers/Leave/LeaveHistoryController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { formatDate, formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type LeaveHistoryRow = {
@@ -76,7 +77,7 @@ export default function LeaveHistoriesIndex({ histories }: { histories: Paginate
                                             #{row.leave_request?.id} 
                                             {row.leave_request && (
                                                 <span className="ml-2 text-xs text-muted-foreground">
-                                                    ({new Date(row.leave_request.start_date).toLocaleDateString()} - {new Date(row.leave_request.end_date).toLocaleDateString()})
+                                                    ({formatDate(row.leave_request.start_date)} - {formatDate(row.leave_request.end_date)})
                                                 </span>
                                             )}
                                         </td>
@@ -97,7 +98,7 @@ export default function LeaveHistoriesIndex({ histories }: { histories: Paginate
                                             {row.done_by?.name || '-'}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {row.action_on ? new Date(row.action_on).toLocaleString() : '-'}
+                                            {row.action_on ? formatDateTime(row.action_on) : '-'}
                                         </td>
                                     </tr>
                                 ))

@@ -16,6 +16,7 @@ import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 interface VisitorDetail {
@@ -227,11 +228,7 @@ export default function VisitsIndex({ visits, filters }: Props) {
                                                     <div className="flex items-center gap-1.5 text-foreground font-medium">
                                                         <Calendar className="size-3.5 text-muted-foreground shrink-0" />
                                                         <span>
-                                                            {new Date(visit.expected_start_date).toLocaleDateString([], {
-                                                                month: 'short',
-                                                                day: 'numeric',
-                                                                year: 'numeric',
-                                                            })}
+                                                            {formatDate(visit.expected_start_date)}
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 text-muted-foreground mt-0.5">

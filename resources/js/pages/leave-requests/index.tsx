@@ -3,6 +3,7 @@ import { Check, Plus, X, Edit2, Ban } from 'lucide-react';
 import { index, update, show } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type LeaveRequestRow = {
@@ -105,7 +106,7 @@ export default function LeaveRequestsIndex({ requests }: { requests: PaginatedRe
                                             {row.leave_type?.leave_name}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {new Date(row.start_date).toLocaleDateString()} - {new Date(row.end_date).toLocaleDateString()}
+                                            {formatDate(row.start_date)} - {formatDate(row.end_date)}
                                         </td>
                                         <td className="px-4 py-3 font-medium text-foreground">
                                             {row.total_days} {row.total_days === 1 ? 'Day' : 'Days'}

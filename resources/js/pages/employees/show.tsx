@@ -6,6 +6,7 @@ import EmployeeController from '@/actions/App/Http/Controllers/Employees/Employe
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type Profile = {
@@ -208,7 +209,7 @@ export default function EmployeesShow({
                         label="Office location"
                         value={employee.office_location?.name}
                     />
-                    <Detail label="Joining date" value={employee.joining_date} />
+                    <Detail label="Joining date" value={formatDate(employee.joining_date)} />
                     <Detail
                         label="Resignation date"
                         value={employee.resignation_date}
@@ -221,7 +222,7 @@ export default function EmployeesShow({
 
                 <Section title="Personal profile">
                     <Detail label="Gender" value={profile?.gender === 'M' ? 'Male' : profile?.gender === 'F' ? 'Female' : profile?.gender} />
-                    <Detail label="Date of birth" value={profile?.dob_personal} />
+                    <Detail label="Date of birth" value={formatDate(profile?.dob_personal)} />
                     <Detail
                         label="Marital status"
                         value={profile?.marital_status ? profile.marital_status.charAt(0).toUpperCase() + profile.marital_status.slice(1) : null}
@@ -293,7 +294,7 @@ export default function EmployeesShow({
                     />
                     <Detail
                         label="Passport DOB"
-                        value={profile?.dob_passport}
+                        value={formatDate(profile?.dob_passport)}
                     />
                     <Detail
                         label="Total experience"

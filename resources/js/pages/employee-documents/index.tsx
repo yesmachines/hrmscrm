@@ -32,6 +32,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { formatDate, formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type DocumentItem = {
@@ -305,7 +306,7 @@ export default function EmployeeDocumentsIndex({
                                         </td>
                                         <td className="px-5 py-4">
                                             <div className="font-medium text-foreground">{doc.document_title || doc.document_name}</div>
-                                            <div className="text-xs text-muted-foreground">Version {doc.current_version} • Uploaded {doc.created_at}</div>
+                                            <div className="text-xs text-muted-foreground">Version {doc.current_version} • Uploaded {formatDateTime(doc.created_at)}</div>
                                         </td>
                                         <td className="hidden px-5 py-4 text-muted-foreground md:table-cell">
                                             <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-neutral-100 text-neutral-800">
@@ -315,7 +316,7 @@ export default function EmployeeDocumentsIndex({
                                         <td className="hidden px-5 py-4 lg:table-cell">
                                             <div className="text-sm text-foreground">{doc.document_number || '—'}</div>
                                             {doc.expiry_date_display && (
-                                                <div className="text-xs text-muted-foreground">Expires: {doc.expiry_date_display}</div>
+                                                <div className="text-xs text-muted-foreground">Expires: {formatDate(doc.expiry_date_display)}</div>
                                             )}
                                         </td>
                                         <td className="px-5 py-4">{getStatusBadge(doc.status)}</td>

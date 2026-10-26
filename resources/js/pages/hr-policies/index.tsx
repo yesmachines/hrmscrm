@@ -31,6 +31,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type PolicyItem = {
@@ -247,7 +248,7 @@ export default function HrPoliciesIndex({ policies, policyTypes }: Props) {
                                                 <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                                                     <span className="font-semibold text-foreground">{policy.version}</span>
                                                     <span>•</span>
-                                                    <span>Updated: {policy.updated_at}</span>
+                                                    <span>Updated: {formatDateTime(policy.updated_at)}</span>
                                                 </div>
                                             </div>
                                         </div>

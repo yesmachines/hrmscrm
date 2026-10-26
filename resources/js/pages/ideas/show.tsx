@@ -4,10 +4,11 @@ import { ArrowLeft, CheckCircle2, Clock, Image as ImageIcon, Check, X, ThumbsUp 
 import IdeaController from '@/actions/App/Http/Controllers/IdeaController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
-import { dashboard } from '@/routes';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import InputError from '@/components/input-error';
+import { formatDate, formatDateTime } from '@/lib/date-format';
+import { dashboard } from '@/routes';
 
 type Track = {
     id: number;
@@ -65,7 +66,7 @@ export default function IdeaShow({ idea }: { idea: IdeaData }) {
                         </Button>
                         <Heading
                             title={idea.title}
-                            description={`Submitted by ${idea.employee?.user?.name ?? 'Unknown'} on ${new Date(idea.created_at).toLocaleDateString()}`}
+                            description={`Submitted by ${idea.employee?.user?.name ?? 'Unknown'} on ${formatDate(idea.created_at)}`}
                         />
                     </div>
                     <div className="flex items-center gap-2">
@@ -206,7 +207,7 @@ export default function IdeaShow({ idea }: { idea: IdeaData }) {
                                                 {track.action_type.charAt(0).toUpperCase() + track.action_type.slice(1)}
                                             </span>
                                             <span className="text-xs text-muted-foreground">
-                                                {new Date(track.action_on).toLocaleString()}
+                                                {formatDateTime(track.action_on)}
                                             </span>
                                             {track.done_by && (
                                                 <span className="text-xs text-muted-foreground mt-1">

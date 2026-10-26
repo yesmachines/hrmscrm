@@ -5,6 +5,7 @@ import Heading from '@/components/heading';
 import RowActionsMenu from '@/components/row-actions-menu';
 import StatusToggle from '@/components/status-toggle';
 import { Button } from '@/components/ui/button';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type FestivalRow = {
@@ -120,7 +121,7 @@ export default function FestivalsIndex({
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {row.type === 'festival' || row.start_date === row.end_date
                                                 ? row.start_date
-                                                : `${row.start_date} to ${row.end_date}`}
+                                                : `${formatDate(row.start_date)} to ${formatDate(row.end_date)}`}
                                         </td>
                                         <td className="px-4 py-3">
                                             <StatusToggle

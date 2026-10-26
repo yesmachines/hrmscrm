@@ -3,6 +3,7 @@ import { Eye } from 'lucide-react';
 import IdeaController from '@/actions/App/Http/Controllers/IdeaController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type IdeaRow = {
@@ -82,7 +83,7 @@ export default function IdeasIndex({ ideas }: { ideas: PaginatedIdeas }) {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {new Date(row.created_at).toLocaleDateString()}
+                                            {formatDate(row.created_at)}
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <Button variant="ghost" size="sm" asChild>

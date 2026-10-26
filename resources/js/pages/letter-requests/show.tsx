@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type LetterDetail = {
@@ -502,7 +503,7 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                 {request.histories.map((hist, idx) => (
                                     <div key={idx} className="text-xs border-l-2 border-primary pl-3 py-0.5 space-y-0.5">
                                         <div className="font-semibold capitalize text-foreground">{hist.action_type}</div>
-                                        <div className="text-muted-foreground">{hist.action_on}</div>
+                                        <div className="text-muted-foreground">{formatDateTime(hist.action_on)}</div>
                                         {hist.remarks && <div className="text-muted-foreground italic">"{hist.remarks}"</div>}
                                     </div>
                                 ))}

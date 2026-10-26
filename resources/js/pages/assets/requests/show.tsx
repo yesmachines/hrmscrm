@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
+import { formatDate, formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 interface AvailableAsset {
@@ -216,7 +217,7 @@ export default function AssetRequestShow({ assetRequest, availableAssets = [] }:
                         <div className="flex items-center gap-3">
                             <Heading
                                 title={assetRequest.request_no}
-                                description={`Submitted by ${assetRequest.requester?.user?.name || 'Employee'} on ${assetRequest.requested_date}`}
+                                description={`Submitted by ${assetRequest.requester?.user?.name || 'Employee'} on ${formatDate(assetRequest.requested_date)}`}
                             />
                             <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(assetRequest.status)}`}>
                                 {assetRequest.status}
@@ -502,13 +503,13 @@ export default function AssetRequestShow({ assetRequest, availableAssets = [] }:
                                 <div>
                                     <p className="text-xs text-neutral-500">Date Requested</p>
                                     <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mt-1">
-                                        {assetRequest.requested_date}
+                                        {formatDate(assetRequest.requested_date)}
                                     </p>
                                 </div>
                                 <div>
                                     <p className="text-xs text-neutral-500">Required By</p>
                                     <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mt-1">
-                                        {assetRequest.required_by_date || 'Not specified'}
+                                        {assetRequest.required_by_date ? formatDate(assetRequest.required_by_date) : 'Not specified'}
                                     </p>
                                 </div>
                             </div>
@@ -632,14 +633,14 @@ export default function AssetRequestShow({ assetRequest, availableAssets = [] }:
                                     <div>
                                         <p className="text-xs text-neutral-500">Reviewed At</p>
                                         <p className="text-neutral-700 dark:text-neutral-300">
-                                            {new Date(assetRequest.reviewed_at).toLocaleString()}
+                                            {formatDateTime(assetRequest.reviewed_at)}
                                         </p>
                                     </div>
                                 )}
                                 <div>
                                     <p className="text-xs text-neutral-500">Created At</p>
                                     <p className="text-neutral-700 dark:text-neutral-300">
-                                        {new Date(assetRequest.created_at).toLocaleString()}
+                                        {formatDateTime(assetRequest.created_at)}
                                     </p>
                                 </div>
                             </div>

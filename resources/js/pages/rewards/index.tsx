@@ -47,6 +47,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 interface RewardCategoryItem {
@@ -637,7 +638,7 @@ export default function RewardsIndex({
                                                 {formatCurrency(reward.amount)}
                                             </td>
                                             <td className="px-5 py-3.5 text-xs text-muted-foreground">
-                                                {reward.submitted_date}
+                                                {formatDate(reward.submitted_date)}
                                             </td>
                                             <td className="px-5 py-3.5">
                                                 {getStatusBadge(reward.status)}
@@ -911,7 +912,7 @@ export default function RewardsIndex({
                                     </div>
                                     <div>
                                         <span className="text-xs text-muted-foreground uppercase font-semibold">Submitted Date</span>
-                                        <p className="text-sm mt-0.5">{selectedReward.submitted_date}</p>
+                                        <p className="text-sm mt-0.5">{formatDate(selectedReward.submitted_date)}</p>
                                     </div>
                                     <div className="sm:col-span-2">
                                         <span className="text-xs text-muted-foreground uppercase font-semibold">Description / Justification</span>

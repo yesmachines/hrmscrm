@@ -20,6 +20,7 @@ import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { formatDate, formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 interface VisitorDetail {
@@ -124,7 +125,7 @@ export default function VisitsShow({ visit }: Props) {
                         <div>
                             <Heading
                                 title={`Visit Request #${visit.id}`}
-                                description={`Requested on ${new Date(visit.created_at).toLocaleDateString()}`}
+                                description={`Requested on ${formatDate(visit.created_at)}`}
                             />
                         </div>
                     </div>
@@ -288,10 +289,7 @@ export default function VisitsShow({ visit }: Props) {
                                     <p className="text-xs font-medium text-muted-foreground">Expected Start</p>
                                     <p className="text-sm font-semibold text-foreground flex items-center gap-1.5 mt-1">
                                         <Calendar className="size-4 text-muted-foreground" />
-                                        {new Date(visit.expected_start_date).toLocaleString([], {
-                                            dateStyle: 'medium',
-                                            timeStyle: 'short',
-                                        })}
+                                        {formatDateTime(visit.expected_start_date)}
                                     </p>
                                 </div>
                                 {visit.expected_end_date && (
@@ -299,10 +297,7 @@ export default function VisitsShow({ visit }: Props) {
                                         <p className="text-xs font-medium text-muted-foreground">Expected End</p>
                                         <p className="text-sm font-semibold text-foreground flex items-center gap-1.5 mt-1">
                                             <Calendar className="size-4 text-muted-foreground" />
-                                            {new Date(visit.expected_end_date).toLocaleString([], {
-                                                dateStyle: 'medium',
-                                                timeStyle: 'short',
-                                            })}
+                                            {formatDateTime(visit.expected_end_date)}
                                         </p>
                                     </div>
                                 )}
@@ -338,10 +333,7 @@ export default function VisitsShow({ visit }: Props) {
                                                     <span>Reviewed by {app.approver?.name ?? 'HR'}</span>
                                                 </div>
                                                 <span className="text-xs text-muted-foreground">
-                                                    {new Date(app.created_at).toLocaleString([], {
-                                                        dateStyle: 'medium',
-                                                        timeStyle: 'short',
-                                                    })}
+                                                    {formatDateTime(app.created_at)}
                                                 </span>
                                             </div>
                                             {app.instructions && (

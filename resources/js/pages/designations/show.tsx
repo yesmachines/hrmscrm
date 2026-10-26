@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
 import { Head, Link, setLayoutProps } from '@inertiajs/react';
+import type { ReactNode } from 'react';
 import DesignationController from '@/actions/App/Http/Controllers/Designation/DesignationController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import { Button } from '@/components/ui/button';
+import { formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type Designation = {
@@ -135,8 +136,8 @@ export default function DesignationsShow({
                         label="Status"
                         value={designation.status === 1 ? 'Active' : 'Inactive'}
                     />
-                    <Detail label="Created at" value={designation.created_at} />
-                    <Detail label="Updated at" value={designation.updated_at} />
+                    <Detail label="Created at" value={formatDateTime(designation.created_at)} />
+                    <Detail label="Updated at" value={formatDateTime(designation.updated_at)} />
                 </Section>
             </div>
         </>

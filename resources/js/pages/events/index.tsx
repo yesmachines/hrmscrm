@@ -293,11 +293,10 @@ export default function EventsIndex({
         try {
             const d = new Date(iso);
             return d.toLocaleDateString([], {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
+                day: '2-digit',
+                month: '2-digit',
                 year: 'numeric',
-            });
+            }).replaceAll('/', '-');
         } catch {
             return iso;
         }

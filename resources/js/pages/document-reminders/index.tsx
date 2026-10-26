@@ -14,6 +14,7 @@ import {
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type ReminderItem = {
@@ -158,7 +159,7 @@ export default function DocumentRemindersIndex({ reminders, filters }: Props) {
                                             {rem.document_number || '—'}
                                         </td>
                                         <td className="px-5 py-4 font-semibold text-foreground">
-                                            {rem.expiry_date}
+                                            {formatDate(rem.expiry_date)}
                                         </td>
                                         <td className="px-5 py-4">
                                             {getUrgencyBadge(rem.urgency, rem.days_remaining)}

@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 interface AssignmentRow {
@@ -143,7 +144,7 @@ export default function AssetsShow({ asset, employees }: Props) {
                         <div>
                             <Heading
                                 title={asset.asset_name}
-                                description={`Reference ID: ${asset.referenceno} • Registered ${new Date(asset.created_at).toLocaleDateString()}`}
+                                description={`Reference ID: ${asset.referenceno} • Registered ${formatDate(asset.created_at)}`}
                             />
                         </div>
                     </div>
@@ -375,10 +376,10 @@ export default function AssetsShow({ asset, employees }: Props) {
                                                         {assign.assignee?.user?.name ?? 'Unknown'}
                                                     </td>
                                                     <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                                                        {assign.assigned_date}
+                                                        {formatDate(assign.assigned_date)}
                                                     </td>
                                                     <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                                                        {assign.returned_date || <span className="text-emerald-700 font-semibold">Active</span>}
+                                                        {assign.returned_date ? formatDate(assign.returned_date) : <span className="text-emerald-700 font-semibold">Active</span>}
                                                     </td>
                                                     <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-xs truncate">
                                                         {assign.note || '-'}
@@ -455,7 +456,7 @@ export default function AssetsShow({ asset, employees }: Props) {
                                     </div>
                                     <div>
                                         <p className="text-xs text-muted-foreground">Assigned Since</p>
-                                        <p className="font-medium text-foreground">{currentAssignment.assigned_date}</p>
+                                        <p className="font-medium text-foreground">{formatDate(currentAssignment.assigned_date)}</p>
                                     </div>
                                     {currentAssignment.note && (
                                         <div>

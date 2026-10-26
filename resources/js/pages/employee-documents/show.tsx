@@ -28,6 +28,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { formatDate, formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type DocumentDetail = {
@@ -380,15 +381,15 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                 </div>
                                 <div className="pt-3 flex items-center justify-between">
                                     <span className="text-xs text-muted-foreground">Issue Date</span>
-                                    <span className="text-sm font-medium text-foreground">{document.issue_date_display || '—'}</span>
+                                    <span className="text-sm font-medium text-foreground">{formatDate(document.issue_date_display) || '—'}</span>
                                 </div>
                                 <div className="pt-3 flex items-center justify-between">
                                     <span className="text-xs text-muted-foreground">Expiry Date</span>
-                                    <span className="text-sm font-medium text-foreground">{document.expiry_date_display || '—'}</span>
+                                    <span className="text-sm font-medium text-foreground">{formatDate(document.expiry_date_display) || '—'}</span>
                                 </div>
                                 <div className="pt-3 flex items-center justify-between">
                                     <span className="text-xs text-muted-foreground">Uploaded On</span>
-                                    <span className="text-sm font-medium text-foreground">{document.created_at}</span>
+                                    <span className="text-sm font-medium text-foreground">{formatDateTime(document.created_at)}</span>
                                 </div>
                                 {document.remarks && (
                                     <div className="pt-3">
@@ -431,7 +432,7 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                         <div className="absolute left-1.5 top-1 size-2 rounded-full bg-primary" />
                                         <div>
                                             <div className="text-xs font-semibold capitalize text-foreground">{hist.action_type}</div>
-                                            <div className="text-xs text-muted-foreground">{hist.action_on}</div>
+                                            <div className="text-xs text-muted-foreground">{formatDateTime(hist.action_on)}</div>
                                             {hist.remarks && <p className="text-xs text-muted-foreground mt-0.5">{hist.remarks}</p>}
                                         </div>
                                     </div>

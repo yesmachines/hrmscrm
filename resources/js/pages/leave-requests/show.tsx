@@ -3,6 +3,7 @@ import { ArrowLeft, Check, X, FileText, Calendar, Building, Clock, FileBadge2, U
 import { index, update } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { formatDate, formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type LeaveRequestDetail = {
@@ -92,7 +93,7 @@ export default function LeaveRequestShow({
                         </Button>
                         <Heading
                             title="Leave Request Details"
-                            description={`Submitted on ${new Date(leave_request.created_at).toLocaleDateString()}`}
+                            description={`Submitted on ${formatDate(leave_request.created_at)}`}
                         />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -155,11 +156,11 @@ export default function LeaveRequestShow({
                                 </div>
                                 <div>
                                     <p className="text-sm text-muted-foreground">Start Date</p>
-                                    <p className="font-medium text-foreground">{new Date(leave_request.start_date).toLocaleDateString()}</p>
+                                    <p className="font-medium text-foreground">{formatDate(leave_request.start_date)}</p>
                                 </div>
                                 <div>
                                     <p className="text-sm text-muted-foreground">End Date</p>
-                                    <p className="font-medium text-foreground">{new Date(leave_request.end_date).toLocaleDateString()}</p>
+                                    <p className="font-medium text-foreground">{formatDate(leave_request.end_date)}</p>
                                 </div>
                                 <div>
                                     <p className="text-sm text-muted-foreground">Total Days</p>
@@ -320,7 +321,7 @@ export default function LeaveRequestShow({
                                                     <p className="text-xs text-muted-foreground mt-0.5">By: {history.done_by.name}</p>
                                                 )}
                                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {new Date(history.action_on).toLocaleString()}
+                                                    {formatDateTime(history.action_on)}
                                                 </p>
                                                 {history.remarks && (
                                                     <p className="text-sm text-foreground mt-2 bg-muted p-2 rounded-md">
