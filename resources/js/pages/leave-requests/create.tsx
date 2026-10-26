@@ -12,6 +12,7 @@ import {
     FileUp,
     ShieldAlert,
 } from 'lucide-react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -345,11 +346,10 @@ export default function LeaveRequestsCreate({
                                     <Label htmlFor={startDateId}>
                                         Start Date <span className="text-destructive">*</span>
                                     </Label>
-                                    <Input
+                                    <FormattedDatePicker
                                         id={startDateId}
-                                        type="date"
                                         value={data.start_date}
-                                        onChange={(e) => setData('start_date', e.target.value)}
+                                        onChange={(value) => setData('start_date', value)}
                                         required
                                     />
                                     {errors.start_date && (
@@ -361,12 +361,11 @@ export default function LeaveRequestsCreate({
                                     <Label htmlFor={endDateId}>
                                         End Date <span className="text-destructive">*</span>
                                     </Label>
-                                    <Input
+                                    <FormattedDatePicker
                                         id={endDateId}
-                                        type="date"
                                         min={data.start_date}
                                         value={data.end_date}
-                                        onChange={(e) => setData('end_date', e.target.value)}
+                                        onChange={(value) => setData('end_date', value)}
                                         required
                                     />
                                     {errors.end_date && (

@@ -7,6 +7,7 @@ import {
     Save,
     UserCheck,
 } from 'lucide-react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -249,11 +250,10 @@ export default function AssetsCreate({ categories, employees }: Props) {
 
                                         <div className="space-y-2">
                                             <Label htmlFor="assigned_date">Assigned Date *</Label>
-                                            <Input
+                                            <FormattedDatePicker
                                                 id="assigned_date"
-                                                type="date"
                                                 value={data.assigned_date}
-                                                onChange={(e) => setData('assigned_date', e.target.value)}
+                                                onChange={(value) => setData('assigned_date', value)}
                                                 required={directAssign}
                                             />
                                         </div>

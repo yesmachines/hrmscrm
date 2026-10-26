@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from 'react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -483,12 +484,11 @@ export default function EmployeeProfileFormFields({
                     name="joining_date"
                     error={errors.joining_date}
                 >
-                    <Input
+                    <FormattedDatePicker
                         id="joining_date"
-                        type="date"
                         name="joining_date"
                         value={joiningDate}
-                        onChange={(e) => setJoiningDate(e.target.value)}
+                        onChange={setJoiningDate}
                     />
                 </Field>
                 {isEdit && (
@@ -497,9 +497,8 @@ export default function EmployeeProfileFormFields({
                         name="resignation_date"
                         error={errors.resignation_date}
                     >
-                        <Input
+                        <FormattedDatePicker
                             id="resignation_date"
-                            type="date"
                             name="resignation_date"
                             defaultValue={defaults.resignation_date ?? ''}
                             min={joiningDate}
@@ -555,9 +554,8 @@ export default function EmployeeProfileFormFields({
                     name="dob_personal"
                     error={errors.dob_personal}
                 >
-                    <Input
+                    <FormattedDatePicker
                         id="dob_personal"
-                        type="date"
                         name="dob_personal"
                         defaultValue={profileDefaults.dob_personal ?? ''}
                     />
@@ -859,9 +857,8 @@ export default function EmployeeProfileFormFields({
                     name="dob_passport"
                     error={errors.dob_passport}
                 >
-                    <Input
+                    <FormattedDatePicker
                         id="dob_passport"
-                        type="date"
                         name="dob_passport"
                         defaultValue={profileDefaults.dob_passport ?? ''}
                     />

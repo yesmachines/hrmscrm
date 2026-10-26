@@ -15,6 +15,7 @@ import {
     UserCheck,
     X,
 } from 'lucide-react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -201,11 +202,10 @@ export default function AssetsShow({ asset, employees }: Props) {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="assigned_date">Assigned Date *</Label>
-                                    <Input
+                                    <FormattedDatePicker
                                         id="assigned_date"
-                                        type="date"
                                         value={assignForm.data.assigned_date}
-                                        onChange={(e) => assignForm.setData('assigned_date', e.target.value)}
+                                        onChange={(value) => assignForm.setData('assigned_date', value)}
                                         required
                                     />
                                 </div>
@@ -247,11 +247,10 @@ export default function AssetsShow({ asset, employees }: Props) {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="returned_date" className="text-amber-950">Return Date *</Label>
-                                    <Input
+                                    <FormattedDatePicker
                                         id="returned_date"
-                                        type="date"
                                         value={returnForm.data.returned_date}
-                                        onChange={(e) => returnForm.setData('returned_date', e.target.value)}
+                                        onChange={(value) => returnForm.setData('returned_date', value)}
                                         className="bg-white"
                                         required
                                     />

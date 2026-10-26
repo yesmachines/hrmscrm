@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
+import InputError from '@/components/input-error';
 import { Label } from '@/components/ui/label';
 
 type Errors = Record<string, string>;
@@ -116,10 +117,9 @@ export default function FestivalFormFields({
                     name="start_date"
                     error={errors.start_date}
                 >
-                    <Input
+                    <FormattedDatePicker
                         id="start_date"
                         name="start_date"
-                        type="date"
                         required
                         defaultValue={defaults.start_date ?? ''}
                     />
@@ -127,10 +127,9 @@ export default function FestivalFormFields({
 
                 {isHoliday && (
                     <Field label="End Date" name="end_date" error={errors.end_date}>
-                        <Input
+                        <FormattedDatePicker
                             id="end_date"
                             name="end_date"
-                            type="date"
                             required
                             defaultValue={defaults.end_date ?? ''}
                         />

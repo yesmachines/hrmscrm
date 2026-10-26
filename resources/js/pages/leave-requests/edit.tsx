@@ -13,6 +13,7 @@ import {
     Ban,
     FileText,
 } from 'lucide-react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -414,11 +415,10 @@ export default function LeaveRequestsEdit({
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                         <div>
                                             <Label htmlFor={startDateId}>Start Date</Label>
-                                            <Input
+                                            <FormattedDatePicker
                                                 id={startDateId}
-                                                type="date"
                                                 value={data.start_date}
-                                                onChange={(e) => setData('start_date', e.target.value)}
+                                                onChange={(value) => setData('start_date', value)}
                                                 className="mt-1.5"
                                                 required
                                             />
@@ -429,12 +429,11 @@ export default function LeaveRequestsEdit({
 
                                         <div>
                                             <Label htmlFor={endDateId}>End Date</Label>
-                                            <Input
+                                            <FormattedDatePicker
                                                 id={endDateId}
-                                                type="date"
                                                 value={data.end_date}
                                                 min={data.start_date}
-                                                onChange={(e) => setData('end_date', e.target.value)}
+                                                onChange={(value) => setData('end_date', value)}
                                                 className="mt-1.5"
                                                 required
                                             />

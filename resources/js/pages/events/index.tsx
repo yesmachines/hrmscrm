@@ -18,6 +18,7 @@ import {
     Trash2,
     X,
 } from 'lucide-react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -292,7 +293,7 @@ export default function EventsIndex({
     const formatDate = (iso: string) => {
         try {
             const d = new Date(iso);
-            return d.toLocaleDateString([], {
+            return d.toLocaleDateString('en-GB', {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
@@ -736,11 +737,11 @@ export default function EventsIndex({
                                 <Label htmlFor="event-start" className="text-xs font-semibold">
                                     Start Date & Time *
                                 </Label>
-                                <Input
+                                <FormattedDatePicker
                                     id="event-start"
-                                    type="datetime-local"
                                     value={formStart}
-                                    onChange={(e) => setFormStart(e.target.value)}
+                                    type="datetime-local"
+                                    onChange={setFormStart}
                                     required
                                 />
                             </div>
@@ -749,11 +750,11 @@ export default function EventsIndex({
                                 <Label htmlFor="event-end" className="text-xs font-semibold">
                                     End Date & Time
                                 </Label>
-                                <Input
+                                <FormattedDatePicker
                                     id="event-end"
-                                    type="datetime-local"
                                     value={formEnd}
-                                    onChange={(e) => setFormEnd(e.target.value)}
+                                    type="datetime-local"
+                                    onChange={setFormEnd}
                                 />
                             </div>
                         </div>

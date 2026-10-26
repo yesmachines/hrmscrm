@@ -1,6 +1,7 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Save } from 'lucide-react';
 import { index, store } from '@/actions/App/Http/Controllers/Leave/LeaveHistoryController';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,11 +96,11 @@ export default function LeaveHistoriesCreate({ leaveRequests, users }: { leaveRe
 
                             <div className="space-y-2">
                                 <Label htmlFor="action_on">Action Date & Time</Label>
-                                <Input
+                                <FormattedDatePicker
                                     id="action_on"
-                                    type="datetime-local"
                                     value={data.action_on}
-                                    onChange={(e) => setData('action_on', e.target.value)}
+                                    type="datetime-local"
+                                    onChange={(value) => setData('action_on', value)}
                                 />
                                 {errors.action_on && <p className="text-sm text-destructive">{errors.action_on}</p>}
                             </div>

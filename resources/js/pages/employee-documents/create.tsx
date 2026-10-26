@@ -1,5 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Download, FileDown, FileUp, Info, UploadCloud } from 'lucide-react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -279,11 +280,10 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                             {/* Issue Date */}
                             <div className="space-y-2">
                                 <Label htmlFor="issue_date">Issue Date</Label>
-                                <Input
+                                <FormattedDatePicker
                                     id="issue_date"
-                                    type="date"
                                     value={data.issue_date}
-                                    onChange={(e) => setData('issue_date', e.target.value)}
+                                    onChange={(value) => setData('issue_date', value)}
                                 />
                                 <InputError message={errors.issue_date} />
                             </div>
@@ -291,11 +291,10 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                             {/* Expiry Date */}
                             <div className="space-y-2">
                                 <Label htmlFor="expiry_date">Expiry Date (for renewals & alerts)</Label>
-                                <Input
+                                <FormattedDatePicker
                                     id="expiry_date"
-                                    type="date"
                                     value={data.expiry_date}
-                                    onChange={(e) => setData('expiry_date', e.target.value)}
+                                    onChange={(value) => setData('expiry_date', value)}
                                 />
                                 <InputError message={errors.expiry_date} />
                             </div>

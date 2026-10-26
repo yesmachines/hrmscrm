@@ -14,9 +14,9 @@ import {
     UserCheck,
     XCircle,
 } from 'lucide-react';
+import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
@@ -308,12 +308,11 @@ export default function AssetRequestShow({ assetRequest, availableAssets = [] }:
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label htmlFor="assignDate">Assigned Date *</Label>
-                                    <Input
+                                    <FormattedDatePicker
                                         id="assignDate"
-                                        type="date"
                                         required
                                         value={assignedDate}
-                                        onChange={(e) => setAssignedDate(e.target.value)}
+                                        onChange={setAssignedDate}
                                     />
                                 </div>
                                 <div className="space-y-1.5 sm:col-span-2">
