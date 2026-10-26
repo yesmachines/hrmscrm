@@ -264,6 +264,8 @@ class LeaveController extends Controller
                         new OA\Property(property: 'reason', type: 'string'),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),
+                        new OA\Property(property: 'emergency_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
+                        new OA\Property(property: 'travel_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
                         new OA\Property(property: 'files', type: 'array', items: new OA\Items(type: 'string', format: 'binary')),
                     ]
                 )
@@ -286,6 +288,11 @@ class LeaveController extends Controller
         if (! $employee) {
             return $this->errorResponse('Employee record not found.', 404);
         }
+
+        $request->validate([
+            'emergency_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
+            'travel_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
+        ]);
 
         try {
             $validation = $validationService->validateApplication(

@@ -61,7 +61,7 @@ class VisitController extends Controller
             'visitor_details.*.name' => 'required|string|max:255',
             'visitor_details.*.designation' => 'nullable|string|max:255',
             'company' => 'required|string|max:255',
-            'contact_no' => 'required|string|max:50',
+            'contact_no' => ['required', 'string', 'max:20', 'regex:/^\+?[0-9]+$/'],
             'email' => 'required|email|max:255',
             'purpose' => 'required|string',
             'location' => 'required|string|max:255',

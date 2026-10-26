@@ -33,6 +33,33 @@ beforeEach(function () {
     Organisation::query()->firstOrCreate(['id' => 1], ['org_name' => 'Default Org', 'short_name' => 'DEF', 'status' => 1]);
 });
 
+test('leave submission validates emergency and travel contact numbers', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Leave User',
+        'email' => 'leave.contact-validation@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-CONTACT-01',
+        'designation' => 'Dev',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'emergency_contact_no' => '123-456',
+        'travel_contact_no' => '+971 50 123 4567',
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['emergency_contact_no', 'travel_contact_no']);
+});
+
 test('get leave detail returns full leave request with attachments, history, details, and approvals', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Leave User',

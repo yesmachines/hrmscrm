@@ -51,6 +51,34 @@ test('employee can submit a visit request via API', function () {
         ->and(count($visit->visitor_details))->toBe(2);
 });
 
+test('visit contact number must contain only digits and an optional leading plus', function () {
+    $salesUser = SalesCrmUser::factory()->create();
+
+    Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Procurement Officer',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    Sanctum::actingAs($salesUser);
+
+    $this->postJson(route('api.v1.visits.store'), [
+        'total_visitors' => 1,
+        'visitor_details' => [['name' => 'John Smith']],
+        'company' => 'Acme Supplies Ltd',
+        'contact_no' => '+1-234-567-890',
+        'email' => 'john.smith@acmesupplies.com',
+        'purpose' => 'Quarterly vendor product review.',
+        'location' => 'Main Conference Room B',
+        'expected_start_date' => '2026-09-25 10:00:00',
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('contact_no');
+});
+
 test('employee can view their visit history via API', function () {
     $salesUser = SalesCrmUser::factory()->create();
 
