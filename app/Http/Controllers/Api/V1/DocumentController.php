@@ -132,13 +132,11 @@ class DocumentController extends Controller
                 'category_code' => $type->category?->short_code,
                 'document_name' => $type->document_name,
                 'document_code' => $type->document_code,
-                'requires_number' => (bool) $type->requires_number,
-                'requires_expiry' => (bool) $type->requires_expiry,
                 'editable_before_approval' => (bool) $type->editable_before_approval,
                 'requires_hr_approval' => (bool) $type->requires_hr_approval,
                 'requires_reminder' => (bool) $type->requires_reminder,
                 'record_source' => $type->record_source,
-                'requires_attachments' => (bool) $type->requires_attachments,
+                'field_requires' => empty($type->field_requires) ? null : (object) $type->field_requires,
                 'has_blank_form' => $hasTemplate,
                 'blank_form_url' => $hasTemplate ? route('api.v1.documents.blank-form', $type->id) : null,
                 'templates' => $type->documentTemplates->map(fn ($t) => [
@@ -325,6 +323,7 @@ class DocumentController extends Controller
                 'remarks' => $doc->remarks,
                 'current_version' => $doc->current_version ?? '1.0',
                 'file_url' => $fileUrl,
+                // 'request_details' => $doc->requestDetails->pluck('field_value', 'field_key'),
                 'can_edit' => in_array($doc->status, ['draft', 'submitted']) || (bool) $doc->documentType?->editable_before_approval,
                 'created_at' => $doc->created_at?->format('d M Y'),
             ];

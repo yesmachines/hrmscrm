@@ -22,7 +22,7 @@ class EmployeeDocumentService
     public function create(
         DocumentType $documentType,
         array $attributes,
-        UploadedFile $file,
+        ?UploadedFile $file,
         ?int $uploadedBy,
         bool $uploadedByHr,
     ): EmployeeDocument {
@@ -30,18 +30,20 @@ class EmployeeDocumentService
             $document = EmployeeDocument::query()->create($attributes);
             $status = $document->status;
 
-            $fileChangeNotes = $uploadedByHr
-                ? ($status === 'submitted' ? 'Uploaded document awaiting HR approval' : 'Uploaded by HR')
-                : 'Initial upload';
+            if ($file) {
+                $fileChangeNotes = $uploadedByHr
+                    ? ($status === 'submitted' ? 'Uploaded document awaiting HR approval' : 'Uploaded by HR')
+                    : 'Initial upload';
 
-            EmployeeDocumentFile::query()->create([
-                'employee_document_id' => $document->id,
-                'version_no' => '1.0',
-                'file_path' => $file->store('employee_documents', 'public'),
-                'uploaded_by' => $uploadedBy,
-                'uploaded_date' => Carbon::now(),
-                'change_notes' => $fileChangeNotes,
-            ]);
+                EmployeeDocumentFile::query()->create([
+                    'employee_document_id' => $document->id,
+                    'version_no' => '1.0',
+                    'file_path' => $file->store('employee_documents', 'public'),
+                    'uploaded_by' => $uploadedBy,
+                    'uploaded_date' => Carbon::now(),
+                    'change_notes' => $fileChangeNotes,
+                ]);
+            }
 
             $historyRemarks = $uploadedByHr
                 ? ($status === 'submitted'

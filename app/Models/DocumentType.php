@@ -12,14 +12,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'category_id',
     'document_name',
     'document_code',
-    'requires_number',
-    'requires_expiry',
     'editable_before_approval',
     'requires_hr_approval',
     'requires_reminder',
     'record_source',
-    'requires_attachments',
     'validity_days',
+    'field_requires',
 ])]
 class DocumentType extends Model
 {
@@ -30,13 +28,11 @@ class DocumentType extends Model
     protected function casts(): array
     {
         return [
-            'requires_number' => 'boolean',
-            'requires_expiry' => 'boolean',
             'editable_before_approval' => 'boolean',
             'requires_hr_approval' => 'boolean',
             'requires_reminder' => 'boolean',
-            'requires_attachments' => 'boolean',
             'validity_days' => 'integer',
+            'field_requires' => 'array',
         ];
     }
 

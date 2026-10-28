@@ -543,6 +543,29 @@ class DocumentSeeder extends Seeder
                 $templates = $typeData['templates'] ?? [];
                 unset($typeData['templates']);
 
+                $fieldRequires = $typeData['field_requires'] ?? [];
+                foreach ([
+                    'requires_number' => 'ref_number',
+                    'requires_expiry' => 'expiry_date',
+                    'requires_attachments' => 'attachments',
+                ] as $legacyField => $fieldKey) {
+                    if (! empty($typeData[$legacyField])) {
+                        $fieldRequires[$fieldKey] = true;
+                    }
+
+                    unset($typeData[$legacyField]);
+                }
+
+                $fieldRequires = array_merge($fieldRequires, match ($typeData['document_code']) {
+                    'visa' => ['uid' => true],
+                    'education' => ['issue_date' => true],
+                    'experience' => [
+                        'issue_date' => true,
+                        'total_experience' => true,
+                    ],
+                    default => [],
+                });
+                $typeData['field_requires'] = $fieldRequires === [] ? null : (object) $fieldRequires;
                 $typeData['category_id'] = $category->id;
 
                 $docType = DocumentType::query()->firstOrCreate(
