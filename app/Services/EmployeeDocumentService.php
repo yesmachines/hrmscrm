@@ -8,7 +8,9 @@ use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
 use App\Models\EmployeeProfile;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,6 +18,80 @@ use Illuminate\Support\Facades\DB;
  */
 class EmployeeDocumentService
 {
+    /**
+     * @return Collection<int, EmployeeDocument>
+     */
+    public function list(Request $request, ?int $employeeId = null): Collection
+    {
+        $query = EmployeeDocument::query()
+            ->with([
+                'documentType.category',
+                'documentType.documentTemplates' => fn ($q) => $q->where('status', 1),
+                'documentTemplate',
+                'files' => fn ($q) => $q->orderByDesc('id'),
+                'requestDetails',
+            ]);
+
+        if ($employeeId !== null) {
+            $query->where('employee_id', $employeeId);
+        }
+
+        if ($request->filled('category_id')) {
+            $query->whereHas('documentType', function ($q) use ($request) {
+                $q->where('category_id', $request->input('category_id'));
+            });
+        } elseif ($request->filled('category_code')) {
+            $query->whereHas('documentType.category', function ($q) use ($request) {
+                $q->where('short_code', $request->input('category_code'));
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        if ($request->filled('organisation_id')) {
+            $query->where('organisation_id', $request->input('organisation_id'));
+        }
+
+        if ($request->filled('year')) {
+            $year = (int) $request->input('year');
+            $query->where(function ($q) use ($year) {
+                $q->whereYear('issue_date', $year)
+                    ->orWhereYear('created_at', $year);
+            });
+        }
+
+        if ($request->filled('month')) {
+            $month = (int) $request->input('month');
+            $query->where(function ($q) use ($month) {
+                $q->whereMonth('issue_date', $month)
+                    ->orWhereMonth('created_at', $month);
+            });
+        }
+
+        if ($request->filled('date')) {
+            $date = $request->input('date');
+            $query->where(function ($q) use ($date) {
+                $q->whereDate('issue_date', $date)
+                    ->orWhereDate('created_at', $date);
+            });
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('document_title', 'like', "%{$search}%")
+                    ->orWhere('document_number', 'like', "%{$search}%")
+                    ->orWhereHas('documentType', function ($sub) use ($search) {
+                        $sub->where('document_name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        return $query->orderByDesc('id')->get();
+    }
+
     /**
      * @param  array<string, mixed>  $attributes
      */

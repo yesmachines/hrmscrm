@@ -26,7 +26,6 @@ class SalesCrmRoleSeeder extends Seeder
             'dcm',
             'hr',
             'finance',
-            'test'
         ];
 
         $connection = DB::connection('salescrm');

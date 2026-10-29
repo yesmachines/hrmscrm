@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\DocumentTypeResource;
 use App\Models\DocumentCategory;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
@@ -11,11 +12,13 @@ use App\Models\EmployeeDocumentHistory;
 use App\Models\EmployeeRequestDetail;
 use App\Models\SalesCrm\Employee;
 use App\Services\EmployeeDocumentService;
+use App\Support\SalesCrmRoles;
 use App\Traits\ApiResponse;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -122,29 +125,7 @@ class DocumentController extends Controller
             });
         }
 
-        $types = $query->orderBy('id')->get()->map(function (DocumentType $type) {
-            $hasTemplate = $type->documentTemplates->isNotEmpty();
-
-            return [
-                'id' => $type->id,
-                'category_id' => $type->category_id,
-                'category_name' => $type->category?->category_name,
-                'category_code' => $type->category?->short_code,
-                'document_name' => $type->document_name,
-                'document_code' => $type->document_code,
-                'editable_before_approval' => (bool) $type->editable_before_approval,
-                'requires_hr_approval' => (bool) $type->requires_hr_approval,
-                'requires_reminder' => (bool) $type->requires_reminder,
-                'record_source' => $type->record_source,
-                'field_requires' => empty($type->field_requires) ? null : (object) $type->field_requires,
-                'has_blank_form' => $hasTemplate,
-                'blank_form_url' => $hasTemplate ? route('api.v1.documents.blank-form', $type->id) : null,
-                'templates' => $type->documentTemplates->map(fn ($t) => [
-                    'id' => $t->id,
-                    'template_name' => $t->template_name,
-                ])->values(),
-            ];
-        });
+        $types = DocumentTypeResource::collection($query->orderBy('id')->get());
 
         return $this->successResponse($types, 'Document types retrieved successfully.');
     }
@@ -219,86 +200,35 @@ class DocumentController extends Controller
     /**
      * Filtered Document List (Matching Figma Category Document List).
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, EmployeeDocumentService $employeeDocumentService): JsonResponse
     {
         $employee = $this->getEmployee($request);
         if (! $employee) {
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $query = EmployeeDocument::query()
-            ->with([
-                'documentType.category',
-                'documentTemplate',
-                'files' => fn ($q) => $q->orderByDesc('id'),
-                'requestDetails',
-            ])
-            ->where('employee_id', $employee->id);
+        return $this->formatDocumentList(
+            $employeeDocumentService->list($request, (int) $employee->id),
+        );
+    }
 
-        if ($request->filled('category_id')) {
-            $query->whereHas('documentType', function ($q) use ($request) {
-                $q->where('category_id', $request->input('category_id'));
-            });
-        } elseif ($request->filled('category_code')) {
-            $query->whereHas('documentType.category', function ($q) use ($request) {
-                $q->where('short_code', $request->input('category_code'));
-            });
-        }
+    /**
+     * List documents across all employees for HR.
+     */
+    public function hrIndex(Request $request, EmployeeDocumentService $employeeDocumentService): JsonResponse
+    {
+        return $this->formatDocumentList($employeeDocumentService->list($request));
+    }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
-        }
-
-        if ($request->filled('organisation_id')) {
-            $query->where('organisation_id', $request->input('organisation_id'));
-        }
-
-        if ($request->filled('year')) {
-            $year = (int) $request->input('year');
-            $query->where(function ($q) use ($year) {
-                $q->whereYear('issue_date', $year)
-                    ->orWhereYear('created_at', $year);
-            });
-        }
-
-        if ($request->filled('month')) {
-            $month = (int) $request->input('month');
-            $query->where(function ($q) use ($month) {
-                $q->whereMonth('issue_date', $month)
-                    ->orWhereMonth('created_at', $month);
-            });
-        }
-
-        if ($request->filled('date')) {
-            $date = $request->input('date');
-            $query->where(function ($q) use ($date) {
-                $q->whereDate('issue_date', $date)
-                    ->orWhereDate('created_at', $date);
-            });
-        }
-
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('document_title', 'like', "%{$search}%")
-                    ->orWhere('document_number', 'like', "%{$search}%")
-                    ->orWhereHas('documentType', function ($sub) use ($search) {
-                        $sub->where('document_name', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        $documents = $query->orderByDesc('id')->get()->map(function (EmployeeDocument $doc) {
+    private function formatDocumentList(Collection $documents): JsonResponse
+    {
+        $documents = $documents->map(function (EmployeeDocument $doc) {
             $latestFile = $doc->files->first();
             $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
 
             return [
                 'id' => $doc->id,
-                'document_type_id' => $doc->document_type_id,
-                'document_name' => $doc->documentType?->document_name,
-                'document_code' => $doc->documentType?->document_code,
-                'category_name' => $doc->documentType?->category?->category_name,
-                'category_code' => $doc->documentType?->category?->short_code,
+                'document_type' => DocumentTypeResource::make($doc->documentType),
                 'document_title' => $doc->document_title,
                 'document_number' => $doc->document_number,
                 'issue_date' => $doc->issue_date?->format('d M Y'),
@@ -364,6 +294,19 @@ class DocumentController extends Controller
         $organisationId = $request->input('organisation_id') ?? $employee->organisation_id;
         $templateId = $request->input('document_template_id')
             ?? $docType->resolveTemplate($organisationId)?->id;
+        $user = $request->user();
+        $uploaderRole = null;
+
+        if ($user !== null) {
+            $userRoles = SalesCrmRoles::roleNamesForUser((int) $user->id);
+
+            foreach (['hr' => 'HR', 'admin' => 'Admin', 'finance' => 'Finance'] as $role => $label) {
+                if (in_array($role, $userRoles, true)) {
+                    $uploaderRole = $label;
+                    break;
+                }
+            }
+        }
 
         $document = $employeeDocumentService->create(
             $docType,
@@ -385,6 +328,14 @@ class DocumentController extends Controller
             $request->user()?->id,
             false,
         );
+
+        if ($uploaderRole !== null) {
+            $document->files()->latest('id')->firstOrFail()->update([
+                'change_notes' => $document->status === 'submitted'
+                    ? "Uploaded by {$uploaderRole}; awaiting HR approval"
+                    : "Uploaded by {$uploaderRole}",
+            ]);
+        }
 
         return $this->successResponse([
             'id' => $document->id,
