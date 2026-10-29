@@ -137,7 +137,7 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
     Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.hr.documents.categories');
     Route::get('documents/types', [DocumentController::class, 'types'])->name('api.v1.hr.documents.types');
     Route::get('documents/types/{document_type}/blank-form', [DocumentController::class, 'blankForm'])->name('api.v1.hr.documents.blank-form');
-    Route::get('documents', [DocumentController::class, 'index'])->name('api.v1.hr.documents.index');
+    Route::get('documents', [DocumentController::class, 'hrIndex'])->name('api.v1.hr.documents.index');
     Route::post('documents', [DocumentController::class, 'store'])->name('api.v1.hr.documents.store');
     Route::get('documents/policies', [DocumentController::class, 'policies'])->name('api.v1.hr.documents.policies');
     Route::get('documents/letters', [DocumentController::class, 'letters'])->name('api.v1.hr.documents.letters');
