@@ -18,7 +18,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -208,7 +208,11 @@ class DocumentController extends Controller
         }
 
         return $this->formatDocumentList(
-            $employeeDocumentService->list($request, (int) $employee->id),
+            $employeeDocumentService->list(
+                $request,
+                (int) $employee->id,
+                (int) $request->input('per_page', 15),
+            ),
         );
     }
 
@@ -217,12 +221,17 @@ class DocumentController extends Controller
      */
     public function hrIndex(Request $request, EmployeeDocumentService $employeeDocumentService): JsonResponse
     {
-        return $this->formatDocumentList($employeeDocumentService->list($request));
+        return $this->formatDocumentList(
+            $employeeDocumentService->list(
+                $request,
+                perPage: (int) $request->input('per_page', 15),
+            ),
+        );
     }
 
-    private function formatDocumentList(Collection $documents): JsonResponse
+    private function formatDocumentList(LengthAwarePaginator $documents): JsonResponse
     {
-        $documents = $documents->map(function (EmployeeDocument $doc) {
+        $documents->setCollection($documents->getCollection()->map(function (EmployeeDocument $doc) {
             $latestFile = $doc->files->first();
             $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
 
@@ -257,9 +266,9 @@ class DocumentController extends Controller
                 'can_edit' => in_array($doc->status, ['draft', 'submitted']) || (bool) $doc->documentType?->editable_before_approval,
                 'created_at' => $doc->created_at?->format('d M Y'),
             ];
-        });
+        }));
 
-        return $this->successResponse($documents, 'Documents retrieved successfully.');
+        return $this->successPaginatedResponse($documents, 'documents', 'Documents retrieved successfully.');
     }
 
     /**

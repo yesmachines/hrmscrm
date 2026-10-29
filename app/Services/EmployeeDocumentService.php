@@ -10,7 +10,7 @@ use App\Models\EmployeeProfile;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,10 +18,7 @@ use Illuminate\Support\Facades\DB;
  */
 class EmployeeDocumentService
 {
-    /**
-     * @return Collection<int, EmployeeDocument>
-     */
-    public function list(Request $request, ?int $employeeId = null): Collection
+    public function list(Request $request, ?int $employeeId = null, int $perPage = 15): LengthAwarePaginator
     {
         $query = EmployeeDocument::query()
             ->with([
@@ -89,7 +86,7 @@ class EmployeeDocumentService
             });
         }
 
-        return $query->orderByDesc('id')->get();
+        return $query->orderByDesc('id')->paginate(max(1, min(100, $perPage)));
     }
 
     /**
