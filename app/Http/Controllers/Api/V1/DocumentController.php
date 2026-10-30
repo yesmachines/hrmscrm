@@ -7,7 +7,6 @@ use App\Http\Resources\Api\V1\DocumentTypeResource;
 use App\Models\DocumentCategory;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
-use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
 use App\Models\EmployeeRequestDetail;
 use App\Models\SalesCrm\Employee;
@@ -213,6 +212,9 @@ class DocumentController extends Controller
                 (int) $employee->id,
                 (int) $request->input('per_page', 15),
             ),
+            $employeeDocumentService,
+            (int) $request->user()->id,
+            (int) $employee->id,
         );
     }
 
@@ -244,12 +246,182 @@ class DocumentController extends Controller
                 perPage: (int) $request->input('per_page', 15),
                 applyHrOnlyFilters: true,
             ),
+            $employeeDocumentService,
+            (int) $request->user()->id,
         );
     }
 
-    private function formatDocumentList(LengthAwarePaginator $documents): JsonResponse
+    public function hrShow(Request $request, int $id, EmployeeDocumentService $employeeDocumentService): JsonResponse
     {
-        $documents->setCollection($documents->getCollection()->map(function (EmployeeDocument $doc) {
+        $document = EmployeeDocument::query()
+            ->with([
+                'documentType.category',
+                'documentTemplate',
+                'files' => fn ($q) => $q->orderByDesc('id'),
+                'histories' => fn ($q) => $q->orderByDesc('id'),
+                'requestDetails',
+            ])
+            ->findOrFail($id);
+
+        $latestFile = $document->files->first();
+
+        return $this->successResponse([
+            'id' => $document->id,
+            'employee_id' => $document->employee_id,
+            'document_type' => DocumentTypeResource::make($document->documentType),
+            'document_title' => $document->document_title,
+            'document_number' => $document->document_number,
+            'issue_date' => $document->issue_date?->format('d M Y'),
+            'issue_date_raw' => $document->issue_date?->format('Y-m-d'),
+            'expiry_date' => $document->expiry_date?->format('d M Y'),
+            'expiry_date_raw' => $document->expiry_date?->format('Y-m-d'),
+            'remarks' => $document->remarks,
+            'status' => $document->status,
+            'current_version' => $document->current_version,
+            'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+            'file_name' => $latestFile ? basename($latestFile->file_path) : null,
+            'request_details' => $document->requestDetails->pluck('field_value', 'field_key'),
+            'histories' => $document->histories->map(fn ($history) => [
+                'action_type' => $history->action_type,
+                'remarks' => $history->remarks,
+                'action_on' => $history->action_on?->format('d M Y H:i'),
+            ]),
+            'can_edit' => $employeeDocumentService->canEdit($document, (int) $request->user()->id),
+        ], 'Document details retrieved successfully.');
+    }
+
+    public function updateHrDocument(Request $request, int $id, EmployeeDocumentService $employeeDocumentService): JsonResponse
+    {
+        $document = EmployeeDocument::query()->with('documentType')->findOrFail($id);
+        $userId = (int) $request->user()->id;
+
+        if (! $employeeDocumentService->canEdit($document, $userId)) {
+            return $this->errorResponse('You are not allowed to edit this document.', 403);
+        }
+
+        $fieldRequires = $document->documentType?->field_requires ?? [];
+        $fileIsRequired = ! empty($fieldRequires['attachments']) && ! $document->files()->exists();
+        $validator = Validator::make($request->all(), [
+            'document_number' => ! empty($fieldRequires['ref_number'])
+                ? ['sometimes', 'required', 'string', 'max:100', 'regex:/\A[A-Za-z0-9\/-]+\z/']
+                : ['prohibited'],
+            'document_title' => ['sometimes', 'required', 'string', 'max:255'],
+            'issue_date' => ! empty($fieldRequires['issue_date'])
+                ? ['sometimes', 'required', 'date', 'before_or_equal:today']
+                : ['prohibited'],
+            'expiry_date' => ! empty($fieldRequires['expiry_date'])
+                ? ['sometimes', 'required', 'date', 'after:today']
+                : ['prohibited'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
+            'file' => $fileIsRequired
+                ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240'
+                : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'uid' => ! empty($fieldRequires['uid'])
+                ? ['sometimes', 'required', 'string', 'max:15', 'regex:/\A[0-9]{1,15}\z/']
+                : ['prohibited'],
+            'total_experience' => ! empty($fieldRequires['total_experience'])
+                ? ['sometimes', 'required', 'numeric', 'min:0', 'max:80']
+                : ['prohibited'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation failed', 422, $validator->errors());
+        }
+
+        $validated = $validator->validated();
+        $attributes = array_intersect_key($validated, array_flip([
+            'document_number',
+            'document_title',
+            'issue_date',
+            'expiry_date',
+            'remarks',
+        ]));
+        $attributes['status'] = $document->status === 'under_review' ? 'submitted' : $document->status;
+        $requestDetails = array_intersect_key($validated, array_flip(['uid', 'total_experience']));
+
+        $employeeDocumentService->updateDocument(
+            $document,
+            $attributes,
+            $requestDetails,
+            $request->file('file'),
+            $userId,
+            'Document details updated by HR, admin, or finance',
+        );
+
+        return $this->successResponse([
+            'id' => $document->id,
+            'status' => $document->status,
+            'current_version' => $document->current_version,
+        ], 'Document updated successfully.');
+    }
+
+    /**
+     * Approve or reject an employee document as HR.
+     */
+    #[OA\Post(
+        path: '/api/v1/hr/documents/{id}/status',
+        summary: 'Approve or reject an employee document',
+        security: [['sanctum' => []]],
+        tags: ['Documents'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['status'],
+                properties: [
+                    new OA\Property(property: 'status', type: 'string', enum: ['approved', 'rejected']),
+                    new OA\Property(property: 'remarks', type: 'string', nullable: true),
+                ],
+            ),
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Document status updated successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Forbidden'),
+            new OA\Response(response: 404, description: 'Document not found'),
+            new OA\Response(response: 422, description: 'Validation failed'),
+        ]
+    )]
+    public function updateHrStatus(Request $request, int $id, EmployeeDocumentService $employeeDocumentService): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:approved,rejected',
+            'remarks' => $request->input('status') === 'rejected'
+                ? 'required|string|max:500'
+                : 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation failed', 422, $validator->errors());
+        }
+
+        $validated = $validator->validated();
+        $document = EmployeeDocument::query()->findOrFail($id);
+        $remarks = $validated['remarks'] ?? 'Approved by HR';
+
+        $employeeDocumentService->updateStatus(
+            $document,
+            $validated['status'],
+            $remarks,
+            $request->user()?->id,
+        );
+
+        return $this->successResponse([
+            'id' => $document->id,
+            'status' => $document->status,
+            'remarks' => $document->remarks,
+        ], 'Document status updated successfully.');
+    }
+
+    private function formatDocumentList(
+        LengthAwarePaginator $documents,
+        EmployeeDocumentService $employeeDocumentService,
+        int $userId,
+        ?int $employeeId = null,
+    ): JsonResponse {
+        $documents->setCollection($documents->getCollection()->map(function (EmployeeDocument $doc) use ($employeeDocumentService, $userId, $employeeId) {
             $latestFile = $doc->files->first();
             $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
 
@@ -281,7 +453,7 @@ class DocumentController extends Controller
                 'current_version' => $doc->current_version ?? '1.0',
                 'file_url' => $fileUrl,
                 // 'request_details' => $doc->requestDetails->pluck('field_value', 'field_key'),
-                'can_edit' => in_array($doc->status, ['draft', 'submitted']) || (bool) $doc->documentType?->editable_before_approval,
+                'can_edit' => $employeeDocumentService->canEdit($doc, $userId, $employeeId),
                 'created_at' => $doc->created_at?->format('d M Y'),
             ];
         }));
@@ -374,7 +546,7 @@ class DocumentController extends Controller
     /**
      * Get Document Details with version history.
      */
-    public function show(Request $request, int $id): JsonResponse
+    public function show(Request $request, int $id, EmployeeDocumentService $employeeDocumentService): JsonResponse
     {
         $employee = $this->getEmployee($request);
         if (! $employee) {
@@ -420,6 +592,7 @@ class DocumentController extends Controller
             'status' => $doc->status,
             'current_version' => $doc->current_version,
             'template_name' => $doc->documentTemplate?->template_name,
+            'can_edit' => $employeeDocumentService->canEdit($doc, (int) $request->user()->id, (int) $employee->id),
             'files' => $files,
             'histories' => $histories,
             'request_details' => $doc->requestDetails->pluck('field_value', 'field_key'),
@@ -429,7 +602,7 @@ class DocumentController extends Controller
     /**
      * Edit / Update Document (e.g. before approval or replace file).
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, int $id, EmployeeDocumentService $employeeDocumentService): JsonResponse
     {
         $employee = $this->getEmployee($request);
         if (! $employee) {
@@ -441,64 +614,64 @@ class DocumentController extends Controller
             ->where('employee_id', $employee->id)
             ->findOrFail($id);
 
-        if (! in_array($document->status, ['draft', 'submitted', 'rejected'])) {
-            return $this->errorResponse('Approved documents cannot be edited directly. Please submit a new version.', 403);
+        if (! $employeeDocumentService->canEdit($document, (int) $request->user()->id, (int) $employee->id)) {
+            return $this->errorResponse('You are not allowed to edit this document.', 403);
         }
 
+        $fieldRequires = $document->documentType?->field_requires ?? [];
+        $fileIsRequired = ! empty($fieldRequires['attachments']) && ! $document->files()->exists();
         $validator = Validator::make($request->all(), [
-            'document_number' => 'nullable|string|max:100',
-            'document_title' => 'nullable|string|max:255',
-            'issue_date' => 'nullable|date',
-            'expiry_date' => 'nullable|date',
-            'remarks' => 'nullable|string',
-            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'document_number' => ! empty($fieldRequires['ref_number'])
+                ? ['sometimes', 'required', 'string', 'max:100', 'regex:/\A[A-Za-z0-9\/-]+\z/']
+                : ['sometimes', 'nullable', 'string', 'max:100', 'regex:/\A[A-Za-z0-9\/-]+\z/'],
+            'document_title' => ['sometimes', 'required', 'string', 'max:255'],
+            'issue_date' => ! empty($fieldRequires['issue_date'])
+                ? ['sometimes', 'required', 'date', 'before_or_equal:today']
+                : ['sometimes', 'nullable', 'date', 'before_or_equal:today'],
+            'expiry_date' => ! empty($fieldRequires['expiry_date'])
+                ? ['sometimes', 'required', 'date', 'after:today']
+                : ['sometimes', 'nullable', 'date', 'after:today'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
+            'file' => $fileIsRequired
+                ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240'
+                : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'uid' => ! empty($fieldRequires['uid'])
+                ? ['sometimes', 'required', 'string', 'max:15', 'regex:/\A[0-9]{1,15}\z/']
+                : ['prohibited'],
+            'total_experience' => ! empty($fieldRequires['total_experience'])
+                ? ['sometimes', 'required', 'numeric', 'min:0', 'max:80']
+                : ['prohibited'],
         ]);
 
         if ($validator->fails()) {
             return $this->errorResponse('Validation failed', 422, $validator->errors());
         }
 
-        return DB::transaction(function () use ($request, $document) {
-            $document->update([
-                'document_number' => $request->input('document_number', $document->document_number),
-                'document_title' => $request->input('document_title', $document->document_title),
-                'issue_date' => $request->input('issue_date', $document->issue_date),
-                'expiry_date' => $request->input('expiry_date', $document->expiry_date),
-                'remarks' => $request->input('remarks', $document->remarks),
-                'status' => 'submitted',
-            ]);
+        $validated = $validator->validated();
+        $attributes = array_intersect_key($validated, array_flip([
+            'document_number',
+            'document_title',
+            'issue_date',
+            'expiry_date',
+            'remarks',
+        ]));
+        $attributes['status'] = 'submitted';
+        $requestDetails = array_intersect_key($validated, array_flip(['uid', 'total_experience']));
 
-            if ($request->hasFile('file')) {
-                $currentVer = (float) ($document->current_version ?? 1.0);
-                $newVer = number_format($currentVer + 0.1, 1);
+        $employeeDocumentService->updateDocument(
+            $document,
+            $attributes,
+            $requestDetails,
+            $request->file('file'),
+            (int) $request->user()->id,
+            'Document details updated by employee',
+        );
 
-                $filePath = $request->file('file')->store('employee_documents', 'public');
-                EmployeeDocumentFile::query()->create([
-                    'employee_document_id' => $document->id,
-                    'version_no' => $newVer,
-                    'file_path' => $filePath,
-                    'uploaded_by' => $request->user()?->id,
-                    'uploaded_date' => Carbon::now(),
-                    'change_notes' => 'Updated document file',
-                ]);
-
-                $document->update(['current_version' => $newVer]);
-            }
-
-            EmployeeDocumentHistory::query()->create([
-                'employee_document_id' => $document->id,
-                'action_type' => 'submitted',
-                'remarks' => 'Document details updated by employee',
-                'done_by' => $request->user()?->id,
-                'action_on' => Carbon::now(),
-            ]);
-
-            return $this->successResponse([
-                'id' => $document->id,
-                'status' => $document->status,
-                'current_version' => $document->current_version,
-            ], 'Document updated successfully.');
-        });
+        return $this->successResponse([
+            'id' => $document->id,
+            'status' => $document->status,
+            'current_version' => $document->current_version,
+        ], 'Document updated successfully.');
     }
 
     /**

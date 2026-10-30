@@ -139,12 +139,13 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
     Route::get('documents/types/{document_type}/blank-form', [DocumentController::class, 'blankForm'])->name('api.v1.hr.documents.blank-form');
     Route::get('documents', [DocumentController::class, 'hrIndex'])->name('api.v1.hr.documents.index');
     Route::post('documents', [DocumentController::class, 'store'])->name('api.v1.hr.documents.store');
+    Route::post('documents/{id}/status', [DocumentController::class, 'updateHrStatus'])->name('api.v1.hr.documents.status');
     Route::get('documents/policies', [DocumentController::class, 'policies'])->name('api.v1.hr.documents.policies');
     Route::get('documents/letters', [DocumentController::class, 'letters'])->name('api.v1.hr.documents.letters');
     Route::post('documents/letters', [DocumentController::class, 'requestLetter'])->name('api.v1.hr.documents.request-letter');
     Route::get('documents/letters/{id}', [DocumentController::class, 'letterDetails'])->name('api.v1.hr.documents.letter-details');
-    Route::get('documents/{id}', [DocumentController::class, 'show'])->name('api.v1.hr.documents.show');
-    Route::put('documents/{id}', [DocumentController::class, 'update'])->name('api.v1.hr.documents.update');
+    Route::get('documents/{id}', [DocumentController::class, 'hrShow'])->name('api.v1.hr.documents.show');
+    Route::put('documents/{id}', [DocumentController::class, 'updateHrDocument'])->name('api.v1.hr.documents.update');
 
     // Visits
     Route::get('visits', [VisitController::class, 'index'])->name('api.v1.hr.visits.index');

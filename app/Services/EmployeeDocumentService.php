@@ -7,6 +7,7 @@ use App\Models\EmployeeDocument;
 use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
 use App\Models\EmployeeProfile;
+use App\Support\SalesCrmRoles;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -18,7 +19,12 @@ use Illuminate\Support\Facades\DB;
  */
 class EmployeeDocumentService
 {
-    public function list(Request $request, ?int $employeeId = null, int $perPage = 15, bool $applyHrOnlyFilters = false,): LengthAwarePaginator
+    /**
+     * @var array<int, list<string>>
+     */
+    private array $roleNamesByUserId = [];
+
+    public function list(Request $request, ?int $employeeId = null, int $perPage = 15, bool $applyHrOnlyFilters = false): LengthAwarePaginator
     {
         $query = EmployeeDocument::query()
             ->with([
@@ -160,6 +166,130 @@ class EmployeeDocumentService
 
             return $document;
         });
+    }
+
+    public function updateStatus(EmployeeDocument $document, string $status, string $remarks, ?int $doneBy): void
+    {
+        DB::transaction(function () use ($document, $status, $remarks, $doneBy) {
+            $document->update([
+                'status' => $status,
+                'remarks' => $remarks,
+            ]);
+
+            EmployeeDocumentHistory::query()->create([
+                'employee_document_id' => $document->id,
+                'action_type' => $status,
+                'remarks' => $remarks,
+                'done_by' => $doneBy,
+                'action_on' => Carbon::now(),
+            ]);
+
+            if ($status === 'approved') {
+                $this->syncWithProfile($document);
+            }
+        });
+    }
+
+    public function canEdit(EmployeeDocument $document, int $userId, ?int $employeeId = null): bool
+    {
+        $document->loadMissing('documentType.category');
+
+        if (! $document->documentType?->editable_before_approval
+            || ! in_array($document->status, ['draft', 'submitted', 'under_review'], true)
+            || $document->created_by === null) {
+            return false;
+        }
+
+        if ($document->documentType->category?->short_code === 'letter_requests'
+            && $document->created_at
+            && $document->created_at->copy()->addMonths(3)->isPast()) {
+            return false;
+        }
+
+        if ($employeeId !== null) {
+            return (int) $document->employee_id === $employeeId
+                && (int) $document->created_by === $userId
+                && array_intersect(
+                    SalesCrmRoles::LOGIN_ROLES,
+                    $this->roleNamesForUser((int) $document->created_by),
+                ) === [];
+        }
+
+        $allowedRoles = SalesCrmRoles::LOGIN_ROLES;
+        $creatorRoles = array_intersect($allowedRoles, $this->roleNamesForUser((int) $document->created_by));
+        $editorRoles = array_intersect($allowedRoles, $this->roleNamesForUser($userId));
+
+        return array_intersect($creatorRoles, $editorRoles) !== [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $requestDetails
+     */
+    public function updateDocument(
+        EmployeeDocument $document,
+        array $attributes,
+        array $requestDetails,
+        ?UploadedFile $file,
+        int $updatedBy,
+        string $changeNotes,
+    ): void {
+        DB::transaction(function () use ($document, $attributes, $requestDetails, $file, $updatedBy, $changeNotes) {
+            $document->update($attributes);
+
+            if ($file !== null) {
+                $currentVersion = (float) ($document->current_version ?? 1.0);
+                $newVersion = number_format($currentVersion + 0.1, 1);
+
+                EmployeeDocumentFile::query()->create([
+                    'employee_document_id' => $document->id,
+                    'version_no' => $newVersion,
+                    'file_path' => $file->store('employee_documents', 'public'),
+                    'uploaded_by' => $updatedBy,
+                    'uploaded_date' => Carbon::now(),
+                    'change_notes' => $changeNotes,
+                ]);
+
+                $document->update(['current_version' => $newVersion]);
+            }
+
+            foreach (['uid', 'total_experience'] as $fieldKey) {
+                if (! array_key_exists($fieldKey, $requestDetails)) {
+                    continue;
+                }
+
+                $fieldValue = $requestDetails[$fieldKey];
+                if ($fieldValue === null || $fieldValue === '') {
+                    $document->requestDetails()->where('field_key', $fieldKey)->delete();
+
+                    continue;
+                }
+
+                $document->requestDetails()->updateOrCreate(
+                    ['field_key' => $fieldKey],
+                    [
+                        'field_name' => str($fieldKey)->headline()->toString(),
+                        'field_value' => (string) $fieldValue,
+                    ],
+                );
+            }
+
+            EmployeeDocumentHistory::query()->create([
+                'employee_document_id' => $document->id,
+                'action_type' => $document->status,
+                'remarks' => $changeNotes,
+                'done_by' => $updatedBy,
+                'action_on' => Carbon::now(),
+            ]);
+        });
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function roleNamesForUser(int $userId): array
+    {
+        return $this->roleNamesByUserId[$userId] ??= SalesCrmRoles::roleNamesForUser($userId);
     }
 
     /**
