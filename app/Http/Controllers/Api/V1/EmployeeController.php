@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\AssetAssignment;
 use App\Models\EmployeeProfile;
 use App\Models\SalesCrm\Department;
 use App\Models\SalesCrm\Division;
