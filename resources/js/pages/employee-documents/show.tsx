@@ -9,6 +9,7 @@ import {
     FileCheck,
     FileText,
     History,
+    Pencil,
     Printer,
     ShieldAlert,
     UserCheck,
@@ -50,6 +51,7 @@ type DocumentDetail = {
     remarks: string | null;
     current_version: string;
     status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived' | 'expired';
+    can_edit: boolean;
     created_at: string;
     file_url: string | null;
     download_url?: string | null;
@@ -155,8 +157,18 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                     </div>
 
                     {/* Review Actions */}
-                    {isPending && (
+                    {(isPending || document.can_edit) && (
                         <div className="flex items-center gap-2.5">
+                            {document.can_edit && (
+                                <Button asChild variant="outline" className="gap-1.5">
+                                    <Link href={`/employee-documents/${document.id}/edit`}>
+                                        <Pencil className="size-4" />
+                                        Edit Document
+                                    </Link>
+                                </Button>
+                            )}
+                            {isPending && (
+                                <>
                             <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
                                 <DialogTrigger asChild>
                                     <Button variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50 gap-1.5">
@@ -242,6 +254,8 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                     </DialogFooter>
                                 </DialogContent>
                             </Dialog>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>

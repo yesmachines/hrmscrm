@@ -64,7 +64,79 @@ test('admin can view employee documents in crm and approve submissions', functio
         ])
         ->assertRedirect();
 
-    expect($doc->fresh()->status)->toBe('approved');
+    expect($doc->fresh()->status)->toBe('approved')
+        ->and($doc->fresh()->remarks)->toBe('Passport verified against physical original copy.')
+        ->and($doc->histories()->where('action_type', 'approved')->latest('id')->value('remarks'))
+        ->toBe('Passport verified against physical original copy.');
+});
+
+test('admin document edit page is available only to the matching creator role when enabled before approval', function () {
+    $admin = createHrmsLoginUser('admin');
+    $hr = createHrmsLoginUser('hr');
+
+    $salesUser = SalesCrmUser::query()->create([
+        'name' => 'Editable CRM Employee',
+        'email' => 'editable.crm.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => 'EMP-EDIT-001',
+        'designation' => 'Analyst',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $documentType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $documentType->update([
+        'editable_before_approval' => true,
+        'field_requires' => [],
+    ]);
+    $adminCreatedDocument = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'Admin Created Passport',
+        'created_by' => $admin->id,
+        'status' => 'submitted',
+    ]);
+    $hrCreatedDocument = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'HR Created Passport',
+        'created_by' => $hr->id,
+        'status' => 'submitted',
+    ]);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employee-documents.edit', $adminCreatedDocument))
+        ->assertOk();
+
+    $this->actingAs($admin)
+        ->put(route('employee-documents.update', $adminCreatedDocument), [
+            'employee_id' => $employee->id,
+            'category_id' => $documentType->category_id,
+            'document_type_id' => $documentType->id,
+            'document_title' => 'Updated Admin Passport',
+            'document_number' => 'EDIT-123',
+            'remarks' => 'Checked by the document creator role.',
+        ])
+        ->assertRedirect(route('employee-documents.show', $adminCreatedDocument));
+
+    expect($adminCreatedDocument->fresh()->document_title)->toBe('Updated Admin Passport');
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employee-documents.edit', $hrCreatedDocument))
+        ->assertForbidden();
+
+    $documentType->update(['editable_before_approval' => false]);
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employee-documents.edit', $adminCreatedDocument))
+        ->assertForbidden();
 });
 
 test('admin can directly upload document for an employee', function () {

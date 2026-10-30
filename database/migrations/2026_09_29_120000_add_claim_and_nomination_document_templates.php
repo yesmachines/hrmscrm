@@ -13,7 +13,7 @@ return new class extends Migration
     public function up(): void
     {
         // 1. Get or create Category 1: Employee Personal Documents
-        $personalCategory = DocumentCategory::query()->firstOrCreate(
+        $personalCategory = DocumentCategory::withoutGlobalScopes()->firstOrCreate(
             ['short_code' => 'personal'],
             [
                 'category_name' => 'Employee Personal Documents',
@@ -22,7 +22,7 @@ return new class extends Migration
         );
 
         // 2. Ensure Education Allowance Claim Form document type
-        $educationType = DocumentType::query()->firstOrCreate(
+        $educationType = DocumentType::withoutGlobalScopes()->firstOrCreate(
             ['document_code' => 'education_allowance_claim'],
             [
                 'category_id' => $personalCategory->id,
@@ -38,7 +38,7 @@ return new class extends Migration
         );
 
         // 3. Ensure Employee Nominee Declaration Form document type (nomination_form)
-        $nomineeType = DocumentType::query()->firstOrCreate(
+        $nomineeType = DocumentType::withoutGlobalScopes()->firstOrCreate(
             ['document_code' => 'nomination_form'],
             [
                 'category_id' => $personalCategory->id,
@@ -54,7 +54,7 @@ return new class extends Migration
         );
 
         // 4. Ensure Dependent Air Ticket Claim Form document type
-        $airTicketType = DocumentType::query()->firstOrCreate(
+        $airTicketType = DocumentType::withoutGlobalScopes()->firstOrCreate(
             ['document_code' => 'air_ticket_claim'],
             [
                 'category_id' => $personalCategory->id,
@@ -216,7 +216,7 @@ return new class extends Migration
 </div>
 HTML;
 
-        DocumentTemplate::query()->updateOrCreate(
+        DocumentTemplate::withoutGlobalScopes()->updateOrCreate(
             [
                 'document_type_id' => $educationType->id,
                 'template_name' => 'Education Allowance Claim Form Template',
@@ -341,7 +341,7 @@ HTML;
 </div>
 HTML;
 
-        DocumentTemplate::query()->updateOrCreate(
+        DocumentTemplate::withoutGlobalScopes()->updateOrCreate(
             [
                 'document_type_id' => $nomineeType->id,
                 'template_name' => 'Employee Nominee Declaration Form Template',
@@ -438,7 +438,7 @@ HTML;
 </div>
 HTML;
 
-        DocumentTemplate::query()->updateOrCreate(
+        DocumentTemplate::withoutGlobalScopes()->updateOrCreate(
             [
                 'document_type_id' => $airTicketType->id,
                 'template_name' => 'Dependent Air Ticket Claim Form Template',
@@ -455,11 +455,11 @@ HTML;
      */
     public function down(): void
     {
-        $typeIds = DocumentType::query()
+        $typeIds = DocumentType::withoutGlobalScopes()
             ->whereIn('document_code', ['education_allowance_claim', 'air_ticket_claim'])
             ->pluck('id');
 
-        DocumentTemplate::query()->whereIn('document_type_id', $typeIds)->delete();
-        DocumentType::query()->whereIn('id', $typeIds)->delete();
+        DocumentTemplate::withoutGlobalScopes()->whereIn('document_type_id', $typeIds)->delete();
+        DocumentType::withoutGlobalScopes()->whereIn('id', $typeIds)->delete();
     }
 };

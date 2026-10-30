@@ -60,10 +60,27 @@ type DownloadableForm = {
     download_url: string;
 };
 
+type EditableDocument = {
+    id: number;
+    employee_id: number;
+    category_id: number;
+    document_type_id: number;
+    document_title: string;
+    document_number: string | null;
+    issue_date: string | null;
+    expiry_date: string | null;
+    remarks: string | null;
+    status: string;
+    file_url: string | null;
+    file_name: string | null;
+    request_details: Record<string, string>;
+};
+
 type Props = {
     categories: Category[];
     employees: Employee[];
     downloadableForms?: DownloadableForm[];
+    document?: EditableDocument;
 };
 
 function formatLocalDate(date: Date): string {
@@ -74,19 +91,20 @@ function formatLocalDate(date: Date): string {
     return `${year}-${month}-${day}`;
 }
 
-export default function EmployeeDocumentCreate({ categories, employees, downloadableForms = [] }: Props) {
-    const { data, setData, post, processing, errors } = useForm({
-        employee_id: '',
-        category_id: '',
-        document_type_id: '',
-        document_title: '',
-        document_number: '',
-        issue_date: '',
-        expiry_date: '',
-        uid: '',
-        total_experience: '',
-        remarks: '',
-        status: 'submitted',
+export default function EmployeeDocumentCreate({ categories, employees, downloadableForms = [], document }: Props) {
+    const isEditing = document !== undefined;
+    const { data, setData, post, put, processing, errors } = useForm({
+        employee_id: document?.employee_id.toString() ?? '',
+        category_id: document?.category_id.toString() ?? '',
+        document_type_id: document?.document_type_id.toString() ?? '',
+        document_title: document?.document_title ?? '',
+        document_number: document?.document_number ?? '',
+        issue_date: document?.issue_date ?? '',
+        expiry_date: document?.expiry_date ?? '',
+        uid: document?.request_details.uid ?? '',
+        total_experience: document?.request_details.total_experience ?? '',
+        remarks: document?.remarks ?? '',
+        status: document?.status ?? 'submitted',
         file: null as File | null,
     });
 
@@ -98,15 +116,27 @@ export default function EmployeeDocumentCreate({ categories, employees, download
     const expiryDateMin = formatLocalDate(
         new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1),
     );
+    const typeChanged = Boolean(
+        document && selectedType && selectedType.id !== document.document_type_id,
+    );
+    const fileIsRequired = Boolean(
+        selectedType?.field_requires?.attachments
+        && (!document || typeChanged || !document.file_url),
+    );
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/employee-documents');
+
+        if (document) {
+            put(`/employee-documents/${document.id}`);
+        } else {
+            post('/employee-documents');
+        }
     };
 
     return (
         <>
-            <Head title="Direct Document Upload" />
+            <Head title={isEditing ? `Edit ${document.document_title}` : 'Direct Document Upload'} />
 
             <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-6 md:p-8">
                 <div className="flex items-center gap-3">
@@ -116,8 +146,10 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                         </Link>
                     </Button>
                     <Heading
-                        title="Direct HR Document Upload"
-                        description="Upload official employment, personal, performance, or disciplinary documents for an employee"
+                        title={isEditing ? 'Edit Employee Document' : 'Direct HR Document Upload'}
+                        description={isEditing
+                            ? 'Update the document details or upload a replacement file.'
+                            : 'Upload official employment, personal, performance, or disciplinary documents for an employee'}
                     />
                 </div>
 
@@ -188,6 +220,12 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                                             ...prev,
                                             category_id: val,
                                             document_type_id: '',
+                                            document_number: '',
+                                            issue_date: '',
+                                            expiry_date: '',
+                                            uid: '',
+                                            total_experience: '',
+                                            file: null,
                                         }));
                                     }}
                                 >
@@ -219,6 +257,12 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                                             document_type_id: val,
                                             document_title: type ? type.document_name : '',
                                             status: type?.requires_hr_approval ? 'submitted' : 'approved',
+                                            document_number: '',
+                                            issue_date: '',
+                                            expiry_date: '',
+                                            uid: '',
+                                            total_experience: '',
+                                            file: null,
                                         }));
                                     }}
                                 >
@@ -290,7 +334,9 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                                         </strong>
                                     </span>
                                     <span>
-                                        Status after upload: <strong className="text-neutral-800 capitalize">{data.status === 'submitted' ? 'Pending Approval' : data.status}</strong>
+                                        {isEditing
+                                            ? 'Saving changes returns the document to pending approval when it is under review.'
+                                            : <>Status after upload: <strong className="text-neutral-800 capitalize">{data.status === 'submitted' ? 'Pending Approval' : data.status}</strong></>}
                                     </span>
                                 </div>
                             )}
@@ -419,14 +465,17 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                         {/* File Upload Zone */}
                         {selectedType?.field_requires?.attachments && (
                             <div className="space-y-2">
-                                <Label htmlFor="file">Upload Document File (PDF, JPG, PNG) *</Label>
+                                <Label htmlFor="file">
+                                    {isEditing ? 'Replace Document File (PDF, JPG, PNG)' : 'Upload Document File (PDF, JPG, PNG) *'}
+                                    {fileIsRequired ? ' *' : ''}
+                                </Label>
                                 <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors bg-neutral-50/50">
                                     <UploadCloud className="mx-auto size-10 text-muted-foreground/50 mb-2" />
                                     <input
                                         id="file"
                                         type="file"
                                         accept=".pdf,.jpg,.jpeg,.png"
-                                        required
+                                        required={fileIsRequired}
                                         onChange={(e) => {
                                             if (e.target.files && e.target.files[0]) {
                                                 setData('file', e.target.files[0]);
@@ -441,6 +490,16 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                                         Click here to select a file from your computer
                                     </label>
                                     <p className="text-xs text-muted-foreground mt-1">Maximum file size: 10MB (PDF, PNG, JPG)</p>
+                                    {isEditing && document.file_url && (
+                                        <a
+                                            href={document.file_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="mt-2 block text-xs text-primary hover:underline"
+                                        >
+                                            Current file: {document.file_name || 'View current file'}
+                                        </a>
+                                    )}
                                     {data.file && (
                                         <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold">
                                             <FileUp className="size-4" />
@@ -459,7 +518,7 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                             <Link href="/employee-documents">Cancel</Link>
                         </Button>
                         <Button type="submit" disabled={processing} className="bg-primary hover:bg-primary/90 text-white">
-                            {processing ? 'Uploading...' : 'Save & Verify Document'}
+                            {processing ? 'Saving...' : isEditing ? 'Save Changes' : 'Save & Verify Document'}
                         </Button>
                     </div>
                 </form>

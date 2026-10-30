@@ -156,6 +156,60 @@ test('documents list nests document type details separately from document fields
         ->and($documentData)->not->toHaveKey('document_code');
 });
 
+test('employee document edit option and endpoint require creator, enabled type, and pre-approval status', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Editable Document Employee',
+        'email' => 'editable.document.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-DOCS-EDIT-001',
+        'designation' => 'Specialist',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $documentType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $documentType->update([
+        'editable_before_approval' => true,
+        'field_requires' => [],
+    ]);
+    $document = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'Employee Passport',
+        'created_by' => $user->id,
+        'status' => 'draft',
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->getJson('/api/v1/documents')
+        ->assertOk()
+        ->assertJsonPath('data.documents.0.can_edit', true);
+
+    $this->withToken($token)
+        ->putJson("/api/v1/documents/{$document->id}", [
+            'document_title' => 'Updated Employee Passport',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'submitted');
+
+    $document->update(['status' => 'approved']);
+    $this->withToken($token)
+        ->getJson('/api/v1/documents')
+        ->assertOk()
+        ->assertJsonPath('data.documents.0.can_edit', false);
+
+    $this->withToken($token)
+        ->putJson("/api/v1/documents/{$document->id}", [
+            'document_title' => 'Approved documents cannot be edited',
+        ])
+        ->assertForbidden();
+});
+
 test('hr document list includes documents belonging to other employees', function () {
     $employeeUser = SalesCrmUser::query()->create([
         'name' => 'Employee Document Owner',
@@ -232,6 +286,123 @@ test('hr document list includes documents belonging to other employees', functio
         ->assertJsonPath('data.documents.0.id', $document->id)
         ->assertJsonCount(1, 'data.documents')
         ->assertJsonPath('data.pagination.total', 1);
+});
+
+test('hr can approve and reject documents with remarks stored on the document and its history', function () {
+    $documentType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $approvedDocument = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'Passport for Approval',
+        'status' => 'submitted',
+    ]);
+    $rejectedDocument = EmployeeDocument::query()->create([
+        'employee_id' => 102,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'Passport for Rejection',
+        'status' => 'under_review',
+    ]);
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'Document Status HR User',
+        'email' => 'document.status.hr@example.com',
+    ]);
+    $hrToken = $hrUser->createToken('test')->plainTextToken;
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/{$approvedDocument->id}/status", [
+            'status' => 'approved',
+            'remarks' => 'Verified against original.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'approved')
+        ->assertJsonPath('data.remarks', 'Verified against original.');
+
+    expect($approvedDocument->fresh()->remarks)->toBe('Verified against original.')
+        ->and($approvedDocument->histories()->where('action_type', 'approved')->latest('id')->value('remarks'))
+        ->toBe('Verified against original.');
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/{$rejectedDocument->id}/status", [
+            'status' => 'rejected',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['remarks']);
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/{$rejectedDocument->id}/status", [
+            'status' => 'rejected',
+            'remarks' => 'Upload is unreadable.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'rejected')
+        ->assertJsonPath('data.remarks', 'Upload is unreadable.');
+
+    expect($rejectedDocument->fresh()->remarks)->toBe('Upload is unreadable.')
+        ->and($rejectedDocument->histories()->where('action_type', 'rejected')->latest('id')->value('remarks'))
+        ->toBe('Upload is unreadable.');
+});
+
+test('hr document edit is restricted by creator role, type setting, and pre-approval status', function () {
+    $documentType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $documentType->update([
+        'editable_before_approval' => true,
+        'field_requires' => ['uid' => true],
+    ]);
+
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'HR Document Editor',
+        'email' => 'hr.document.editor@example.com',
+    ]);
+    $adminUser = createHrmsLoginUser('admin', [
+        'name' => 'Admin Document Editor',
+        'email' => 'admin.document.editor@example.com',
+    ]);
+
+    $hrDocument = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'HR Created Document',
+        'created_by' => $hrUser->id,
+        'status' => 'under_review',
+    ]);
+    $approvedDocument = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'Approved Document',
+        'created_by' => $hrUser->id,
+        'status' => 'approved',
+    ]);
+
+    $hrToken = $hrUser->createToken('test')->plainTextToken;
+    $adminToken = $adminUser->createToken('test')->plainTextToken;
+
+    $this->withToken($hrToken)
+        ->getJson("/api/v1/hr/documents/{$hrDocument->id}")
+        ->assertOk()
+        ->assertJsonPath('data.can_edit', true);
+
+    $this->withToken($hrToken)
+        ->putJson("/api/v1/hr/documents/{$hrDocument->id}", [
+            'document_title' => 'Updated by HR',
+            'uid' => '001234',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'submitted');
+
+    expect($hrDocument->requestDetails()->where('field_key', 'uid')->value('field_value'))
+        ->toBe('001234');
+
+    $this->withToken($adminToken)
+        ->putJson("/api/v1/hr/documents/{$hrDocument->id}", [
+            'document_title' => 'Updated by another role',
+        ])
+        ->assertForbidden();
+
+    $this->withToken($hrToken)
+        ->putJson("/api/v1/hr/documents/{$approvedDocument->id}", [
+            'document_title' => 'Approved documents cannot be edited',
+        ])
+        ->assertForbidden();
 });
 
 test('hr document list filters by employee and document type only on the hr endpoint', function () {

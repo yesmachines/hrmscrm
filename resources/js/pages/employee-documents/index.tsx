@@ -7,6 +7,7 @@ import {
     FileDown,
     FileText,
     Filter,
+    Pencil,
     Plus,
     Search,
     ShieldAlert,
@@ -55,6 +56,7 @@ type DocumentItem = {
     status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived' | 'expired';
     created_at: string;
     file_url: string | null;
+    can_edit: boolean;
 };
 
 type PaginatedDocuments = {
@@ -321,12 +323,22 @@ export default function EmployeeDocumentsIndex({
                                         </td>
                                         <td className="px-5 py-4">{getStatusBadge(doc.status)}</td>
                                         <td className="px-5 py-4 text-right">
-                                            <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-lg">
-                                                <Link href={`/employee-documents/${doc.id}`}>
-                                                    <Eye className="size-3.5" />
-                                                    View / Review
-                                                </Link>
-                                            </Button>
+                                            <div className="flex justify-end gap-2">
+                                                <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-lg">
+                                                    <Link href={`/employee-documents/${doc.id}`}>
+                                                        <Eye className="size-3.5" />
+                                                        View / Review
+                                                    </Link>
+                                                </Button>
+                                                {doc.can_edit && (
+                                                    <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-lg">
+                                                        <Link href={`/employee-documents/${doc.id}/edit`}>
+                                                            <Pencil className="size-3.5" />
+                                                            Edit
+                                                        </Link>
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))

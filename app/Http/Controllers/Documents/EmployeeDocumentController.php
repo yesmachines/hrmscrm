@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\DocumentCategory;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
-use App\Models\EmployeeDocumentHistory;
 use App\Models\SalesCrm\Employee;
 use App\Services\EmployeeDocumentService;
 use Carbon\Carbon;
@@ -22,7 +21,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EmployeeDocumentController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, EmployeeDocumentService $employeeDocumentService): Response
     {
         $query = EmployeeDocument::query()
             ->with([
@@ -63,7 +62,10 @@ class EmployeeDocumentController extends Controller
         $documents = $query->orderByDesc('id')
             ->paginate(15)
             ->withQueryString()
-            ->through(fn (EmployeeDocument $doc) => $this->payload($doc));
+            ->through(fn (EmployeeDocument $doc) => $this->payload(
+                $doc,
+                $employeeDocumentService->canEdit($doc, (int) $request->user()->id),
+            ));
 
         $downloadableForms = DocumentType::query()
             ->whereHas('documentTemplates', fn ($q) => $q->where('status', 1))
@@ -91,49 +93,94 @@ class EmployeeDocumentController extends Controller
 
     public function create(): Response
     {
-        $categories = DocumentCategory::query()
-            ->with(['documentTypes.documentTemplates' => fn ($q) => $q->where('status', 1)])
-            ->where('status', 1)
-            ->get()
-            ->map(function ($cat) {
-                return [
-                    'id' => $cat->id,
-                    'category_name' => $cat->category_name,
-                    'short_code' => $cat->short_code,
-                    'document_types' => $cat->documentTypes->map(function ($type) {
-                        $hasBlank = $type->documentTemplates->isNotEmpty();
+        return Inertia::render('employee-documents/create', $this->documentFormOptions());
+    }
 
-                        return [
-                            'id' => $type->id,
-                            'category_id' => $type->category_id,
-                            'document_name' => $type->document_name,
-                            'document_code' => $type->document_code,
-                            'field_requires' => empty($type->field_requires) ? null : (object) $type->field_requires,
-                            'requires_hr_approval' => (bool) $type->requires_hr_approval,
-                            'has_blank_form' => $hasBlank,
-                            'blank_form_url' => $hasBlank ? route('document-types.blank-form', ['document_type' => $type->id, 'download' => 1]) : null,
-                        ];
-                    }),
-                ];
+    public function edit(
+        Request $request,
+        EmployeeDocument $employeeDocument,
+        EmployeeDocumentService $employeeDocumentService,
+    ): Response {
+        if (! $employeeDocumentService->canEdit($employeeDocument, (int) $request->user()->id)) {
+            abort(403);
+        }
+
+        $employeeDocument->load([
+            'documentType',
+            'files' => fn ($q) => $q->orderByDesc('id'),
+            'requestDetails',
+        ]);
+        $latestFile = $employeeDocument->files->first();
+        $formOptions = $this->documentFormOptions($employeeDocument->documentType?->category_id);
+        $formOptions['document'] = [
+            'id' => $employeeDocument->id,
+            'employee_id' => $employeeDocument->employee_id,
+            'category_id' => $employeeDocument->documentType?->category_id,
+            'document_type_id' => $employeeDocument->document_type_id,
+            'document_title' => $employeeDocument->document_title,
+            'document_number' => $employeeDocument->document_number,
+            'issue_date' => $employeeDocument->issue_date?->format('Y-m-d'),
+            'expiry_date' => $employeeDocument->expiry_date?->format('Y-m-d'),
+            'remarks' => $employeeDocument->remarks,
+            'status' => $employeeDocument->status,
+            'file_url' => $latestFile ? route('employee-documents.file', $employeeDocument->id) : null,
+            'file_name' => $latestFile ? basename($latestFile->file_path) : null,
+            'request_details' => $employeeDocument->requestDetails->pluck('field_value', 'field_key')->all(),
+        ];
+
+        return Inertia::render('employee-documents/create', $formOptions);
+    }
+
+    private function documentFormOptions(?int $includeCategoryId = null): array
+    {
+        $categoryQuery = DocumentCategory::query()
+            ->with(['documentTypes.documentTemplates' => fn ($q) => $q->where('status', 1)])
+            ->where(function ($query) use ($includeCategoryId) {
+                $query->where('status', 1);
+                if ($includeCategoryId !== null) {
+                    $query->orWhere('id', $includeCategoryId);
+                }
             });
+
+        $categories = $categoryQuery->get()->map(fn ($category) => [
+            'id' => $category->id,
+            'category_name' => $category->category_name,
+            'short_code' => $category->short_code,
+            'document_types' => $category->documentTypes->map(function ($type) {
+                $hasBlank = $type->documentTemplates->isNotEmpty();
+
+                return [
+                    'id' => $type->id,
+                    'category_id' => $type->category_id,
+                    'document_name' => $type->document_name,
+                    'document_code' => $type->document_code,
+                    'field_requires' => empty($type->field_requires) ? null : (object) $type->field_requires,
+                    'requires_hr_approval' => (bool) $type->requires_hr_approval,
+                    'has_blank_form' => $hasBlank,
+                    'blank_form_url' => $hasBlank ? route('document-types.blank-form', ['document_type' => $type->id, 'download' => 1]) : null,
+                ];
+            }),
+        ]);
 
         $downloadableForms = DocumentType::query()
             ->whereHas('documentTemplates', fn ($q) => $q->where('status', 1))
             ->get(['id', 'document_name', 'document_code'])
-            ->map(fn (DocumentType $t) => [
-                'id' => $t->id,
-                'name' => $t->document_name,
-                'code' => $t->document_code,
-                'download_url' => route('document-types.blank-form', ['document_type' => $t->id, 'download' => 1]),
+            ->map(fn (DocumentType $type) => [
+                'id' => $type->id,
+                'name' => $type->document_name,
+                'code' => $type->document_code,
+                'download_url' => route('document-types.blank-form', ['document_type' => $type->id, 'download' => 1]),
             ]);
 
-        $employees = Employee::query()->with('user:id,name,email')->get(['id', 'user_id', 'emp_num', 'designation']);
+        $employees = Employee::query()
+            ->with('user:id,name,email')
+            ->get(['id', 'user_id', 'emp_num', 'designation']);
 
-        return Inertia::render('employee-documents/create', [
+        return [
             'categories' => $categories,
             'employees' => $employees,
             'downloadableForms' => $downloadableForms,
-        ]);
+        ];
     }
 
     public function store(Request $request, EmployeeDocumentService $employeeDocumentService): RedirectResponse
@@ -239,7 +286,101 @@ class EmployeeDocumentController extends Controller
             ->with('toast', ['type' => 'success', 'message' => $message]);
     }
 
-    public function show(EmployeeDocument $employeeDocument): Response
+    public function update(
+        Request $request,
+        EmployeeDocument $employeeDocument,
+        EmployeeDocumentService $employeeDocumentService,
+    ): RedirectResponse {
+        if (! $employeeDocumentService->canEdit($employeeDocument, (int) $request->user()->id)) {
+            abort(403);
+        }
+
+        $documentTypeId = $request->input('document_type_id');
+        $selectedDocumentType = is_scalar($documentTypeId)
+            && filter_var($documentTypeId, FILTER_VALIDATE_INT) !== false
+                ? DocumentType::query()->find((int) $documentTypeId)
+                : null;
+        $fieldRequires = $selectedDocumentType?->field_requires ?? [];
+        $categoryRules = ['required', 'integer', 'exists:document_categories,id'];
+
+        if ($selectedDocumentType) {
+            $categoryRules[] = Rule::in([$selectedDocumentType->category_id]);
+        }
+
+        $fileIsRequired = ! empty($fieldRequires['attachments'])
+            && ((int) $employeeDocument->document_type_id !== (int) $selectedDocumentType?->id
+                || ! $employeeDocument->files()->exists());
+
+        $validated = $request->validate([
+            'employee_id' => ['required', 'integer', Rule::exists(Employee::class, 'id')],
+            'category_id' => $categoryRules,
+            'document_type_id' => 'required|exists:document_types,id',
+            'document_number' => ! empty($fieldRequires['ref_number'])
+                ? ['required', 'string', 'max:100', 'regex:/\A[A-Za-z0-9\/-]+\z/']
+                : ['nullable', 'string', 'max:100', 'regex:/\A[A-Za-z0-9\/-]+\z/'],
+            'document_title' => 'required|string|max:255',
+            'issue_date' => ! empty($fieldRequires['issue_date'])
+                ? 'required|date|before_or_equal:today'
+                : 'nullable|date|before_or_equal:today',
+            'expiry_date' => ! empty($fieldRequires['expiry_date'])
+                ? 'required|date|after:today'
+                : 'nullable|date|after:today',
+            'remarks' => 'nullable|string',
+            'file' => $fileIsRequired
+                ? 'required|file|mimes:pdf,jpg,jpeg,png|max:10240'
+                : 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'uid' => ! empty($fieldRequires['uid'])
+                ? ['required', 'string', 'max:15', 'regex:/\A[0-9]{1,15}\z/']
+                : ['nullable', 'string', 'max:15', 'regex:/\A[0-9]{1,15}\z/'],
+            'total_experience' => ! empty($fieldRequires['total_experience'])
+                ? 'required|numeric|min:0|max:80'
+                : 'nullable|numeric|min:0|max:80',
+        ]);
+
+        $documentType = $selectedDocumentType ?? DocumentType::query()->findOrFail($documentTypeId);
+        $employee = Employee::query()->find($validated['employee_id']);
+        $organisationId = $employee?->organisation_id;
+        $sameDocumentType = $documentType->id === $employeeDocument->document_type_id;
+        $templateId = $sameDocumentType
+            && (int) $organisationId === (int) $employeeDocument->organisation_id
+            ? $employeeDocument->document_template_id
+            : $documentType->resolveTemplate($organisationId)?->id;
+        $requestDetails = [
+            'uid' => ! empty($fieldRequires['uid']) ? ($validated['uid'] ?? null) : null,
+            'total_experience' => ! empty($fieldRequires['total_experience']) ? ($validated['total_experience'] ?? null) : null,
+        ];
+
+        $employeeDocumentService->updateDocument(
+            $employeeDocument,
+            [
+                'employee_id' => $validated['employee_id'],
+                'organisation_id' => $organisationId,
+                'document_type_id' => $documentType->id,
+                'document_template_id' => $templateId,
+                'document_number' => ! empty($fieldRequires['ref_number'])
+                    ? $validated['document_number']
+                    : ($sameDocumentType ? $employeeDocument->document_number : null),
+                'document_title' => $validated['document_title'],
+                'issue_date' => ! empty($fieldRequires['issue_date'])
+                    ? $validated['issue_date']
+                    : ($sameDocumentType ? $employeeDocument->issue_date : null),
+                'expiry_date' => ! empty($fieldRequires['expiry_date'])
+                    ? $validated['expiry_date']
+                    : ($sameDocumentType ? $employeeDocument->expiry_date : null),
+                'remarks' => $validated['remarks'] ?? null,
+                'status' => $employeeDocument->status === 'under_review' ? 'submitted' : $employeeDocument->status,
+            ],
+            $requestDetails,
+            $request->file('file'),
+            (int) $request->user()->id,
+            'Document details updated by HR, admin, or finance',
+        );
+
+        return redirect()->route('employee-documents.show', $employeeDocument)
+            ->with('toast', ['type' => 'success', 'message' => 'Document updated successfully.']);
+    }
+
+    public function show(Request $request, EmployeeDocument $employeeDocument, EmployeeDocumentService $employeeDocumentService): Response
     {
         $employeeDocument->load([
             'documentType.category',
@@ -252,54 +393,42 @@ class EmployeeDocumentController extends Controller
         $employee = Employee::query()->with('user:id,name,email', 'department:id,name')->find($employeeDocument->employee_id);
 
         return Inertia::render('employee-documents/show', [
-            'document' => $this->payload($employeeDocument),
+            'document' => $this->payload(
+                $employeeDocument,
+                $employeeDocumentService->canEdit($employeeDocument, (int) $request->user()->id),
+            ),
             'employee' => $employee,
         ]);
     }
 
     public function approve(Request $request, EmployeeDocument $employeeDocument, EmployeeDocumentService $employeeDocumentService): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'remarks' => 'nullable|string|max:500',
         ]);
 
-        DB::transaction(function () use ($request, $employeeDocument, $employeeDocumentService) {
-            $employeeDocument->update([
-                'status' => 'approved',
-            ]);
-
-            EmployeeDocumentHistory::query()->create([
-                'employee_document_id' => $employeeDocument->id,
-                'action_type' => 'approved',
-                'remarks' => $request->input('remarks', 'Approved by HR'),
-                'done_by' => $request->user()?->id,
-                'action_on' => Carbon::now(),
-            ]);
-
-            $employeeDocumentService->syncWithProfile($employeeDocument);
-        });
+        $employeeDocumentService->updateStatus(
+            $employeeDocument,
+            'approved',
+            $validated['remarks'] ?? 'Approved by HR',
+            $request->user()?->id,
+        );
 
         return back()->with('toast', ['type' => 'success', 'message' => 'Document approved successfully.']);
     }
 
-    public function reject(Request $request, EmployeeDocument $employeeDocument): RedirectResponse
+    public function reject(Request $request, EmployeeDocument $employeeDocument, EmployeeDocumentService $employeeDocumentService): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'remarks' => 'required|string|max:500',
         ]);
 
-        $employeeDocument->update([
-            'status' => 'rejected',
-            'remarks' => $request->input('remarks'),
-        ]);
-
-        EmployeeDocumentHistory::query()->create([
-            'employee_document_id' => $employeeDocument->id,
-            'action_type' => 'rejected',
-            'remarks' => $request->input('remarks'),
-            'done_by' => $request->user()?->id,
-            'action_on' => Carbon::now(),
-        ]);
+        $employeeDocumentService->updateStatus(
+            $employeeDocument,
+            'rejected',
+            $validated['remarks'],
+            $request->user()?->id,
+        );
 
         return back()->with('toast', ['type' => 'success', 'message' => 'Document rejected.']);
     }
@@ -397,7 +526,7 @@ class EmployeeDocumentController extends Controller
         return str_replace(array_keys($replacements), array_values($replacements), $template->template_code);
     }
 
-    protected function payload(EmployeeDocument $doc): array
+    protected function payload(EmployeeDocument $doc, bool $canEdit = false): array
     {
         $employee = Employee::query()->with(['user:id,name,email', 'department:id,name', 'organisation'])->find($doc->employee_id);
         $latestFile = $doc->files->first();
@@ -428,6 +557,7 @@ class EmployeeDocumentController extends Controller
             'remarks' => $doc->remarks,
             'current_version' => $doc->current_version ?? '1.0',
             'status' => $isExpiredLetter ? 'expired' : $doc->status,
+            'can_edit' => $canEdit && ! $isExpiredLetter,
             'created_at' => $doc->created_at?->format('d M Y H:i'),
             'file_url' => ($latestFile && $canAccessFile) ? route('employee-documents.file', $doc->id) : null,
             'download_url' => ($latestFile && $canAccessFile) ? route('employee-documents.download', $doc->id) : null,
