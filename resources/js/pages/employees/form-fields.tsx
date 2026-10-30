@@ -364,11 +364,10 @@ export default function EmployeeProfileFormFields({
                             )}
                     </select>
                 </Field>
-                <Field label="Division" name="division" error={errors.division} required>
+                <Field label="Division" name="division" error={errors.division}>
                     <select
                         id="division"
                         name="division"
-                        required
                         defaultValue={matchedDivisionValue}
                         className={fieldClass}
                     >

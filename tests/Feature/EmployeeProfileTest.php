@@ -40,11 +40,12 @@ afterEach(function () {
     $sales = DB::connection('salescrm');
     $testEmails = [
         'test.employee@example.com',
+        'optional.division@example.com',
         'old.employee@example.com',
         'delete.me@example.com',
         'upload.employee@example.com',
     ];
-    $testEmpNums = ['T-9001', 'T-9002', 'T-9003', 'T-9999'];
+    $testEmpNums = ['T-9001', 'T-9002', 'T-9003', 'T-9999', 'T-9010'];
 
     $userIds = $sales->table('users')->whereIn('email', $testEmails)->pluck('id');
     $employeeIds = $sales->table('employees')->whereIn('emp_num', $testEmpNums)->pluck('id');
@@ -116,6 +117,37 @@ test('authenticated users can create an employee across salescrm and hrms', func
             ->where('role_id', $roleId)
             ->exists()
     )->toBeTrue();
+});
+
+test('employee division is optional on create and edit', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $this->actingAs($admin)
+        ->post(route('employees.store'), [
+            'name' => 'Optional Division Employee',
+            'email' => 'optional.division@example.com',
+            'password' => 'Password123!',
+            'roles' => 'salesmanager',
+            'emp_num' => 'T-9010',
+            'designation' => 'Engineer',
+        ])
+        ->assertRedirect();
+
+    $employee = Employee::query()->where('emp_num', 'T-9010')->firstOrFail();
+
+    expect($employee->division)->toBe('');
+
+    $this->actingAs($admin)
+        ->put(route('employees.update', $employee), [
+            'name' => 'Optional Division Employee',
+            'email' => 'optional.division@example.com',
+            'emp_num' => 'T-9010',
+            'designation' => 'Engineer',
+            'division' => '',
+        ])
+        ->assertRedirect(route('employees.show', $employee));
+
+    expect($employee->fresh()->division)->toBe('');
 });
 
 test('authenticated users can update an employee', function () {

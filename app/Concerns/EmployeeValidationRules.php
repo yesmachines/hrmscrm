@@ -24,6 +24,7 @@ trait EmployeeValidationRules
             'office_location_id',
             'joining_date',
             'resignation_date',
+            'division',
             'image_url',
             'department_id',
             'password',
@@ -113,7 +114,7 @@ trait EmployeeValidationRules
             'resignation_date' => $isCreate
                 ? ['prohibited']
                 : ['nullable', 'date', 'after_or_equal:joining_date'],
-            'division' => ['required', 'string', 'max:255'],
+            'division' => ['nullable', 'string', 'max:255'],
             'image_url' => $this->hasFile('image_url')
                 ? ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120']
                 : ['nullable', 'string', 'max:255'],
@@ -182,6 +183,10 @@ trait EmployeeValidationRules
             'has_report',
             'department_id',
         ]));
+
+        if (array_key_exists('division', $crmEmployee)) {
+            $crmEmployee['division'] ??= '';
+        }
 
         if (! empty($crmEmployee['designation_id']) && empty($crmEmployee['designation'])) {
             $designationModel = Designation::query()->find($crmEmployee['designation_id']);

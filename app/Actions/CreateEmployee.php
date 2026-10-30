@@ -49,7 +49,7 @@ class CreateEmployee
                 'emp_num' => $crmEmployee['emp_num'],
                 'phone' => $crmEmployee['phone'] ?? null,
                 'designation' => $crmEmployee['designation'],
-                'division' => $crmEmployee['division'],
+                'division' => $crmEmployee['division'] ?? '',
                 'status' => (int) ($crmEmployee['status'] ?? 1),
                 'image_url' => $crmEmployee['image_url'] ?? null,
                 'organisation_id' => $crmEmployee['organisation_id'] ?? null,
