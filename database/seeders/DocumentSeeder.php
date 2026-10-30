@@ -285,6 +285,11 @@ class DocumentSeeder extends Seeder
                         'requires_reminder' => false,
                         'record_source' => 'generated',
                         'requires_attachments' => false,
+                        'field_requires' => [
+                            'to_address' => true,
+                            'visa_designation' => true,
+                            'purpose' => true,
+                        ],
                         'templates' => [
                             [
                                 'template_name' => 'Standard NOC Template',
@@ -332,6 +337,11 @@ class DocumentSeeder extends Seeder
                         'requires_reminder' => false,
                         'record_source' => 'generated',
                         'requires_attachments' => false,
+                        'field_requires' => [
+                            'salary_amount' => true,
+                            'currency' => true,
+                            'purpose' => true,
+                        ],
                         'templates' => [
                             [
                                 'template_name' => 'Standard Salary Certificate',
@@ -406,6 +416,13 @@ class DocumentSeeder extends Seeder
                         'requires_reminder' => false,
                         'record_source' => 'generated',
                         'requires_attachments' => false,
+                        'field_requires' => [
+                            'salary_amount' => true,
+                            'currency' => true,
+                            'bank_iban' => true,
+                            'to_address' => true,
+                            'purpose' => true,
+                        ],
                         'templates' => [
                             [
                                 'template_name' => 'Standard Salary Transfer Letter',

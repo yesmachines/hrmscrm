@@ -63,6 +63,8 @@ class HrLetterRequestController extends Controller
             $letterRequest,
             $letterRequest->employee,
         );
+        $fieldRequires = $letterRequest->documentType?->field_requires;
+        $data['field_requires'] = empty($fieldRequires) ? null : (object) $fieldRequires;
 
         return $this->successResponse($data, 'Letter request details retrieved successfully.');
     }

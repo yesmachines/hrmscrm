@@ -1057,7 +1057,35 @@ test('hr can list view approve and reject employee letter requests only', functi
         ->assertJsonPath('data.employee_id', $employee->id)
         ->assertJsonPath('data.employee_name', 'Letter Request Employee')
         ->assertJsonPath('data.purpose', 'Visa application')
-        ->assertJsonPath('data.rendered_html', 'To Embassy: Visa application for Letter Request Employee');
+        ->assertJsonPath('data.rendered_html', 'To Embassy: Visa application for Letter Request Employee')
+        ->assertJsonPath('data.field_requires.to_address', true)
+        ->assertJsonPath('data.field_requires.visa_designation', true)
+        ->assertJsonPath('data.field_requires.purpose', true);
+
+    $salaryCertificateRequirements = DocumentType::query()
+        ->where('document_code', 'salary_certificate')
+        ->firstOrFail()
+        ->field_requires;
+    ksort($salaryCertificateRequirements);
+
+    $salaryTransferRequirements = DocumentType::query()
+        ->where('document_code', 'salary_transfer_letter')
+        ->firstOrFail()
+        ->field_requires;
+    ksort($salaryTransferRequirements);
+
+    expect($salaryCertificateRequirements)->toBe([
+        'currency' => true,
+        'purpose' => true,
+        'salary_amount' => true,
+    ])
+        ->and($salaryTransferRequirements)->toBe([
+            'bank_iban' => true,
+            'currency' => true,
+            'purpose' => true,
+            'salary_amount' => true,
+            'to_address' => true,
+        ]);
 
     $this->withToken($hrToken)
         ->postJson("/api/v1/hr/documents/letters/{$approvedLetter->id}/approve", [
