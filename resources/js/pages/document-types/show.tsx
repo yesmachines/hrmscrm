@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { Head, Link, setLayoutProps } from '@inertiajs/react';
+import type { ReactNode } from 'react';
 import DocumentTypeController from '@/actions/App/Http/Controllers/Documents/DocumentTypeController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
@@ -11,13 +11,16 @@ type DocumentType = {
     category_id: number;
     document_name: string;
     document_code: string;
-    requires_number: number;
-    requires_expiry: number;
     editable_before_approval: number;
     requires_hr_approval: number;
     requires_reminder: number;
+    requires_number: boolean;
+    requires_expiry: boolean;
+    requires_issue_date: boolean;
+    requires_attachments: boolean;
+    requires_uid: boolean;
+    requires_total_experience: boolean;
     record_source: string | null;
-    requires_attachments: number;
     category: { id: number; name: string } | null;
 };
 
@@ -41,13 +44,7 @@ function Detail({
     );
 }
 
-function Section({
-    title,
-    children,
-}: {
-    title: string;
-    children: ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
     return (
         <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
@@ -56,8 +53,8 @@ function Section({
     );
 }
 
-function yesNo(value: number): string {
-    return value === 1 ? 'Yes' : 'No';
+function yesNo(value: number | boolean): string {
+    return value === true || value === 1 ? 'Yes' : 'No';
 }
 
 function formatRecordSource(value: string | null): string | null {
@@ -91,7 +88,7 @@ export default function DocumentTypesShow({
         <>
             <Head title={documentType.document_name} />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1600px]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title={documentType.document_name}
@@ -137,14 +134,6 @@ export default function DocumentTypesShow({
                         value={formatRecordSource(documentType.record_source)}
                     />
                     <Detail
-                        label="Requires number"
-                        value={yesNo(documentType.requires_number)}
-                    />
-                    <Detail
-                        label="Requires expiry"
-                        value={yesNo(documentType.requires_expiry)}
-                    />
-                    <Detail
                         label="Editable before approval"
                         value={yesNo(documentType.editable_before_approval)}
                     />
@@ -157,8 +146,28 @@ export default function DocumentTypesShow({
                         value={yesNo(documentType.requires_reminder)}
                     />
                     <Detail
+                        label="Requires number"
+                        value={yesNo(documentType.requires_number)}
+                    />
+                    <Detail
+                        label="Requires expiry"
+                        value={yesNo(documentType.requires_expiry)}
+                    />
+                    <Detail
+                        label="Requires issue date"
+                        value={yesNo(documentType.requires_issue_date)}
+                    />
+                    <Detail
                         label="Requires attachments"
                         value={yesNo(documentType.requires_attachments)}
+                    />
+                    <Detail
+                        label="Requires UID"
+                        value={yesNo(documentType.requires_uid)}
+                    />
+                    <Detail
+                        label="Requires total experience"
+                        value={yesNo(documentType.requires_total_experience)}
                     />
                 </Section>
             </div>

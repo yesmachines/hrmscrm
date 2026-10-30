@@ -15,13 +15,24 @@ import {
 } from '@/components/ui/select';
 import { dashboard } from '@/routes';
 
+type DocumentFieldRequirements = Partial<
+    Record<
+        | 'ref_number'
+        | 'issue_date'
+        | 'expiry_date'
+        | 'attachments'
+        | 'uid'
+        | 'total_experience',
+        boolean
+    >
+>;
+
 type DocumentType = {
     id: number;
     category_id: number;
     document_name: string;
     document_code: string;
-    requires_number: boolean;
-    requires_expiry: boolean;
+    field_requires: DocumentFieldRequirements | null;
     requires_hr_approval?: boolean;
     has_blank_form?: boolean;
     blank_form_url?: string | null;
@@ -55,6 +66,14 @@ type Props = {
     downloadableForms?: DownloadableForm[];
 };
 
+function formatLocalDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
 export default function EmployeeDocumentCreate({ categories, employees, downloadableForms = [] }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         employee_id: '',
@@ -64,6 +83,8 @@ export default function EmployeeDocumentCreate({ categories, employees, download
         document_number: '',
         issue_date: '',
         expiry_date: '',
+        uid: '',
+        total_experience: '',
         remarks: '',
         status: 'submitted',
         file: null as File | null,
@@ -72,6 +93,11 @@ export default function EmployeeDocumentCreate({ categories, employees, download
     const activeCategory = categories.find((c) => c.id.toString() === data.category_id);
     const availableTypes = activeCategory ? activeCategory.document_types : [];
     const selectedType = availableTypes.find((t) => t.id.toString() === data.document_type_id);
+    const today = new Date();
+    const issueDateMax = formatLocalDate(today);
+    const expiryDateMin = formatLocalDate(
+        new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1),
+    );
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -126,13 +152,14 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form noValidate onSubmit={handleSubmit} className="space-y-6">
                     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm space-y-5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             {/* Employee Selection */}
                             <div className="space-y-2">
                                 <Label htmlFor="employee_id">Target Employee *</Label>
                                 <Select
+                                    required
                                     value={data.employee_id}
                                     onValueChange={(val) => setData('employee_id', val)}
                                 >
@@ -154,6 +181,7 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                             <div className="space-y-2">
                                 <Label htmlFor="category_id">Document Category *</Label>
                                 <Select
+                                    required
                                     value={data.category_id}
                                     onValueChange={(val) => {
                                         setData((prev) => ({
@@ -181,6 +209,7 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                             <div className="space-y-2">
                                 <Label htmlFor="document_type_id">Document Type *</Label>
                                 <Select
+                                    required
                                     value={data.document_type_id}
                                     disabled={!data.category_id}
                                     onValueChange={(val) => {
@@ -215,6 +244,7 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                                     value={data.document_title}
                                     onChange={(e) => setData('document_title', e.target.value)}
                                     placeholder="e.g. Annual Appraisal 2026 / Offer Letter"
+                                    required
                                 />
                                 <InputError message={errors.document_title} />
                             </div>
@@ -265,39 +295,111 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                                 </div>
                             )}
 
-                            {/* Document Number (if required / optional) */}
-                            <div className="space-y-2">
-                                <Label htmlFor="document_number">Document / ID Number</Label>
-                                <Input
-                                    id="document_number"
-                                    value={data.document_number}
-                                    onChange={(e) => setData('document_number', e.target.value)}
-                                    placeholder="e.g. LC-88921-00 or Passport No"
-                                />
-                                <InputError message={errors.document_number} />
-                            </div>
+                            {selectedType?.field_requires?.ref_number && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="document_number">
+                                        Document / ID Number *
+                                    </Label>
+                                    <Input
+                                        id="document_number"
+                                        value={data.document_number}
+                                        pattern="[A-Za-z0-9/-]+"
+                                        onChange={(e) =>
+                                            setData(
+                                                'document_number',
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="e.g. P1234567 or LC-88921-00"
+                                        required
+                                    />
+                                    <InputError
+                                        message={errors.document_number}
+                                    />
+                                </div>
+                            )}
 
-                            {/* Issue Date */}
-                            <div className="space-y-2">
-                                <Label htmlFor="issue_date">Issue Date</Label>
-                                <FormattedDatePicker
-                                    id="issue_date"
-                                    value={data.issue_date}
-                                    onChange={(value) => setData('issue_date', value)}
-                                />
-                                <InputError message={errors.issue_date} />
-                            </div>
+                            {selectedType?.field_requires?.issue_date && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="issue_date">
+                                        Issue Date *
+                                    </Label>
+                                    <FormattedDatePicker
+                                        id="issue_date"
+                                        value={data.issue_date}
+                                        max={issueDateMax}
+                                        required
+                                        onChange={(value) =>
+                                            setData('issue_date', value)
+                                        }
+                                    />
+                                    <InputError message={errors.issue_date} />
+                                </div>
+                            )}
 
-                            {/* Expiry Date */}
-                            <div className="space-y-2">
-                                <Label htmlFor="expiry_date">Expiry Date (for renewals & alerts)</Label>
-                                <FormattedDatePicker
-                                    id="expiry_date"
-                                    value={data.expiry_date}
-                                    onChange={(value) => setData('expiry_date', value)}
-                                />
-                                <InputError message={errors.expiry_date} />
-                            </div>
+                            {selectedType?.field_requires?.expiry_date && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="expiry_date">
+                                        Expiry Date (for renewals & alerts) *
+                                    </Label>
+                                    <FormattedDatePicker
+                                        id="expiry_date"
+                                        value={data.expiry_date}
+                                        min={expiryDateMin}
+                                        required
+                                        onChange={(value) =>
+                                            setData('expiry_date', value)
+                                        }
+                                    />
+                                    <InputError message={errors.expiry_date} />
+                                </div>
+                            )}
+
+                            {selectedType?.field_requires?.uid && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="uid">UID *</Label>
+                                    <Input
+                                        id="uid"
+                                        value={data.uid}
+                                        inputMode="numeric"
+                                        maxLength={15}
+                                        pattern="[0-9]{1,15}"
+                                        onChange={(e) =>
+                                            setData('uid', e.target.value)
+                                        }
+                                        placeholder="Enter numeric UID (up to 15 digits)"
+                                        required
+                                    />
+                                    <InputError message={errors.uid} />
+                                </div>
+                            )}
+
+                            {selectedType?.field_requires?.total_experience && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="total_experience">
+                                        Total Experience (in years) *
+                                    </Label>
+                                    <Input
+                                        id="total_experience"
+                                        type="number"
+                                        min="0"
+                                        max="80"
+                                        step="0.1"
+                                        value={data.total_experience}
+                                        onChange={(e) =>
+                                            setData(
+                                                'total_experience',
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="e.g. 5.5"
+                                        required
+                                    />
+                                    <InputError
+                                        message={errors.total_experience}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         {/* Remarks */}
@@ -315,37 +417,40 @@ export default function EmployeeDocumentCreate({ categories, employees, download
                         </div>
 
                         {/* File Upload Zone */}
-                        <div className="space-y-2">
-                            <Label htmlFor="file">Upload Document File (PDF, JPG, PNG) *</Label>
-                            <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors bg-neutral-50/50">
-                                <UploadCloud className="mx-auto size-10 text-muted-foreground/50 mb-2" />
-                                <input
-                                    id="file"
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    onChange={(e) => {
-                                        if (e.target.files && e.target.files[0]) {
-                                            setData('file', e.target.files[0]);
-                                        }
-                                    }}
-                                    className="hidden"
-                                />
-                                <label
-                                    htmlFor="file"
-                                    className="cursor-pointer text-sm font-semibold text-primary hover:underline"
-                                >
-                                    Click here to select a file from your computer
-                                </label>
-                                <p className="text-xs text-muted-foreground mt-1">Maximum file size: 10MB (PDF, PNG, JPG)</p>
-                                {data.file && (
-                                    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold">
-                                        <FileUp className="size-4" />
-                                        {data.file.name} ({(data.file.size / 1024 / 1024).toFixed(2)} MB)
-                                    </div>
-                                )}
+                        {selectedType?.field_requires?.attachments && (
+                            <div className="space-y-2">
+                                <Label htmlFor="file">Upload Document File (PDF, JPG, PNG) *</Label>
+                                <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors bg-neutral-50/50">
+                                    <UploadCloud className="mx-auto size-10 text-muted-foreground/50 mb-2" />
+                                    <input
+                                        id="file"
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        required
+                                        onChange={(e) => {
+                                            if (e.target.files && e.target.files[0]) {
+                                                setData('file', e.target.files[0]);
+                                            }
+                                        }}
+                                        className="hidden"
+                                    />
+                                    <label
+                                        htmlFor="file"
+                                        className="cursor-pointer text-sm font-semibold text-primary hover:underline"
+                                    >
+                                        Click here to select a file from your computer
+                                    </label>
+                                    <p className="text-xs text-muted-foreground mt-1">Maximum file size: 10MB (PDF, PNG, JPG)</p>
+                                    {data.file && (
+                                        <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold">
+                                            <FileUp className="size-4" />
+                                            {data.file.name} ({(data.file.size / 1024 / 1024).toFixed(2)} MB)
+                                        </div>
+                                    )}
+                                </div>
+                                <InputError message={errors.file} />
                             </div>
-                            <InputError message={errors.file} />
-                        </div>
+                        )}
                     </div>
 
                     {/* Actions */}

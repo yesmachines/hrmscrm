@@ -14,12 +14,15 @@ type DocumentTypeFormValues = {
     category_id?: number | string | null;
     document_name?: string | null;
     document_code?: string | null;
-    requires_number?: number | string | null;
-    requires_expiry?: number | string | null;
-    editable_before_approval?: number | string | null;
-    requires_hr_approval?: number | string | null;
-    requires_reminder?: number | string | null;
-    requires_attachments?: number | string | null;
+    editable_before_approval?: boolean | number | string | null;
+    requires_hr_approval?: boolean | number | string | null;
+    requires_reminder?: boolean | number | string | null;
+    requires_number?: boolean | number | string | null;
+    requires_expiry?: boolean | number | string | null;
+    requires_issue_date?: boolean | number | string | null;
+    requires_attachments?: boolean | number | string | null;
+    requires_uid?: boolean | number | string | null;
+    requires_total_experience?: boolean | number | string | null;
     record_source?: string | null;
 };
 
@@ -52,9 +55,15 @@ function Field({
     );
 }
 
-function yesNoDefault(value: number | string | null | undefined): string {
+function yesNoDefault(
+    value: boolean | number | string | null | undefined,
+): string {
     if (value === null || value === undefined || value === '') {
         return '0';
+    }
+
+    if (typeof value === 'boolean') {
+        return value ? '1' : '0';
     }
 
     return String(value);
@@ -65,7 +74,7 @@ function YesNoSelect({
     defaultValue,
 }: {
     name: string;
-    defaultValue: number | string | null | undefined;
+    defaultValue: boolean | number | string | null | undefined;
 }) {
     return (
         <select
@@ -184,6 +193,28 @@ export default function DocumentTypeFormFields({
                 </Field>
 
                 <Field
+                    label="Requires issue date"
+                    name="requires_issue_date"
+                    error={errors.requires_issue_date}
+                >
+                    <YesNoSelect
+                        name="requires_issue_date"
+                        defaultValue={defaults.requires_issue_date}
+                    />
+                </Field>
+
+                <Field
+                    label="Requires attachments"
+                    name="requires_attachments"
+                    error={errors.requires_attachments}
+                >
+                    <YesNoSelect
+                        name="requires_attachments"
+                        defaultValue={defaults.requires_attachments}
+                    />
+                </Field>
+
+                <Field
                     label="Editable before approval"
                     name="editable_before_approval"
                     error={errors.editable_before_approval}
@@ -217,13 +248,24 @@ export default function DocumentTypeFormFields({
                 </Field>
 
                 <Field
-                    label="Requires attachments"
-                    name="requires_attachments"
-                    error={errors.requires_attachments}
+                    label="Requires UID"
+                    name="requires_uid"
+                    error={errors.requires_uid}
                 >
                     <YesNoSelect
-                        name="requires_attachments"
-                        defaultValue={defaults.requires_attachments}
+                        name="requires_uid"
+                        defaultValue={defaults.requires_uid}
+                    />
+                </Field>
+
+                <Field
+                    label="Requires total experience"
+                    name="requires_total_experience"
+                    error={errors.requires_total_experience}
+                >
+                    <YesNoSelect
+                        name="requires_total_experience"
+                        defaultValue={defaults.requires_total_experience}
                     />
                 </Field>
             </div>

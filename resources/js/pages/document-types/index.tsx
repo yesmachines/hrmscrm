@@ -11,13 +11,10 @@ type DocumentTypeRow = {
     category_id: number;
     document_name: string;
     document_code: string;
-    requires_number: number;
-    requires_expiry: number;
     editable_before_approval: number;
     requires_hr_approval: number;
     requires_reminder: number;
     record_source: string | null;
-    requires_attachments: number;
     category: { id: number; name: string } | null;
 };
 
@@ -43,7 +40,7 @@ export default function DocumentTypesIndex({
         <>
             <Head title="Document types" />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1600px]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title="Document types"

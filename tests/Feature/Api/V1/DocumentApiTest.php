@@ -72,6 +72,168 @@ test('documents categories hub returns categories with live count', function () 
         ]);
 });
 
+test('documents list nests document type details separately from document fields', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Document List User',
+        'email' => 'document.list@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-DOCS-LIST-001',
+        'designation' => 'Software Engineer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $passportType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $document = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Passport Copy',
+        'document_number' => 'A98765432',
+        'issue_date' => '2024-01-15',
+        'expiry_date' => '2034-01-14',
+        'status' => 'submitted',
+        'remarks' => 'Renewed passport copy',
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+    $typesResponse = $this->withToken($token)->getJson('/api/v1/documents/types');
+    $typesResponse->assertOk();
+    $expectedDocumentType = collect($typesResponse->json('data'))
+        ->firstWhere('id', $passportType->id);
+
+    $response = $this->withToken($token)->getJson('/api/v1/documents');
+
+    $response->assertOk()
+        ->assertJsonStructure([
+            'statusCode',
+            'message',
+            'data' => [
+                'documents' => [
+                    '*' => [
+                        'id',
+                        'document_type' => [
+                            'id',
+                            'category_id',
+                            'document_name',
+                            'document_code',
+                            'category_name',
+                            'category_code',
+                            'editable_before_approval',
+                            'requires_hr_approval',
+                            'requires_reminder',
+                            'record_source',
+                            'field_requires',
+                            'has_blank_form',
+                            'blank_form_url',
+                            'templates',
+                        ],
+                        'document_title',
+                        'document_number',
+                        'status',
+                    ],
+                ],
+                'pagination' => ['total', 'per_page', 'current_page', 'last_page'],
+            ],
+        ])
+        ->assertJsonPath('data.documents.0.id', $document->id)
+        ->assertJsonPath('data.documents.0.document_title', 'Passport Copy')
+        ->assertJsonPath('data.documents.0.document_number', 'A98765432')
+        ->assertJsonPath('data.documents.0.status', 'submitted')
+        ->assertJsonPath('data.pagination.total', 1)
+        ->assertJsonPath('data.pagination.per_page', 15);
+
+    $documentData = $response->json('data.documents.0');
+    expect($documentData['document_type'])->toBe($expectedDocumentType)
+        ->and($documentData)->not->toHaveKey('category_code')
+        ->and($documentData)->not->toHaveKey('document_type_id')
+        ->and($documentData)->not->toHaveKey('document_name')
+        ->and($documentData)->not->toHaveKey('document_code');
+});
+
+test('hr document list includes documents belonging to other employees', function () {
+    $employeeUser = SalesCrmUser::query()->create([
+        'name' => 'Employee Document Owner',
+        'email' => 'employee.document.owner@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $employeeUser->id,
+        'emp_num' => 'EMP-DOCS-HR-LIST-001',
+        'designation' => 'Software Engineer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $passportType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $document = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Employee Passport',
+        'document_number' => 'HR-LIST-001',
+        'status' => 'submitted',
+    ]);
+
+    $otherEmployeeUser = SalesCrmUser::query()->create([
+        'name' => 'Other Document Owner',
+        'email' => 'other.document.owner@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $otherEmployee = Employee::query()->create([
+        'user_id' => $otherEmployeeUser->id,
+        'emp_num' => 'EMP-DOCS-HR-LIST-002',
+        'designation' => 'Analyst',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $otherDocument = EmployeeDocument::query()->create([
+        'employee_id' => $otherEmployee->id,
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Other Employee Passport',
+        'document_number' => 'HR-LIST-002',
+        'status' => 'approved',
+    ]);
+
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'HR Document List User',
+        'email' => 'hr.document.list@example.com',
+    ]);
+    $hrToken = $hrUser->createToken('test')->plainTextToken;
+    $hrResponse = $this->withToken($hrToken)->getJson('/api/v1/hr/documents?per_page=1&page=2');
+
+    $hrResponse->assertOk()
+        ->assertJsonPath('data.documents.0.id', $otherDocument->id)
+        ->assertJsonPath('data.documents.0.document_title', 'Other Employee Passport')
+        ->assertJsonCount(1, 'data.documents')
+        ->assertJsonPath('data.pagination.total', 2)
+        ->assertJsonPath('data.pagination.per_page', 1)
+        ->assertJsonPath('data.pagination.current_page', 2)
+        ->assertJsonPath('data.pagination.last_page', 2);
+
+    $employeeToken = $employeeUser->createToken('test')->plainTextToken;
+    $this->withToken($employeeToken)
+        ->getJson('/api/v1/hr/documents')
+        ->assertForbidden();
+
+    $employeeListResponse = $this->withToken($employeeToken)->getJson('/api/v1/documents');
+    $employeeListResponse->assertOk()
+        ->assertJsonPath('data.documents.0.id', $document->id)
+        ->assertJsonCount(1, 'data.documents')
+        ->assertJsonPath('data.pagination.total', 1);
+});
+
 test('documents upload endpoint allows employee to upload document with file', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Sanub User',
@@ -96,7 +258,7 @@ test('documents upload endpoint allows employee to upload document with file', f
 
     $response = $this->withToken($token)->postJson('/api/v1/documents', [
         'document_type_id' => $eidType->id,
-        'document_number' => '784-1990-1234567-1',
+        'ref_number' => '784-1990-1234567-1',
         'document_title' => 'Emirates ID',
         'issue_date' => '2026-07-13',
         'expiry_date' => '2026-10-13',
@@ -114,6 +276,209 @@ test('documents upload endpoint allows employee to upload document with file', f
     // 3-month reminder should have been created
     $reminder = DB::table('document_reminders')->where('employee_document_id', $doc->id)->first();
     expect($reminder)->not->toBeNull();
+});
+
+test('hr document api records the hr upload file note', function () {
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'HR Document Uploader',
+        'email' => 'hr.document.uploader@example.com',
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $hrUser->id,
+        'emp_num' => 'EMP-HR-DOCS-001',
+        'designation' => 'HR Officer',
+        'division' => 'Human Resources',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $passportType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $passportType->update(['requires_hr_approval' => false]);
+    $token = $hrUser->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/v1/hr/documents', [
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Passport',
+        'file' => UploadedFile::fake()->create('passport.pdf', 500, 'application/pdf'),
+    ]);
+
+    $response->assertStatus(201);
+
+    $document = EmployeeDocument::query()
+        ->where('employee_id', $employee->id)
+        ->where('document_type_id', $passportType->id)
+        ->firstOrFail();
+    $fileRecord = $document->files()->firstOrFail();
+    expect($fileRecord->change_notes)->toBe('Uploaded by HR');
+
+    $passportType->update(['requires_hr_approval' => true]);
+    $pendingResponse = $this->withToken($token)->postJson('/api/v1/hr/documents', [
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Passport renewal',
+        'file' => UploadedFile::fake()->create('passport-renewal.pdf', 500, 'application/pdf'),
+    ]);
+
+    $pendingResponse->assertStatus(201);
+    $pendingDocument = EmployeeDocument::query()
+        ->where('employee_id', $employee->id)
+        ->where('document_title', 'Passport renewal')
+        ->firstOrFail();
+    expect($pendingDocument->files()->firstOrFail()->change_notes)
+        ->toBe('Uploaded by HR; awaiting HR approval');
+
+    $adminUser = createHrmsLoginUser('admin', [
+        'name' => 'Admin Document Uploader',
+        'email' => 'admin.document.uploader@example.com',
+    ]);
+
+    $adminEmployee = Employee::query()->create([
+        'user_id' => $adminUser->id,
+        'emp_num' => 'EMP-ADMIN-DOCS-001',
+        'designation' => 'Administrator',
+        'division' => 'Administration',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $adminToken = $adminUser->createToken('test')->plainTextToken;
+
+    $adminResponse = $this->withToken($adminToken)->postJson('/api/v1/hr/documents', [
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Passport',
+        'file' => UploadedFile::fake()->create('admin-passport.pdf', 500, 'application/pdf'),
+    ]);
+
+    $adminResponse->assertStatus(201);
+
+    $adminDocument = EmployeeDocument::query()
+        ->where('employee_id', $adminEmployee->id)
+        ->where('document_type_id', $passportType->id)
+        ->firstOrFail();
+    expect($adminDocument->files()->firstOrFail()->change_notes)
+        ->toBe('Uploaded by Admin; awaiting HR approval');
+
+    $financeUser = createHrmsLoginUser('finance', [
+        'name' => 'Finance Document Uploader',
+        'email' => 'finance.document.uploader@example.com',
+    ]);
+    $financeEmployee = Employee::query()->create([
+        'user_id' => $financeUser->id,
+        'emp_num' => 'EMP-FINANCE-DOCS-001',
+        'designation' => 'Finance Officer',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $financeToken = $financeUser->createToken('test')->plainTextToken;
+
+    $financeResponse = $this->withToken($financeToken)->postJson('/api/v1/hr/documents', [
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Passport',
+        'file' => UploadedFile::fake()->create('finance-passport.pdf', 500, 'application/pdf'),
+    ]);
+    $financeResponse->assertStatus(201);
+
+    $financeDocument = EmployeeDocument::query()
+        ->where('employee_id', $financeEmployee->id)
+        ->where('document_type_id', $passportType->id)
+        ->firstOrFail();
+    expect($financeDocument->files()->firstOrFail()->change_notes)
+        ->toBe('Uploaded by Finance; awaiting HR approval');
+});
+
+test('document type API exposes configured fields and document uploads save extra values as request details', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Dynamic Fields User',
+        'email' => 'dynamic.fields@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-DOCS-DYNAMIC',
+        'designation' => 'Specialist',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $type = DocumentType::query()->where('document_code', 'experience')->firstOrFail();
+    $token = $user->createToken('test')->plainTextToken;
+
+    $typesResponse = $this->withToken($token)->getJson('/api/v1/documents/types?category_code=personal');
+    $typesResponse->assertOk();
+    expect($typesResponse->json())->not->toHaveKey('params');
+
+    $visa = collect($typesResponse->json('data'))->firstWhere('document_code', 'visa');
+    expect($visa['field_requires'])->toBe([
+        'ref_number' => true,
+        'expiry_date' => true,
+        'attachments' => true,
+        'uid' => true,
+    ]);
+
+    $letterTypesResponse = $this->withToken($token)
+        ->getJson('/api/v1/documents/types?category_code=letter_requests');
+    $letterTypesResponse->assertOk();
+    $noc = collect($letterTypesResponse->json('data'))->firstWhere('document_code', 'noc');
+    expect($noc['field_requires'])->toBeNull();
+
+    $file = UploadedFile::fake()->create('experience.pdf', 500, 'application/pdf');
+    $response = $this->withToken($token)->postJson('/api/v1/documents', [
+        'document_type_id' => $type->id,
+        'issue_date' => '2026-10-28',
+        'total_experience' => 8.5,
+        'custom_note' => 'Additional information not configured on the type',
+        'file' => $file,
+    ]);
+
+    $response->assertCreated();
+
+    $documentId = $response->json('data.id');
+    $this->assertDatabaseHas('employee_request_details', [
+        'employee_document_id' => $documentId,
+        'field_key' => 'total_experience',
+        'field_value' => '8.5',
+    ]);
+    $this->assertDatabaseHas('employee_request_details', [
+        'employee_document_id' => $documentId,
+        'field_key' => 'custom_note',
+        'field_value' => 'Additional information not configured on the type',
+    ]);
+
+    $this->withToken($token)
+        ->getJson("/api/v1/documents/{$documentId}")
+        ->assertOk()
+        ->assertJsonPath('data.request_details.total_experience', '8.5');
+});
+
+test('document upload API does not require values based on field_requires', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Required Fields User',
+        'email' => 'required.fields@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-DOCS-REQUIRED',
+        'designation' => 'Specialist',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $type = DocumentType::query()->where('document_code', 'experience')->firstOrFail();
+    $token = $user->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/v1/documents', [
+        'document_type_id' => $type->id,
+        'file' => UploadedFile::fake()->create('experience.pdf', 500, 'application/pdf'),
+    ]);
+
+    $response->assertCreated();
 });
 
 test('documents letter request endpoint submits noc request', function () {
@@ -196,6 +561,8 @@ test('documents upload and letter requests accept organisation_id and document_t
         'organisation_id' => $org->id,
         'document_number' => 'ORG-PASSPORT-01',
         'document_title' => 'Org Passport Copy',
+        'issue_date' => '2025-01-01',
+        'expiry_date' => '2030-01-01',
         'file' => $file,
     ]);
 
@@ -211,7 +578,7 @@ test('documents upload and letter requests accept organisation_id and document_t
     $listResponse->assertOk()
         ->assertJsonPath('statusCode', 200);
 
-    $items = collect($listResponse->json('data'));
+    $items = collect($listResponse->json('data.documents'));
     expect($items->pluck('id'))->toContain($uploadedDoc->id);
 
     // 3. Submit letter request with organisation_id

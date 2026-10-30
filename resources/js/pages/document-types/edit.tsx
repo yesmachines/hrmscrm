@@ -16,13 +16,16 @@ type DocumentType = {
     category_id: number;
     document_name: string;
     document_code: string;
-    requires_number: number;
-    requires_expiry: number;
     editable_before_approval: number;
     requires_hr_approval: number;
     requires_reminder: number;
+    requires_number: boolean;
+    requires_expiry: boolean;
+    requires_issue_date: boolean;
+    requires_attachments: boolean;
+    requires_uid: boolean;
+    requires_total_experience: boolean;
     record_source: string | null;
-    requires_attachments: number;
     category: { id: number; name: string } | null;
 };
 
@@ -55,7 +58,7 @@ export default function DocumentTypesEdit({
         <>
             <Head title={`Edit ${documentType.document_name}`} />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1600px]">
                 <Heading
                     title="Edit document type"
                     description="Update document type details"

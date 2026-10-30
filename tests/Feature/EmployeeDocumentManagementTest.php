@@ -92,6 +92,7 @@ test('admin can directly upload document for an employee', function () {
     $this->actingAs($admin)
         ->post(route('employee-documents.store'), [
             'employee_id' => $employee->id,
+            'category_id' => $offerType->category_id,
             'document_type_id' => $offerType->id,
             'document_title' => 'Official Offer Letter 2026',
             'file' => $file,
@@ -110,6 +111,157 @@ test('admin can directly upload document for an employee', function () {
         ->get(route('employee-documents.download', $createdDoc))
         ->assertOk()
         ->assertDownload();
+});
+
+test('admin visa upload validates and saves uid based on field_requires', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $salesUser = SalesCrmUser::query()->create([
+        'name' => 'Visa Upload Employee',
+        'email' => 'visa.upload@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => 'EMP-CRM-VISA',
+        'designation' => 'Specialist',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $visaType = DocumentType::query()->where('document_code', 'visa')->firstOrFail();
+    $visaType->update([
+        'field_requires' => [
+            'ref_number' => true,
+            'issue_date' => true,
+            'expiry_date' => true,
+            'attachments' => true,
+            'uid' => true,
+            'total_experience' => true,
+        ],
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('employee-documents.create'))
+        ->post(route('employee-documents.store'), [
+            'category_id' => $visaType->category_id,
+            'document_type_id' => $visaType->id,
+            'document_title' => 'Employee Visa',
+        ])
+        ->assertRedirect(route('employee-documents.create'))
+        ->assertSessionHasErrors([
+            'employee_id',
+            'document_number',
+            'issue_date',
+            'expiry_date',
+            'file',
+            'uid',
+            'total_experience',
+        ]);
+
+    $this->actingAs($admin)
+        ->from(route('employee-documents.create'))
+        ->post(route('employee-documents.store'), [
+            'employee_id' => $employee->id,
+            'document_type_id' => $visaType->id,
+        ])
+        ->assertRedirect(route('employee-documents.create'))
+        ->assertSessionHasErrors([
+            'category_id',
+            'document_title',
+            'document_number',
+            'issue_date',
+            'expiry_date',
+            'file',
+            'uid',
+            'total_experience',
+        ]);
+
+    $this->actingAs($admin)
+        ->from(route('employee-documents.create'))
+        ->post(route('employee-documents.store'), [
+            'employee_id' => $employee->id,
+            'category_id' => $visaType->category_id,
+            'document_type_id' => $visaType->id,
+            'document_title' => 'Employee Visa',
+        ])
+        ->assertRedirect(route('employee-documents.create'))
+        ->assertSessionHasErrors([
+            'document_number',
+            'issue_date',
+            'expiry_date',
+            'file',
+            'uid',
+            'total_experience',
+        ]);
+
+    $this->actingAs($admin)
+        ->from(route('employee-documents.create'))
+        ->post(route('employee-documents.store'), [
+            'employee_id' => $employee->id,
+            'category_id' => $visaType->category_id,
+            'document_type_id' => $visaType->id,
+            'document_title' => 'Employee Visa',
+            'document_number' => 'VISA-REF-100',
+            'issue_date' => now()->addDay()->toDateString(),
+            'expiry_date' => now()->toDateString(),
+            'uid' => '123456789',
+            'total_experience' => '4.5',
+            'file' => UploadedFile::fake()->create('visa.pdf', 300, 'application/pdf'),
+        ])
+        ->assertRedirect(route('employee-documents.create'))
+        ->assertSessionHasErrors(['issue_date', 'expiry_date']);
+
+    $this->actingAs($admin)
+        ->from(route('employee-documents.create'))
+        ->post(route('employee-documents.store'), [
+            'employee_id' => $employee->id,
+            'category_id' => $visaType->category_id,
+            'document_type_id' => $visaType->id,
+            'document_title' => 'Employee Visa',
+            'document_number' => 'VISA&REF-100',
+            'issue_date' => now()->subDay()->toDateString(),
+            'expiry_date' => now()->addDay()->toDateString(),
+            'uid' => 'VISA-UID-12345',
+            'total_experience' => '4.5',
+            'file' => UploadedFile::fake()->create('visa.pdf', 300, 'application/pdf'),
+        ])
+        ->assertRedirect(route('employee-documents.create'))
+        ->assertSessionHasErrors(['document_number', 'uid']);
+
+    $this->actingAs($admin)
+        ->post(route('employee-documents.store'), [
+            'employee_id' => $employee->id,
+            'category_id' => $visaType->category_id,
+            'document_type_id' => $visaType->id,
+            'document_title' => 'Employee Visa',
+            'document_number' => 'VISA-REF-100',
+            'issue_date' => now()->subDay()->toDateString(),
+            'expiry_date' => now()->addDay()->toDateString(),
+            'uid' => '123456789012345',
+            'total_experience' => '4.5',
+            'file' => UploadedFile::fake()->create('visa.pdf', 300, 'application/pdf'),
+        ])
+        ->assertRedirect(route('employee-documents.index'));
+
+    $document = EmployeeDocument::query()
+        ->where('employee_id', $employee->id)
+        ->where('document_type_id', $visaType->id)
+        ->firstOrFail();
+
+    $this->assertDatabaseHas('employee_request_details', [
+        'employee_document_id' => $document->id,
+        'field_key' => 'uid',
+        'field_value' => '123456789012345',
+    ]);
+    $this->assertDatabaseHas('employee_request_details', [
+        'employee_document_id' => $document->id,
+        'field_key' => 'total_experience',
+        'field_value' => '4.5',
+    ]);
 });
 
 test('user can download blank form pdf for education allowance claim, nominee declaration, and air ticket claim', function () {

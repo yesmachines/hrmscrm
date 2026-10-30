@@ -17,12 +17,9 @@ class UpdateDocumentTypeRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         foreach ([
-            'requires_number',
-            'requires_expiry',
             'editable_before_approval',
             'requires_hr_approval',
             'requires_reminder',
-            'requires_attachments',
         ] as $field) {
             if ($this->has($field)) {
                 $this->merge([$field => $this->boolean($field)]);
@@ -43,13 +40,16 @@ class UpdateDocumentTypeRequest extends FormRequest
             'category_id' => ['required', 'integer', Rule::exists(DocumentCategory::class, 'id')],
             'document_name' => ['required', 'string', 'max:255'],
             'document_code' => ['required', 'string', 'max:255'],
-            'requires_number' => ['nullable', 'boolean'],
-            'requires_expiry' => ['nullable', 'boolean'],
             'editable_before_approval' => ['nullable', 'boolean'],
             'requires_hr_approval' => ['nullable', 'boolean'],
             'requires_reminder' => ['nullable', 'boolean'],
+            'requires_number' => ['required', 'boolean'],
+            'requires_expiry' => ['required', 'boolean'],
+            'requires_issue_date' => ['required', 'boolean'],
+            'requires_attachments' => ['required', 'boolean'],
+            'requires_uid' => ['required', 'boolean'],
+            'requires_total_experience' => ['required', 'boolean'],
             'record_source' => ['nullable', 'string', Rule::in(['uploaded', 'generated'])],
-            'requires_attachments' => ['nullable', 'boolean'],
             'validity_days' => ['nullable', 'integer', 'min:1'],
         ];
     }
@@ -60,19 +60,25 @@ class UpdateDocumentTypeRequest extends FormRequest
     public function payload(): array
     {
         $validated = $this->validated();
+        $fieldRequires = [
+            'ref_number' => (bool) $validated['requires_number'],
+            'expiry_date' => (bool) $validated['requires_expiry'],
+            'issue_date' => (bool) $validated['requires_issue_date'],
+            'attachments' => (bool) $validated['requires_attachments'],
+            'uid' => (bool) $validated['requires_uid'],
+            'total_experience' => (bool) $validated['requires_total_experience'],
+        ];
 
         return [
             'category_id' => $validated['category_id'],
             'document_name' => $validated['document_name'],
             'document_code' => $validated['document_code'],
-            'requires_number' => (bool) ($validated['requires_number'] ?? false),
-            'requires_expiry' => (bool) ($validated['requires_expiry'] ?? false),
             'editable_before_approval' => (bool) ($validated['editable_before_approval'] ?? false),
             'requires_hr_approval' => (bool) ($validated['requires_hr_approval'] ?? false),
             'requires_reminder' => (bool) ($validated['requires_reminder'] ?? false),
             'record_source' => $validated['record_source'] ?? null,
-            'requires_attachments' => (bool) ($validated['requires_attachments'] ?? false),
             'validity_days' => isset($validated['validity_days']) && $validated['validity_days'] !== '' ? (int) $validated['validity_days'] : null,
+            'field_requires' => (object) $fieldRequires,
         ];
     }
 }

@@ -30,22 +30,58 @@ test('authenticated users can manage document categories types and templates', f
             'category_id' => $category->id,
             'document_name' => 'Passport',
             'document_code' => 'passport',
-            'requires_number' => 1,
-            'requires_expiry' => 1,
             'editable_before_approval' => 0,
             'requires_hr_approval' => 1,
             'requires_reminder' => 1,
-            'record_source' => 'uploaded',
+            'requires_number' => 1,
+            'requires_expiry' => 1,
+            'requires_issue_date' => 0,
             'requires_attachments' => 1,
+            'requires_uid' => 0,
+            'requires_total_experience' => 0,
+            'record_source' => 'uploaded',
             'validity_days' => 365,
         ])
         ->assertRedirect();
 
     $type = DocumentType::query()->where('document_code', 'passport')->first();
     expect($type)->not->toBeNull()
-        ->and($type->requires_number)->toBeTrue()
+        ->and($type->field_requires)->toBe([
+            'ref_number' => true,
+            'expiry_date' => true,
+            'issue_date' => false,
+            'attachments' => true,
+            'uid' => false,
+            'total_experience' => false,
+        ])
         ->and($type->record_source)->toBe('uploaded')
         ->and($type->validity_days)->toBe(365);
+
+    $this->actingAs($admin)
+        ->post(route('document-types.store'), [
+            'category_id' => $category->id,
+            'document_name' => 'Unconfigured Document',
+            'document_code' => 'unconfigured_document',
+            'requires_number' => 0,
+            'requires_expiry' => 0,
+            'requires_issue_date' => 0,
+            'requires_attachments' => 0,
+            'requires_uid' => 0,
+            'requires_total_experience' => 0,
+        ])
+        ->assertRedirect();
+
+    $unconfiguredType = DocumentType::query()
+        ->where('document_code', 'unconfigured_document')
+        ->first();
+    expect($unconfiguredType?->field_requires)->toBe([
+        'ref_number' => false,
+        'expiry_date' => false,
+        'issue_date' => false,
+        'attachments' => false,
+        'uid' => false,
+        'total_experience' => false,
+    ]);
 
     $org = Organisation::query()->firstOrCreate(
         ['short_name' => 'YESM'],
