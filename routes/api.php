@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\EventController;
+use App\Http\Controllers\Api\V1\HrLetterRequestController;
 use App\Http\Controllers\Api\V1\IdeaController;
 use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\RewardController;
@@ -141,9 +142,10 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
     Route::post('documents', [DocumentController::class, 'hrStore'])->name('api.v1.hr.documents.store');
     Route::post('documents/{id}/status', [DocumentController::class, 'updateHrStatus'])->name('api.v1.hr.documents.status');
     Route::get('documents/policies', [DocumentController::class, 'policies'])->name('api.v1.hr.documents.policies');
-    Route::get('documents/letters', [DocumentController::class, 'letters'])->name('api.v1.hr.documents.letters');
-    Route::post('documents/letters', [DocumentController::class, 'requestLetter'])->name('api.v1.hr.documents.request-letter');
-    Route::get('documents/letters/{id}', [DocumentController::class, 'letterDetails'])->name('api.v1.hr.documents.letter-details');
+    Route::get('documents/letters', [HrLetterRequestController::class, 'index'])->name('api.v1.hr.documents.letters');
+    Route::get('documents/letters/{id}', [HrLetterRequestController::class, 'show'])->name('api.v1.hr.documents.letter-details');
+    Route::post('documents/letters/{id}/approve', [HrLetterRequestController::class, 'approve'])->name('api.v1.hr.documents.letters.approve');
+    Route::post('documents/letters/{id}/reject', [HrLetterRequestController::class, 'reject'])->name('api.v1.hr.documents.letters.reject');
     Route::get('documents/{id}', [DocumentController::class, 'hrShow'])->name('api.v1.hr.documents.show');
     Route::put('documents/{id}', [DocumentController::class, 'updateHrDocument'])->name('api.v1.hr.documents.update');
 

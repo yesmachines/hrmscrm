@@ -968,3 +968,139 @@ test('documents upload and letter requests accept organisation_id and document_t
         ->and($letterDoc->organisation_id)->toBe($org->id)
         ->and($letterDoc->document_template_id)->toBe($template->id);
 });
+
+test('hr can list view approve and reject employee letter requests only', function () {
+    $employeeUser = SalesCrmUser::query()->create([
+        'name' => 'Letter Request Employee',
+        'email' => 'letter.request.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $employeeUser->id,
+        'emp_num' => 'EMP-LETTER-001',
+        'designation' => 'Analyst',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $secondEmployeeUser = SalesCrmUser::query()->create([
+        'name' => 'Second Letter Employee',
+        'email' => 'second.letter.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $secondEmployee = Employee::query()->create([
+        'user_id' => $secondEmployeeUser->id,
+        'emp_num' => 'EMP-LETTER-002',
+        'designation' => 'Coordinator',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $nocType = DocumentType::query()->where('document_code', 'noc')->firstOrFail();
+    $passportType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $template = DocumentTemplate::query()->create([
+        'document_type_id' => $nocType->id,
+        'template_name' => 'NOC Letter Template',
+        'template_code' => 'To {{to_address}}: {{purpose}} for {{employee_name}}',
+        'status' => 1,
+    ]);
+
+    $approvedLetter = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $nocType->id,
+        'document_template_id' => $template->id,
+        'document_title' => 'NOC Request',
+        'status' => 'submitted',
+    ]);
+    $approvedLetter->requestDetails()->createMany([
+        ['field_name' => 'Purpose', 'field_key' => 'purpose', 'field_value' => 'Visa application'],
+        ['field_name' => 'Address', 'field_key' => 'to_address', 'field_value' => 'Embassy'],
+    ]);
+
+    $rejectedLetter = EmployeeDocument::query()->create([
+        'employee_id' => $secondEmployee->id,
+        'document_type_id' => $nocType->id,
+        'document_title' => 'Second NOC Request',
+        'status' => 'under_review',
+    ]);
+
+    EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $passportType->id,
+        'document_title' => 'Passport Upload',
+        'status' => 'submitted',
+    ]);
+
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'Letter Request HR',
+        'email' => 'letter.request.hr@example.com',
+    ]);
+    $hrToken = $hrUser->createToken('test')->plainTextToken;
+
+    $letterListResponse = $this->withToken($hrToken)
+        ->getJson('/api/v1/hr/documents/letters')
+        ->assertOk()
+        ->assertJsonPath('data.pagination.total', 2);
+
+    $letterListResponse->assertJsonFragment(['employee_name' => 'Letter Request Employee'])
+        ->assertJsonFragment(['employee_name' => 'Second Letter Employee']);
+
+    $this->withToken($hrToken)
+        ->getJson("/api/v1/hr/documents/letters/{$approvedLetter->id}")
+        ->assertOk()
+        ->assertJsonPath('data.employee_id', $employee->id)
+        ->assertJsonPath('data.employee_name', 'Letter Request Employee')
+        ->assertJsonPath('data.purpose', 'Visa application')
+        ->assertJsonPath('data.rendered_html', 'To Embassy: Visa application for Letter Request Employee');
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/letters/{$approvedLetter->id}/approve", [
+            'remarks' => 'Verified.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'approved')
+        ->assertJsonPath('data.has_generated_file', true);
+
+    expect($approvedLetter->fresh()->histories()->where('action_type', 'approved')->value('remarks'))
+        ->toBe('Verified.')
+        ->and($approvedLetter->fresh()->files()->exists())
+        ->toBeTrue();
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/letters/{$approvedLetter->id}/approve")
+        ->assertStatus(409);
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/letters/{$rejectedLetter->id}/reject", [
+            'remarks' => 'Please provide the destination details.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'rejected')
+        ->assertJsonPath('data.remarks', 'Please provide the destination details.');
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/{$approvedLetter->id}/status", [
+            'status' => 'rejected',
+            'remarks' => 'Should not bypass letter processing.',
+        ])
+        ->assertStatus(409);
+
+    $this->withToken($hrToken)
+        ->postJson('/api/v1/hr/documents/letters', [])
+        ->assertStatus(405);
+
+});
+
+test('employees cannot access the HR letter request review queue', function () {
+    $employeeUser = SalesCrmUser::factory()->create();
+
+    $this->withToken($employeeUser->createToken('test')->plainTextToken)
+        ->getJson('/api/v1/hr/documents/letters')
+        ->assertForbidden();
+});

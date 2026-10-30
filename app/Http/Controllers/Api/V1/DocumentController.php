@@ -405,6 +405,15 @@ class DocumentController extends Controller
 
         $validated = $validator->validated();
         $document = EmployeeDocument::query()->findOrFail($id);
+        $document->loadMissing('documentType.category');
+
+        if ($document->documentType?->category?->short_code === 'letter_requests') {
+            return $this->errorResponse(
+                'Use the letter request approval or rejection endpoint to process letter requests.',
+                409,
+            );
+        }
+
         $remarks = $validated['remarks'] ?? 'Approved by HR';
 
         $employeeDocumentService->updateStatus(
