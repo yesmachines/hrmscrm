@@ -219,12 +219,30 @@ class DocumentController extends Controller
     /**
      * List documents across all employees for HR.
      */
+    #[OA\Get(
+        path: '/api/v1/hr/documents',
+        summary: 'List documents across employees for HR',
+        security: [['sanctum' => []]],
+        tags: ['Documents'],
+        parameters: [
+            new OA\Parameter(name: 'employee_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'document_type_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'status', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 15)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Documents retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Forbidden'),
+        ]
+    )]
     public function hrIndex(Request $request, EmployeeDocumentService $employeeDocumentService): JsonResponse
     {
         return $this->formatDocumentList(
             $employeeDocumentService->list(
                 $request,
                 perPage: (int) $request->input('per_page', 15),
+                applyHrOnlyFilters: true,
             ),
         );
     }

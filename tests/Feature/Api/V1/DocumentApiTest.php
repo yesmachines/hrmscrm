@@ -234,6 +234,78 @@ test('hr document list includes documents belonging to other employees', functio
         ->assertJsonPath('data.pagination.total', 1);
 });
 
+test('hr document list filters by employee and document type only on the hr endpoint', function () {
+    $employeeUsers = collect([
+        ['name' => 'First Filter Employee', 'email' => 'first.filter.employee@example.com'],
+        ['name' => 'Second Filter Employee', 'email' => 'second.filter.employee@example.com'],
+    ])->map(fn (array $attributes) => SalesCrmUser::query()->create([
+        ...$attributes,
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]));
+
+    $employees = $employeeUsers->values()->map(fn (SalesCrmUser $user, int $index) => Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-DOCS-FILTER-'.($index + 1),
+        'designation' => 'Specialist',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]));
+
+    $passportType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $visaType = DocumentType::query()->where('document_code', 'visa')->firstOrFail();
+    $firstEmployee = $employees->first();
+
+    $firstPassport = EmployeeDocument::query()->create([
+        'employee_id' => $firstEmployee->id,
+        'document_type_id' => $passportType->id,
+        'document_title' => 'First Employee Passport',
+        'status' => 'submitted',
+    ]);
+    $firstVisa = EmployeeDocument::query()->create([
+        'employee_id' => $firstEmployee->id,
+        'document_type_id' => $visaType->id,
+        'document_title' => 'First Employee Visa',
+        'status' => 'submitted',
+    ]);
+    EmployeeDocument::query()->create([
+        'employee_id' => $employees->last()->id,
+        'document_type_id' => $visaType->id,
+        'document_title' => 'Second Employee Visa',
+        'status' => 'submitted',
+    ]);
+
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'Document Filter HR User',
+        'email' => 'document.filter.hr@example.com',
+    ]);
+    $hrToken = $hrUser->createToken('test')->plainTextToken;
+
+    $this->withToken($hrToken)
+        ->getJson('/api/v1/hr/documents?employee_id='.$firstEmployee->id)
+        ->assertOk()
+        ->assertJsonPath('data.pagination.total', 2);
+
+    $this->withToken($hrToken)
+        ->getJson('/api/v1/hr/documents?document_type_id='.$visaType->id)
+        ->assertOk()
+        ->assertJsonPath('data.pagination.total', 2);
+
+    $this->withToken($hrToken)
+        ->getJson('/api/v1/hr/documents?employee_id='.$firstEmployee->id.'&document_type_id='.$visaType->id)
+        ->assertOk()
+        ->assertJsonPath('data.documents.0.id', $firstVisa->id)
+        ->assertJsonPath('data.pagination.total', 1);
+
+    $employeeToken = $employeeUsers->first()->createToken('test')->plainTextToken;
+    $this->withToken($employeeToken)
+        ->getJson('/api/v1/documents?employee_id='.$employees->last()->id.'&document_type_id='.$passportType->id)
+        ->assertOk()
+        ->assertJsonPath('data.pagination.total', 2)
+        ->assertJsonPath('data.documents.0.id', $firstVisa->id);
+});
+
 test('documents upload endpoint allows employee to upload document with file', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Sanub User',

@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
  */
 class EmployeeDocumentService
 {
-    public function list(Request $request, ?int $employeeId = null, int $perPage = 15): LengthAwarePaginator
+    public function list(Request $request, ?int $employeeId = null, int $perPage = 15, bool $applyHrOnlyFilters = false,): LengthAwarePaginator
     {
         $query = EmployeeDocument::query()
             ->with([
@@ -31,6 +31,14 @@ class EmployeeDocumentService
 
         if ($employeeId !== null) {
             $query->where('employee_id', $employeeId);
+        }
+
+        if ($applyHrOnlyFilters && $request->filled('employee_id')) {
+            $query->where('employee_id', $request->input('employee_id'));
+        }
+
+        if ($applyHrOnlyFilters && $request->filled('document_type_id')) {
+            $query->where('document_type_id', $request->input('document_type_id'));
         }
 
         if ($request->filled('category_id')) {
