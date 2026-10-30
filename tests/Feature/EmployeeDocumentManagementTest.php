@@ -125,7 +125,9 @@ test('admin document edit page is available only to the matching creator role wh
         ])
         ->assertRedirect(route('employee-documents.show', $adminCreatedDocument));
 
-    expect($adminCreatedDocument->fresh()->document_title)->toBe('Updated Admin Passport');
+    expect($adminCreatedDocument->fresh()->document_title)->toBe('Updated Admin Passport')
+        ->and($adminCreatedDocument->histories()->latest('id')->value('remarks'))
+        ->toBe('Document details updated by Admin');
 
     $this->actingAs($admin)
         ->withoutVite()

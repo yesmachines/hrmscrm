@@ -3,11 +3,13 @@
 use App\Models\DocumentTemplate;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
+use App\Models\EmployeeProfile;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Database\Seeders\DocumentSeeder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -152,6 +154,8 @@ test('documents list nests document type details separately from document fields
     expect($documentData['document_type'])->toBe($expectedDocumentType)
         ->and($documentData)->not->toHaveKey('category_code')
         ->and($documentData)->not->toHaveKey('document_type_id')
+        ->and($documentData)->not->toHaveKey('employee_id')
+        ->and($documentData)->not->toHaveKey('employee_name')
         ->and($documentData)->not->toHaveKey('document_name')
         ->and($documentData)->not->toHaveKey('document_code');
 });
@@ -269,12 +273,20 @@ test('hr document list includes documents belonging to other employees', functio
 
     $hrResponse->assertOk()
         ->assertJsonPath('data.documents.0.id', $otherDocument->id)
+        ->assertJsonPath('data.documents.0.employee_id', $otherEmployee->id)
+        ->assertJsonPath('data.documents.0.employee_name', 'Other Document Owner')
         ->assertJsonPath('data.documents.0.document_title', 'Other Employee Passport')
         ->assertJsonCount(1, 'data.documents')
         ->assertJsonPath('data.pagination.total', 2)
         ->assertJsonPath('data.pagination.per_page', 1)
         ->assertJsonPath('data.pagination.current_page', 2)
         ->assertJsonPath('data.pagination.last_page', 2);
+
+    $this->withToken($hrToken)
+        ->getJson("/api/v1/hr/documents/{$otherDocument->id}")
+        ->assertOk()
+        ->assertJsonPath('data.employee_id', $otherEmployee->id)
+        ->assertJsonPath('data.employee_name', 'Other Document Owner');
 
     $employeeToken = $employeeUser->createToken('test')->plainTextToken;
     $this->withToken($employeeToken)
@@ -390,7 +402,9 @@ test('hr document edit is restricted by creator role, type setting, and pre-appr
         ->assertJsonPath('data.status', 'submitted');
 
     expect($hrDocument->requestDetails()->where('field_key', 'uid')->value('field_value'))
-        ->toBe('001234');
+        ->toBe('001234')
+        ->and($hrDocument->histories()->latest('id')->value('remarks'))
+        ->toBe('Document details updated by HR');
 
     $this->withToken($adminToken)
         ->putJson("/api/v1/hr/documents/{$hrDocument->id}", [
@@ -403,6 +417,32 @@ test('hr document edit is restricted by creator role, type setting, and pre-appr
             'document_title' => 'Approved documents cannot be edited',
         ])
         ->assertForbidden();
+});
+
+test('hr document edit history records the acting role', function () {
+    $documentType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+    $documentType->update([
+        'editable_before_approval' => true,
+        'field_requires' => [],
+    ]);
+
+    $hrUser = createHrmsLoginUser('hr');
+    $document = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'HR editable document',
+        'created_by' => $hrUser->id,
+        'status' => 'submitted',
+    ]);
+
+    $this->withToken($hrUser->createToken('test')->plainTextToken)
+        ->putJson("/api/v1/hr/documents/{$document->id}", [
+            'document_title' => 'Updated HR document',
+        ])
+        ->assertOk();
+
+    expect($document->histories()->latest('id')->value('remarks'))
+        ->toBe('Document details updated by HR');
 });
 
 test('hr document list filters by employee and document type only on the hr endpoint', function () {
@@ -521,50 +561,92 @@ test('documents upload endpoint allows employee to upload document with file', f
     expect($reminder)->not->toBeNull();
 });
 
-test('hr document api records the hr upload file note', function () {
+test('hr document API creates documents for the selected employee with HR audit details', function () {
     $hrUser = createHrmsLoginUser('hr', [
         'name' => 'HR Document Uploader',
         'email' => 'hr.document.uploader@example.com',
     ]);
 
-    $employee = Employee::query()->create([
-        'user_id' => $hrUser->id,
-        'emp_num' => 'EMP-HR-DOCS-001',
-        'designation' => 'HR Officer',
-        'division' => 'Human Resources',
+    $targetUser = SalesCrmUser::query()->create([
+        'name' => 'HR Document Target Employee',
+        'email' => 'hr.document.target@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $targetEmployee = Employee::query()->create([
+        'user_id' => $targetUser->id,
+        'emp_num' => 'EMP-HR-DOCS-TARGET',
+        'designation' => 'Analyst',
+        'division' => 'Operations',
         'status' => 1,
         'has_report' => false,
+    ]);
+    $profile = EmployeeProfile::query()->create([
+        'employee_id' => $targetEmployee->id,
     ]);
 
     $passportType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
     $passportType->update(['requires_hr_approval' => false]);
     $token = $hrUser->createToken('test')->plainTextToken;
 
+    $this->withToken($token)
+        ->postJson('/api/v1/hr/documents', [
+            'document_type_id' => $passportType->id,
+            'document_number' => 'HR-PASSPORT-INVALID',
+            'file' => UploadedFile::fake()->create('missing-employee.pdf', 500, 'application/pdf'),
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['employee_id']);
+
     $response = $this->withToken($token)->postJson('/api/v1/hr/documents', [
+        'employee_id' => $targetEmployee->id,
         'document_type_id' => $passportType->id,
+        'document_number' => 'HR-PASSPORT-001',
         'document_title' => 'Passport',
+        'issue_date' => '2024-01-15',
+        'expiry_date' => '2034-01-14',
         'file' => UploadedFile::fake()->create('passport.pdf', 500, 'application/pdf'),
     ]);
 
-    $response->assertStatus(201);
+    $response->assertCreated()
+        ->assertJsonPath('data.employee_id', $targetEmployee->id)
+        ->assertJsonPath('data.employee_name', 'HR Document Target Employee')
+        ->assertJsonPath('data.status', 'approved')
+        ->assertJsonPath('data.message', 'Document uploaded successfully.');
 
     $document = EmployeeDocument::query()
-        ->where('employee_id', $employee->id)
+        ->where('employee_id', $targetEmployee->id)
         ->where('document_type_id', $passportType->id)
         ->firstOrFail();
+    $this->withToken($token)
+        ->getJson("/api/v1/hr/documents/{$document->id}")
+        ->assertOk()
+        ->assertJsonPath('data.employee_id', $targetEmployee->id)
+        ->assertJsonPath('data.employee_name', 'HR Document Target Employee');
+
     $fileRecord = $document->files()->firstOrFail();
-    expect($fileRecord->change_notes)->toBe('Uploaded by HR');
+    expect($document->created_by)->toBe($hrUser->id)
+        ->and($fileRecord->uploaded_by)->toBe($hrUser->id)
+        ->and($fileRecord->change_notes)->toBe('Uploaded by HR')
+        ->and($document->histories()->latest('id')->value('remarks'))
+        ->toBe('Document uploaded and approved by HR')
+        ->and($profile->fresh()->dob_passport?->format('Y-m-d'))
+        ->toBe('2024-01-15');
 
     $passportType->update(['requires_hr_approval' => true]);
     $pendingResponse = $this->withToken($token)->postJson('/api/v1/hr/documents', [
+        'employee_id' => $targetEmployee->id,
         'document_type_id' => $passportType->id,
+        'document_number' => 'HR-PASSPORT-002',
         'document_title' => 'Passport renewal',
+        'issue_date' => '2025-01-15',
+        'expiry_date' => '2035-01-14',
         'file' => UploadedFile::fake()->create('passport-renewal.pdf', 500, 'application/pdf'),
     ]);
 
     $pendingResponse->assertStatus(201);
     $pendingDocument = EmployeeDocument::query()
-        ->where('employee_id', $employee->id)
+        ->where('employee_id', $targetEmployee->id)
         ->where('document_title', 'Passport renewal')
         ->firstOrFail();
     expect($pendingDocument->files()->firstOrFail()->change_notes)
@@ -584,10 +666,15 @@ test('hr document api records the hr upload file note', function () {
         'has_report' => false,
     ]);
     $adminToken = $adminUser->createToken('test')->plainTextToken;
+    Auth::forgetGuards();
 
     $adminResponse = $this->withToken($adminToken)->postJson('/api/v1/hr/documents', [
+        'employee_id' => $adminEmployee->id,
         'document_type_id' => $passportType->id,
+        'document_number' => 'ADMIN-PASSPORT-001',
         'document_title' => 'Passport',
+        'issue_date' => '2024-02-15',
+        'expiry_date' => '2034-02-14',
         'file' => UploadedFile::fake()->create('admin-passport.pdf', 500, 'application/pdf'),
     ]);
 
@@ -613,10 +700,15 @@ test('hr document api records the hr upload file note', function () {
         'has_report' => false,
     ]);
     $financeToken = $financeUser->createToken('test')->plainTextToken;
+    Auth::forgetGuards();
 
     $financeResponse = $this->withToken($financeToken)->postJson('/api/v1/hr/documents', [
+        'employee_id' => $financeEmployee->id,
         'document_type_id' => $passportType->id,
+        'document_number' => 'FINANCE-PASSPORT-001',
         'document_title' => 'Passport',
+        'issue_date' => '2024-03-15',
+        'expiry_date' => '2034-03-14',
         'file' => UploadedFile::fake()->create('finance-passport.pdf', 500, 'application/pdf'),
     ]);
     $financeResponse->assertStatus(201);
@@ -627,6 +719,42 @@ test('hr document api records the hr upload file note', function () {
         ->firstOrFail();
     expect($financeDocument->files()->firstOrFail()->change_notes)
         ->toBe('Uploaded by Finance; awaiting HR approval');
+});
+
+test('hr document uploads persist configured request details', function () {
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'HR Experience Uploader',
+        'email' => 'hr.experience.uploader@example.com',
+    ]);
+    $employeeUser = SalesCrmUser::query()->create([
+        'name' => 'Experience Document Employee',
+        'email' => 'experience.document.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $employeeUser->id,
+        'emp_num' => 'EMP-HR-EXPERIENCE-001',
+        'designation' => 'Specialist',
+        'division' => 'Operations',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $type = DocumentType::query()->where('document_code', 'experience')->firstOrFail();
+    $token = $hrUser->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/v1/hr/documents', [
+        'employee_id' => $employee->id,
+        'document_type_id' => $type->id,
+        'issue_date' => '2024-01-01',
+        'total_experience' => 8.5,
+        'file' => UploadedFile::fake()->create('experience.pdf', 500, 'application/pdf'),
+    ]);
+
+    $response->assertCreated()
+        ->assertJsonPath('data.employee_id', $employee->id)
+        ->assertJsonPath('data.status', 'submitted')
+        ->assertJsonPath('data.request_details.total_experience', '8.5');
 });
 
 test('document type API exposes configured fields and document uploads save extra values as request details', function () {

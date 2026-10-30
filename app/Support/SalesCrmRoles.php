@@ -65,6 +65,22 @@ class SalesCrmRoles
             ->all();
     }
 
+    public static function hrmsRoleLabelForUser(?int $userId): ?string
+    {
+        if ($userId === null) {
+            return null;
+        }
+
+        $userRoles = self::roleNamesForUser($userId);
+        foreach (['hr' => 'HR', 'admin' => 'Admin', 'finance' => 'Finance'] as $role => $label) {
+            if (in_array($role, $userRoles, true)) {
+                return $label;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * All Sales CRM roles available for employee ACL assignment (excludes superadmin id 1).
      *

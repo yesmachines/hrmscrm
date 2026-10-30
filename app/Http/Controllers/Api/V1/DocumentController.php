@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\StoreHrEmployeeDocumentRequest;
 use App\Http\Resources\Api\V1\DocumentTypeResource;
+use App\Http\Resources\Api\V1\EmployeeDocumentResource;
 use App\Models\DocumentCategory;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
@@ -245,9 +247,11 @@ class DocumentController extends Controller
                 $request,
                 perPage: (int) $request->input('per_page', 15),
                 applyHrOnlyFilters: true,
+                includeEmployeeDetails: true,
             ),
             $employeeDocumentService,
             (int) $request->user()->id,
+            includeEmployeeDetails: true,
         );
     }
 
@@ -255,6 +259,7 @@ class DocumentController extends Controller
     {
         $document = EmployeeDocument::query()
             ->with([
+                'employee.user:id,name',
                 'documentType.category',
                 'documentTemplate',
                 'files' => fn ($q) => $q->orderByDesc('id'),
@@ -268,6 +273,7 @@ class DocumentController extends Controller
         return $this->successResponse([
             'id' => $document->id,
             'employee_id' => $document->employee_id,
+            'employee_name' => $document->employee?->user?->name,
             'document_type' => DocumentTypeResource::make($document->documentType),
             'document_title' => $document->document_title,
             'document_number' => $document->document_number,
@@ -345,7 +351,7 @@ class DocumentController extends Controller
             $requestDetails,
             $request->file('file'),
             $userId,
-            'Document details updated by HR, admin, or finance',
+            'Document details updated by '.(SalesCrmRoles::hrmsRoleLabelForUser($userId) ?? 'HRMS user'),
         );
 
         return $this->successResponse([
@@ -420,13 +426,18 @@ class DocumentController extends Controller
         EmployeeDocumentService $employeeDocumentService,
         int $userId,
         ?int $employeeId = null,
+        bool $includeEmployeeDetails = false,
     ): JsonResponse {
-        $documents->setCollection($documents->getCollection()->map(function (EmployeeDocument $doc) use ($employeeDocumentService, $userId, $employeeId) {
+        $documents->setCollection($documents->getCollection()->map(function (EmployeeDocument $doc) use ($employeeDocumentService, $userId, $employeeId, $includeEmployeeDetails) {
             $latestFile = $doc->files->first();
             $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
 
             return [
                 'id' => $doc->id,
+                ...($includeEmployeeDetails ? [
+                    'employee_id' => $doc->employee_id,
+                    'employee_name' => $doc->employee?->user?->name,
+                ] : []),
                 'document_type' => DocumentTypeResource::make($doc->documentType),
                 'document_title' => $doc->document_title,
                 'document_number' => $doc->document_number,
@@ -493,19 +504,7 @@ class DocumentController extends Controller
         $organisationId = $request->input('organisation_id') ?? $employee->organisation_id;
         $templateId = $request->input('document_template_id')
             ?? $docType->resolveTemplate($organisationId)?->id;
-        $user = $request->user();
-        $uploaderRole = null;
-
-        if ($user !== null) {
-            $userRoles = SalesCrmRoles::roleNamesForUser((int) $user->id);
-
-            foreach (['hr' => 'HR', 'admin' => 'Admin', 'finance' => 'Finance'] as $role => $label) {
-                if (in_array($role, $userRoles, true)) {
-                    $uploaderRole = $label;
-                    break;
-                }
-            }
-        }
+        $uploaderRole = SalesCrmRoles::hrmsRoleLabelForUser($request->user()?->id);
 
         $document = $employeeDocumentService->create(
             $docType,
@@ -541,6 +540,52 @@ class DocumentController extends Controller
             'status' => $document->status,
             'message' => 'Document uploaded successfully.',
         ], 'Document uploaded successfully.', 201);
+    }
+
+    public function hrStore(StoreHrEmployeeDocumentRequest $request, EmployeeDocumentService $employeeDocumentService): JsonResponse
+    {
+        $validated = $request->validated();
+        $employee = Employee::query()->findOrFail((int) $validated['employee_id']);
+        $documentType = DocumentType::query()->findOrFail((int) $validated['document_type_id']);
+        $organisationId = $employee->organisation_id;
+        $templateId = $validated['document_template_id']
+            ?? $documentType->resolveTemplate($organisationId)?->id;
+        $status = $documentType->requires_hr_approval ? 'submitted' : 'approved';
+        $userId = (int) $request->user()->id;
+        $requestDetails = array_intersect_key($validated, array_flip(['uid', 'total_experience']));
+
+        $document = $employeeDocumentService->create(
+            $documentType,
+            [
+                'employee_id' => $employee->id,
+                'organisation_id' => $organisationId,
+                'document_type_id' => $documentType->id,
+                'document_template_id' => $templateId,
+                'document_number' => $validated['document_number'] ?? null,
+                'document_title' => $validated['document_title'] ?? $documentType->document_name,
+                'issue_date' => $validated['issue_date'] ?? null,
+                'expiry_date' => $validated['expiry_date'] ?? null,
+                'remarks' => $validated['remarks'] ?? null,
+                'current_version' => '1.0',
+                'created_by' => $userId,
+                'status' => $status,
+            ],
+            $request->file('file'),
+            $userId,
+            true,
+            $requestDetails,
+            SalesCrmRoles::hrmsRoleLabelForUser($userId),
+        );
+
+        $document->load([
+            'employee.user:id,name',
+            'files' => fn ($query) => $query->orderByDesc('id'),
+            'requestDetails',
+        ]);
+        $data = EmployeeDocumentResource::make($document)->resolve($request);
+        $data['message'] = 'Document uploaded successfully.';
+
+        return $this->successResponse($data, 'Document uploaded successfully.', 201);
     }
 
     /**

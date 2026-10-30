@@ -8,6 +8,7 @@ use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
 use App\Models\SalesCrm\Employee;
 use App\Services\EmployeeDocumentService;
+use App\Support\SalesCrmRoles;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -373,7 +374,7 @@ class EmployeeDocumentController extends Controller
             $requestDetails,
             $request->file('file'),
             (int) $request->user()->id,
-            'Document details updated by HR, admin, or finance',
+            'Document details updated by '.(SalesCrmRoles::hrmsRoleLabelForUser((int) $request->user()->id) ?? 'HRMS user'),
         );
 
         return redirect()->route('employee-documents.show', $employeeDocument)

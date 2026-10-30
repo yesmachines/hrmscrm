@@ -24,7 +24,7 @@ class EmployeeDocumentService
      */
     private array $roleNamesByUserId = [];
 
-    public function list(Request $request, ?int $employeeId = null, int $perPage = 15, bool $applyHrOnlyFilters = false): LengthAwarePaginator
+    public function list(Request $request, ?int $employeeId = null, int $perPage = 15, bool $applyHrOnlyFilters = false, bool $includeEmployeeDetails = false,): LengthAwarePaginator 
     {
         $query = EmployeeDocument::query()
             ->with([
@@ -34,6 +34,10 @@ class EmployeeDocumentService
                 'files' => fn ($q) => $q->orderByDesc('id'),
                 'requestDetails',
             ]);
+
+        if ($includeEmployeeDetails) {
+            $query->with('employee.user:id,name');
+        }
 
         if ($employeeId !== null) {
             $query->where('employee_id', $employeeId);
@@ -105,6 +109,7 @@ class EmployeeDocumentService
 
     /**
      * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $requestDetails
      */
     public function create(
         DocumentType $documentType,
@@ -112,15 +117,22 @@ class EmployeeDocumentService
         ?UploadedFile $file,
         ?int $uploadedBy,
         bool $uploadedByHr,
+        array $requestDetails = [],
+        ?string $uploaderRole = null,
     ): EmployeeDocument {
-        return DB::transaction(function () use ($documentType, $attributes, $file, $uploadedBy, $uploadedByHr) {
+        return DB::transaction(function () use ($documentType, $attributes, $file, $uploadedBy, $uploadedByHr, $requestDetails, $uploaderRole) {
             $document = EmployeeDocument::query()->create($attributes);
             $status = $document->status;
 
             if ($file) {
-                $fileChangeNotes = $uploadedByHr
-                    ? ($status === 'submitted' ? 'Uploaded document awaiting HR approval' : 'Uploaded by HR')
-                    : 'Initial upload';
+                $fileChangeNotes = 'Initial upload';
+                if ($uploadedByHr) {
+                    $fileChangeNotes = $status === 'submitted'
+                        ? ($uploaderRole === null
+                            ? 'Uploaded document awaiting HR approval'
+                            : "Uploaded by {$uploaderRole}; awaiting HR approval")
+                        : ($uploaderRole === null ? 'Uploaded by HR' : "Uploaded by {$uploaderRole}");
+                }
 
                 EmployeeDocumentFile::query()->create([
                     'employee_document_id' => $document->id,
@@ -145,6 +157,8 @@ class EmployeeDocumentService
                 'done_by' => $uploadedBy,
                 'action_on' => Carbon::now(),
             ]);
+
+            $this->syncRequestDetails($document, $requestDetails);
 
             if ($documentType->requires_reminder && $document->expiry_date) {
                 $reminderAttributes = [
@@ -253,26 +267,7 @@ class EmployeeDocumentService
                 $document->update(['current_version' => $newVersion]);
             }
 
-            foreach (['uid', 'total_experience'] as $fieldKey) {
-                if (! array_key_exists($fieldKey, $requestDetails)) {
-                    continue;
-                }
-
-                $fieldValue = $requestDetails[$fieldKey];
-                if ($fieldValue === null || $fieldValue === '') {
-                    $document->requestDetails()->where('field_key', $fieldKey)->delete();
-
-                    continue;
-                }
-
-                $document->requestDetails()->updateOrCreate(
-                    ['field_key' => $fieldKey],
-                    [
-                        'field_name' => str($fieldKey)->headline()->toString(),
-                        'field_value' => (string) $fieldValue,
-                    ],
-                );
-            }
+            $this->syncRequestDetails($document, $requestDetails);
 
             EmployeeDocumentHistory::query()->create([
                 'employee_document_id' => $document->id,
@@ -290,6 +285,33 @@ class EmployeeDocumentService
     private function roleNamesForUser(int $userId): array
     {
         return $this->roleNamesByUserId[$userId] ??= SalesCrmRoles::roleNamesForUser($userId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $requestDetails
+     */
+    private function syncRequestDetails(EmployeeDocument $document, array $requestDetails): void
+    {
+        foreach (['uid', 'total_experience'] as $fieldKey) {
+            if (! array_key_exists($fieldKey, $requestDetails)) {
+                continue;
+            }
+
+            $fieldValue = $requestDetails[$fieldKey];
+            if ($fieldValue === null || $fieldValue === '') {
+                $document->requestDetails()->where('field_key', $fieldKey)->delete();
+
+                continue;
+            }
+
+            $document->requestDetails()->updateOrCreate(
+                ['field_key' => $fieldKey],
+                [
+                    'field_name' => str($fieldKey)->headline()->toString(),
+                    'field_value' => (string) $fieldValue,
+                ],
+            );
+        }
     }
 
     /**

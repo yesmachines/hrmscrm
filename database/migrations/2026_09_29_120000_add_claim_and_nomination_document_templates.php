@@ -22,7 +22,7 @@ return new class extends Migration
         );
 
         // 2. Ensure Education Allowance Claim Form document type
-        $educationType = DocumentType::withoutGlobalScopes()->firstOrCreate(
+        $educationType = DocumentType::withoutTimestamps(fn () => DocumentType::withoutGlobalScopes()->firstOrCreate(
             ['document_code' => 'education_allowance_claim'],
             [
                 'category_id' => $personalCategory->id,
@@ -35,10 +35,10 @@ return new class extends Migration
                 'record_source' => 'uploaded',
                 'requires_attachments' => true,
             ]
-        );
+        ));
 
         // 3. Ensure Employee Nominee Declaration Form document type (nomination_form)
-        $nomineeType = DocumentType::withoutGlobalScopes()->firstOrCreate(
+        $nomineeType = DocumentType::withoutTimestamps(fn () => DocumentType::withoutGlobalScopes()->firstOrCreate(
             ['document_code' => 'nomination_form'],
             [
                 'category_id' => $personalCategory->id,
@@ -51,10 +51,10 @@ return new class extends Migration
                 'record_source' => 'uploaded',
                 'requires_attachments' => true,
             ]
-        );
+        ));
 
         // 4. Ensure Dependent Air Ticket Claim Form document type
-        $airTicketType = DocumentType::withoutGlobalScopes()->firstOrCreate(
+        $airTicketType = DocumentType::withoutTimestamps(fn () => DocumentType::withoutGlobalScopes()->firstOrCreate(
             ['document_code' => 'air_ticket_claim'],
             [
                 'category_id' => $personalCategory->id,
@@ -67,7 +67,7 @@ return new class extends Migration
                 'record_source' => 'uploaded',
                 'requires_attachments' => true,
             ]
-        );
+        ));
 
         // 5. Create / Update Education Allowance Template
         $educationHtml = <<<'HTML'
