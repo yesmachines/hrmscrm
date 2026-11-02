@@ -851,8 +851,9 @@ class DocumentController extends Controller
         tags: ['Documents - Letters'],
         requestBody: new OA\RequestBody(
             required: true,
+            description: 'Submit the employee-provided fields configured as true in the selected document type field_requires.',
             content: new OA\JsonContent(
-                required: ['document_type_id', 'purpose'],
+                required: ['document_type_id'],
                 properties: [
                     new OA\Property(property: 'document_type_id', type: 'integer', example: 1),
                     new OA\Property(property: 'document_template_id', type: 'integer', nullable: true),
@@ -861,6 +862,10 @@ class DocumentController extends Controller
                     new OA\Property(property: 'details', type: 'string', nullable: true),
                     new OA\Property(property: 'to_address', type: 'string', nullable: true),
                     new OA\Property(property: 'visa_designation', type: 'string', nullable: true),
+                    new OA\Property(property: 'destination_country', type: 'string', maxLength: 100, nullable: true),
+                    new OA\Property(property: 'salary_amount', type: 'number', format: 'float', nullable: true),
+                    new OA\Property(property: 'currency', type: 'string', maxLength: 3, pattern: '^[A-Z]{3}$', nullable: true),
+                    new OA\Property(property: 'bank_iban', type: 'string', maxLength: 100, nullable: true),
                 ]
             )
         ),
@@ -878,25 +883,63 @@ class DocumentController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $validator = Validator::make($request->all(), [
-            'document_type_id' => 'required|exists:document_types,id',
+        $baseValidator = Validator::make($request->all(), [
+            'document_type_id' => 'required|integer|exists:document_types,id',
             'document_template_id' => 'nullable|exists:document_templates,id',
             'organisation_id' => 'nullable|integer|exists:organisations,id',
-            'purpose' => 'required|string|max:255',
-            'details' => 'nullable|string',
-            'to_address' => 'nullable|string|max:255',
-            'visa_designation' => 'nullable|string|max:255',
         ]);
 
-        if ($validator->fails()) {
-            return $this->errorResponse('Validation failed', 422, $validator->errors());
+        if ($baseValidator->fails()) {
+            return $this->errorResponse('Validation failed', 422, $baseValidator->errors()->toArray());
         }
 
-        $docType = DocumentType::query()->findOrFail($request->input('document_type_id'));
+        $docType = DocumentType::query()
+            ->with('category')
+            ->findOrFail($request->integer('document_type_id'));
 
-        return DB::transaction(function () use ($request, $employee, $docType) {
-            $organisationId = $request->input('organisation_id') ?? $employee->organisation_id;
-            $templateId = $request->input('document_template_id')
+        if ($docType->category?->short_code !== 'letter_requests') {
+            return $this->errorResponse('The selected document type is not a letter request type.', 422, [
+                'document_type_id' => ['The selected document type is invalid.'],
+            ]);
+        }
+
+        $fieldRules = [
+            'purpose' => ['string', 'max:255'],
+            'details' => ['nullable', 'string'],
+            'to_address' => ['string', 'max:255'],
+            'visa_designation' => ['string', 'max:255'],
+            'destination_country' => ['string', 'max:100'],
+            'salary_amount' => ['numeric', 'min:0.01', 'max:999999999.99'],
+            'currency' => ['string', 'regex:/\A[A-Z]{3}\z/'],
+            'bank_iban' => ['string', 'max:100'],
+        ];
+        $fieldRequires = $docType->field_requires ?? [];
+        $rules = [];
+
+        foreach ($fieldRules as $field => $fieldValidationRules) {
+            if ($field === 'details') {
+                $rules[$field] = $fieldValidationRules;
+
+                continue;
+            }
+
+            $rules[$field] = [
+                ...(! empty($fieldRequires[$field]) ? ['required'] : ['nullable']),
+                ...$fieldValidationRules,
+            ];
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation failed', 422, $validator->errors()->toArray());
+        }
+
+        $validated = array_merge($baseValidator->validated(), $validator->validated());
+
+        return DB::transaction(function () use ($request, $employee, $docType, $validated, $fieldRules) {
+            $organisationId = $validated['organisation_id'] ?? $employee->organisation_id;
+            $templateId = $validated['document_template_id']
                 ?? $docType->resolveTemplate($organisationId)?->id;
 
             $document = EmployeeDocument::query()->create([
@@ -910,10 +953,7 @@ class DocumentController extends Controller
             ]);
 
             $fields = [
-                'purpose' => $request->input('purpose'),
-                'details' => $request->input('details'),
-                'to_address' => $request->input('to_address'),
-                'visa_designation' => $request->input('visa_designation'),
+                ...array_intersect_key($validated, array_flip(array_keys($fieldRules))),
             ];
 
             foreach ($fields as $key => $value) {
@@ -922,7 +962,7 @@ class DocumentController extends Controller
                         'employee_document_id' => $document->id,
                         'field_name' => ucfirst(str_replace('_', ' ', $key)),
                         'field_key' => $key,
-                        'field_value' => $value,
+                        'field_value' => (string) $value,
                     ]);
                 }
             }
@@ -984,6 +1024,7 @@ class DocumentController extends Controller
             'to_address' => $details['to_address'] ?? null,
             'visa_designation' => $details['visa_designation'] ?? null,
             'salary_amount' => $details['salary_amount'] ?? null,
+            'currency' => $details['currency'] ?? null,
             'bank_iban' => $details['bank_iban'] ?? null,
             'destination_country' => $details['destination_country'] ?? null,
             'applied_date' => $doc->created_at?->format('d M Y') ?? '12 JAN 2026',

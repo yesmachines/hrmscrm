@@ -793,7 +793,12 @@ test('document type API exposes configured fields and document uploads save extr
         ->getJson('/api/v1/documents/types?category_code=letter_requests');
     $letterTypesResponse->assertOk();
     $noc = collect($letterTypesResponse->json('data'))->firstWhere('document_code', 'noc');
-    expect($noc['field_requires'])->toBeNull();
+    expect($noc['field_requires'])->toBe([
+        'to_address' => true,
+        'visa_designation' => true,
+        'destination_country' => true,
+        'purpose' => true,
+    ]);
 
     $file = UploadedFile::fake()->create('experience.pdf', 500, 'application/pdf');
     $response = $this->withToken($token)->postJson('/api/v1/documents', [
@@ -872,11 +877,22 @@ test('documents letter request endpoint submits noc request', function () {
     $nocType = DocumentType::query()->where('document_code', 'noc')->first();
     $token = $user->createToken('test')->plainTextToken;
 
+    $this->withToken($token)->postJson('/api/v1/documents/letters', [
+        'document_type_id' => $nocType->id,
+        'purpose' => 'Employment Visa Process',
+        'details' => 'Requesting NOC for embassy submission.',
+        'to_address' => 'Embassy of Germany',
+        'visa_designation' => 'Senior Engineer',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors(['destination_country']);
+
     $response = $this->withToken($token)->postJson('/api/v1/documents/letters', [
         'document_type_id' => $nocType->id,
         'purpose' => 'Employment Visa Process',
         'details' => 'Requesting NOC for embassy submission.',
         'to_address' => 'Embassy of Germany',
+        'visa_designation' => 'Senior Engineer',
+        'destination_country' => 'Germany',
     ]);
 
     $response->assertStatus(201)
@@ -888,7 +904,11 @@ test('documents letter request endpoint submits noc request', function () {
     // Check letter details endpoint
     $detailsResponse = $this->withToken($token)->getJson("/api/v1/documents/letters/{$letter->id}");
     $detailsResponse->assertOk()
-        ->assertJsonPath('data.purpose', 'Employment Visa Process');
+        ->assertJsonPath('data.purpose', 'Employment Visa Process')
+        ->assertJsonPath('data.destination_country', 'Germany');
+
+    expect($letter->requestDetails()->where('field_key', 'destination_country')->value('field_value'))
+        ->toBe('Germany');
 });
 
 test('documents upload and letter requests accept organisation_id and document_template_id', function () {
@@ -960,6 +980,9 @@ test('documents upload and letter requests accept organisation_id and document_t
         'organisation_id' => $org->id,
         'purpose' => 'Bank Loan Application',
         'details' => 'NOC for auto finance',
+        'to_address' => 'Bank',
+        'visa_designation' => 'Analyst',
+        'destination_country' => 'Germany',
     ]);
 
     $letterResponse->assertStatus(201);
@@ -967,6 +990,93 @@ test('documents upload and letter requests accept organisation_id and document_t
     expect($letterDoc)->not->toBeNull()
         ->and($letterDoc->organisation_id)->toBe($org->id)
         ->and($letterDoc->document_template_id)->toBe($template->id);
+});
+
+test('employee letter submission requires configured fields and stores salary details for HR review', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Salary Transfer Employee',
+        'email' => 'salary.transfer.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-SALARY-TRANSFER-001',
+        'designation' => 'Analyst',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $documentType = DocumentType::query()
+        ->where('document_code', 'salary_transfer_letter')
+        ->firstOrFail();
+    $template = DocumentTemplate::query()->create([
+        'document_type_id' => $documentType->id,
+        'template_name' => 'Salary Transfer Test Template',
+        'template_code' => '{{currency}} {{gross_salary}} {{iban_number}} {{to_address}} {{purpose}}',
+        'status' => 1,
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->postJson('/api/v1/documents/letters', [
+            'document_type_id' => $documentType->id,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([
+            'salary_amount',
+            'currency',
+            'bank_iban',
+            'to_address',
+            'purpose',
+        ]);
+
+    $response = $this->withToken($token)
+        ->postJson('/api/v1/documents/letters', [
+            'document_type_id' => $documentType->id,
+            'salary_amount' => 8500.50,
+            'currency' => 'US',
+            'bank_iban' => 'AE070331234567890123456',
+            'to_address' => 'Bank of Example',
+            'purpose' => 'Salary transfer',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['currency']);
+
+    $response = $this->withToken($token)
+        ->postJson('/api/v1/documents/letters', [
+            'document_type_id' => $documentType->id,
+            'document_template_id' => $template->id,
+            'salary_amount' => 8500.50,
+            'currency' => 'AED',
+            'bank_iban' => 'AE070331234567890123456',
+            'to_address' => 'Bank of Example',
+            'purpose' => 'Salary transfer',
+        ])
+        ->assertCreated();
+
+    $letterRequestId = $response->json('data.id');
+    $letter = EmployeeDocument::query()->findOrFail($letterRequestId);
+    expect($letter->employee_id)->toBe($employee->id)
+        ->and($letter->requestDetails()->pluck('field_value', 'field_key')->all())->toMatchArray([
+            'salary_amount' => '8500.5',
+            'currency' => 'AED',
+            'bank_iban' => 'AE070331234567890123456',
+            'to_address' => 'Bank of Example',
+            'purpose' => 'Salary transfer',
+        ]);
+
+    $employeeDetailsResponse = $this->withToken($token)
+        ->getJson("/api/v1/documents/letters/{$letter->id}");
+
+    expect($employeeDetailsResponse->status())->toBe(200, $employeeDetailsResponse->content());
+    $employeeDetailsResponse
+        ->assertJsonPath('data.salary_amount', '8500.5')
+        ->assertJsonPath('data.currency', 'AED')
+        ->assertJsonPath('data.bank_iban', 'AE070331234567890123456');
+
 });
 
 test('hr can list view approve and reject employee letter requests only', function () {
@@ -1007,7 +1117,7 @@ test('hr can list view approve and reject employee letter requests only', functi
     $template = DocumentTemplate::query()->create([
         'document_type_id' => $nocType->id,
         'template_name' => 'NOC Letter Template',
-        'template_code' => 'To {{to_address}}: {{purpose}} for {{employee_name}}',
+        'template_code' => 'To {{to_address}}: {{purpose}} for {{employee_name}} traveling to {{destination_country}}',
         'status' => 1,
     ]);
 
@@ -1021,6 +1131,7 @@ test('hr can list view approve and reject employee letter requests only', functi
     $approvedLetter->requestDetails()->createMany([
         ['field_name' => 'Purpose', 'field_key' => 'purpose', 'field_value' => 'Visa application'],
         ['field_name' => 'Address', 'field_key' => 'to_address', 'field_value' => 'Embassy'],
+        ['field_name' => 'Destination Country', 'field_key' => 'destination_country', 'field_value' => 'Germany'],
     ]);
 
     $rejectedLetter = EmployeeDocument::query()->create([
@@ -1028,6 +1139,23 @@ test('hr can list view approve and reject employee letter requests only', functi
         'document_type_id' => $nocType->id,
         'document_title' => 'Second NOC Request',
         'status' => 'under_review',
+    ]);
+
+    $salaryTransferType = DocumentType::query()
+        ->where('document_code', 'salary_transfer_letter')
+        ->firstOrFail();
+    $salaryTransferLetter = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $salaryTransferType->id,
+        'document_title' => 'Salary Transfer Request',
+        'status' => 'submitted',
+    ]);
+    $salaryTransferLetter->requestDetails()->createMany([
+        ['field_name' => 'Salary Amount', 'field_key' => 'salary_amount', 'field_value' => '8500.5'],
+        ['field_name' => 'Currency', 'field_key' => 'currency', 'field_value' => 'AED'],
+        ['field_name' => 'IBAN', 'field_key' => 'bank_iban', 'field_value' => 'AE070331234567890123456'],
+        ['field_name' => 'Address', 'field_key' => 'to_address', 'field_value' => 'Bank of Example'],
+        ['field_name' => 'Purpose', 'field_key' => 'purpose', 'field_value' => 'Salary transfer'],
     ]);
 
     EmployeeDocument::query()->create([
@@ -1046,7 +1174,7 @@ test('hr can list view approve and reject employee letter requests only', functi
     $letterListResponse = $this->withToken($hrToken)
         ->getJson('/api/v1/hr/documents/letters')
         ->assertOk()
-        ->assertJsonPath('data.pagination.total', 2);
+        ->assertJsonPath('data.pagination.total', 3);
 
     $letterListResponse->assertJsonFragment(['employee_name' => 'Letter Request Employee'])
         ->assertJsonFragment(['employee_name' => 'Second Letter Employee']);
@@ -1057,10 +1185,25 @@ test('hr can list view approve and reject employee letter requests only', functi
         ->assertJsonPath('data.employee_id', $employee->id)
         ->assertJsonPath('data.employee_name', 'Letter Request Employee')
         ->assertJsonPath('data.purpose', 'Visa application')
-        ->assertJsonPath('data.rendered_html', 'To Embassy: Visa application for Letter Request Employee')
+        ->assertJsonPath(
+            'data.rendered_html',
+            'To Embassy: Visa application for Letter Request Employee traveling to Germany',
+        )
         ->assertJsonPath('data.field_requires.to_address', true)
         ->assertJsonPath('data.field_requires.visa_designation', true)
-        ->assertJsonPath('data.field_requires.purpose', true);
+        ->assertJsonPath('data.field_requires.purpose', true)
+        ->assertJsonPath('data.approval_fields', ['to_address', 'visa_designation', 'purpose']);
+
+    $hrSalaryTransferDetailsResponse = $this->withToken($hrToken)
+        ->getJson("/api/v1/hr/documents/letters/{$salaryTransferLetter->id}")
+        ->assertOk()
+        ->assertJsonPath('data.salary_amount', '8500.5')
+        ->assertJsonPath('data.currency', 'AED')
+        ->assertJsonPath('data.bank_iban', 'AE070331234567890123456')
+        ->assertJsonPath('data.approval_fields', ['salary_amount', 'currency', 'bank_iban']);
+    expect($hrSalaryTransferDetailsResponse->json('data.rendered_html'))
+        ->toContain('AED 8,500.50')
+        ->toContain('AE070331234567890123456');
 
     $salaryCertificateRequirements = DocumentType::query()
         ->where('document_code', 'salary_certificate')
@@ -1091,9 +1234,47 @@ test('hr can list view approve and reject employee letter requests only', functi
         ->postJson("/api/v1/hr/documents/letters/{$approvedLetter->id}/approve", [
             'remarks' => 'Verified.',
         ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['to_address', 'visa_designation', 'purpose']);
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/letters/{$approvedLetter->id}/approve", [
+            'to_address' => 'Embassy',
+            'visa_designation' => 'Project Manager',
+            'purpose' => 'Visa application',
+            'remarks' => 'Verified.',
+        ])
         ->assertOk()
         ->assertJsonPath('data.status', 'approved')
         ->assertJsonPath('data.has_generated_file', true);
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/letters/{$salaryTransferLetter->id}/approve", [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([
+            'salary_amount',
+            'currency',
+            'bank_iban',
+        ]);
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/letters/{$salaryTransferLetter->id}/approve", [
+            'salary_amount' => '8500.50',
+            'currency' => 'US',
+            'bank_iban' => 'AE070331234567890123456',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['currency']);
+
+    $this->withToken($hrToken)
+        ->postJson("/api/v1/hr/documents/letters/{$salaryTransferLetter->id}/approve", [
+            'salary_amount' => '8500.50',
+            'currency' => 'AED',
+            'bank_iban' => 'AE070331234567890123456',
+            'remarks' => 'Salary and IBAN verified.',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.status', 'approved');
 
     expect($approvedLetter->fresh()->histories()->where('action_type', 'approved')->value('remarks'))
         ->toBe('Verified.')
@@ -1131,4 +1312,160 @@ test('employees cannot access the HR letter request review queue', function () {
     $this->withToken($employeeUser->createToken('test')->plainTextToken)
         ->getJson('/api/v1/hr/documents/letters')
         ->assertForbidden();
+});
+
+test('admin letter approval displays and validates only HR approval fields by letter type', function () {
+    $nocType = DocumentType::query()->where('document_code', 'noc')->firstOrFail();
+    $letterRequest = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $nocType->id,
+        'document_title' => 'NOC Request',
+        'status' => 'submitted',
+    ]);
+    $letterRequest->requestDetails()->createMany([
+        ['field_name' => 'Destination Country', 'field_key' => 'destination_country', 'field_value' => 'Germany'],
+    ]);
+
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'Letter Approval HR',
+        'email' => 'letter.approval.hr@example.com',
+    ]);
+
+    $this->actingAs($hrUser)
+        ->get("/letter-requests/{$letterRequest->id}")
+        ->assertInertia(fn ($page) => $page
+            ->component('letter-requests/show')
+            ->where('request.field_requires.to_address', true)
+            ->where('request.field_requires.visa_designation', true)
+            ->where('request.field_requires.destination_country', true)
+            ->where('request.field_requires.purpose', true)
+            ->where('request.destination_country', 'Germany')
+            ->where('request.approval_fields', ['to_address', 'visa_designation', 'purpose']));
+
+    $this->actingAs($hrUser)
+        ->from("/letter-requests/{$letterRequest->id}")
+        ->post("/letter-requests/{$letterRequest->id}/approve", [
+            'to_address' => 'Embassy',
+            'purpose' => 'Visa application',
+        ])
+        ->assertSessionHasErrors(['visa_designation']);
+
+    expect($letterRequest->fresh()->status)->toBe('submitted');
+
+    $this->actingAs($hrUser)
+        ->post("/letter-requests/{$letterRequest->id}/approve", [
+            'to_address' => 'Embassy',
+            'visa_designation' => 'Project Manager',
+            'purpose' => 'Visa application',
+        ])
+        ->assertRedirect();
+
+    expect($letterRequest->fresh()->status)->toBe('approved');
+
+    $salaryCertificateType = DocumentType::query()
+        ->where('document_code', 'salary_certificate')
+        ->firstOrFail();
+    $salaryCertificate = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $salaryCertificateType->id,
+        'document_title' => 'Salary Certificate Request',
+        'status' => 'submitted',
+    ]);
+
+    $this->actingAs($hrUser)
+        ->get("/letter-requests/{$salaryCertificate->id}")
+        ->assertInertia(fn ($page) => $page
+            ->where('request.approval_fields', ['salary_amount', 'currency']));
+
+    $this->actingAs($hrUser)
+        ->from("/letter-requests/{$salaryCertificate->id}")
+        ->post("/letter-requests/{$salaryCertificate->id}/approve", [])
+        ->assertSessionHasErrors(['salary_amount', 'currency']);
+
+    $this->actingAs($hrUser)
+        ->from("/letter-requests/{$salaryCertificate->id}")
+        ->post("/letter-requests/{$salaryCertificate->id}/approve", [
+            'salary_amount' => '8500.50',
+            'currency' => 'usd',
+        ])
+        ->assertSessionHasErrors(['currency']);
+
+    $this->actingAs($hrUser)
+        ->post("/letter-requests/{$salaryCertificate->id}/approve", [
+            'salary_amount' => '8500.50',
+            'currency' => 'USD',
+        ])
+        ->assertRedirect();
+
+    expect($salaryCertificate->fresh()->status)->toBe('approved');
+
+    $salaryTransferType = DocumentType::query()
+        ->where('document_code', 'salary_transfer_letter')
+        ->firstOrFail();
+    $salaryTransfer = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $salaryTransferType->id,
+        'document_title' => 'Salary Transfer Request',
+        'status' => 'submitted',
+    ]);
+
+    $this->actingAs($hrUser)
+        ->get("/letter-requests/{$salaryTransfer->id}")
+        ->assertInertia(fn ($page) => $page
+            ->where('request.approval_fields', ['salary_amount', 'currency', 'bank_iban']));
+
+    $this->actingAs($hrUser)
+        ->from("/letter-requests/{$salaryTransfer->id}")
+        ->post("/letter-requests/{$salaryTransfer->id}/approve", [
+            'salary_amount' => '8500.50',
+        ])
+        ->assertSessionHasErrors(['currency', 'bank_iban']);
+
+    $this->actingAs($hrUser)
+        ->post("/letter-requests/{$salaryTransfer->id}/approve", [
+            'salary_amount' => '8500.50',
+            'currency' => 'AED',
+            'bank_iban' => 'AE070331234567890123456',
+        ])
+        ->assertRedirect();
+
+    expect($salaryTransfer->fresh()->status)->toBe('approved');
+
+    $paySlipType = DocumentType::query()
+        ->where('document_code', 'pay_slip')
+        ->firstOrFail();
+    $paySlip = EmployeeDocument::query()->create([
+        'employee_id' => 101,
+        'document_type_id' => $paySlipType->id,
+        'document_title' => 'Pay Slip Request',
+        'status' => 'submitted',
+    ]);
+
+    $this->actingAs($hrUser)
+        ->get("/letter-requests/{$paySlip->id}")
+        ->assertInertia(fn ($page) => $page
+            ->where('request.approval_fields', []));
+});
+
+test('salary letter templates use the currency request placeholder', function () {
+    $salaryCertificateType = DocumentType::query()
+        ->where('document_code', 'salary_certificate')
+        ->firstOrFail();
+    $salaryCertificateTemplate = DocumentTemplate::query()
+        ->where('document_type_id', $salaryCertificateType->id)
+        ->where('template_name', 'Standard Salary Certificate')
+        ->firstOrFail();
+
+    $salaryTransferType = DocumentType::query()
+        ->where('document_code', 'salary_transfer_letter')
+        ->firstOrFail();
+    $salaryTransferTemplate = DocumentTemplate::query()
+        ->where('document_type_id', $salaryTransferType->id)
+        ->where('template_name', 'Standard Salary Transfer Letter')
+        ->firstOrFail();
+
+    expect($salaryCertificateTemplate->template_code)
+        ->toContain('Amount ({{currency}})')
+        ->and($salaryTransferTemplate->template_code)
+        ->toContain('{{currency}} {{gross_salary}}');
 });

@@ -7,14 +7,12 @@ import {
     FileText,
     History,
     Landmark,
-    Mail,
     Printer,
     ShieldAlert,
     User,
     XCircle,
 } from 'lucide-react';
 import { useState } from 'react';
-import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,6 +29,8 @@ import { Label } from '@/components/ui/label';
 import { formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
+type ApprovalField = 'salary_amount' | 'currency' | 'bank_iban' | 'to_address' | 'visa_designation' | 'purpose';
+
 type LetterDetail = {
     id: number;
     employee_id: number;
@@ -45,7 +45,9 @@ type LetterDetail = {
     destination_country: string | null;
     visa_designation: string | null;
     salary_amount: string | null;
+    currency: string | null;
     bank_iban: string | null;
+    approval_fields: ApprovalField[];
     status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived' | 'expired';
     remarks: string | null;
     applied_date: string;
@@ -78,28 +80,41 @@ export default function LetterRequestShow({ request, employee }: Props) {
     const [approveOpen, setApproveOpen] = useState(false);
     const [rejectOpen, setRejectOpen] = useState(false);
     const [salaryAmount, setSalaryAmount] = useState(request.salary_amount || '');
+    const [currency, setCurrency] = useState(request.currency || '');
     const [bankIban, setBankIban] = useState(request.bank_iban || '');
     const [toAddress, setToAddress] = useState(request.to_address || '');
-    const [destinationCountry, setDestinationCountry] = useState(request.destination_country || '');
+    const [visaDesignation, setVisaDesignation] = useState(request.visa_designation || '');
     const [purpose, setPurpose] = useState(request.purpose || '');
     const [remarks, setRemarks] = useState(request.remarks || '');
     const [rejectRemarks, setRejectRemarks] = useState('');
     const [processing, setProcessing] = useState(false);
 
     const isPending = request.status === 'submitted' || request.status === 'under_review';
-    const isSalaryLetter = request.document_code === 'salary_certificate' || request.document_code === 'salary_transfer_letter';
-    const isNocLetter = request.document_code === 'noc' || request.document_code === 'noc_letter';
+    const approvalValues: Record<ApprovalField, string> = {
+        salary_amount: salaryAmount,
+        currency,
+        bank_iban: bankIban,
+        to_address: toAddress,
+        visa_designation: visaDesignation,
+        purpose,
+    };
+    const hasRequiredApprovalFields = request.approval_fields.every(
+        (field) => approvalValues[field].trim().length > 0
+    );
 
     const handleApprove = () => {
+        if (!hasRequiredApprovalFields) {
+            return;
+        }
+
         setProcessing(true);
+        const approvedDetails = Object.fromEntries(
+            request.approval_fields.map((field) => [field, approvalValues[field]])
+        );
         router.post(
             `/letter-requests/${request.id}/approve`,
             {
-                salary_amount: salaryAmount,
-                bank_iban: bankIban,
-                to_address: toAddress,
-                destination_country: destinationCountry,
-                purpose: purpose,
+                ...approvedDetails,
                 remarks,
             },
             {
@@ -112,7 +127,10 @@ export default function LetterRequestShow({ request, employee }: Props) {
     };
 
     const handleReject = () => {
-        if (!rejectRemarks.trim()) return;
+        if (!rejectRemarks.trim()) {
+            return;
+        }
+
         setProcessing(true);
         router.post(
             `/letter-requests/${request.id}/reject`,
@@ -228,73 +246,93 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-4 py-2">
-                                        {isSalaryLetter && (
-                                            <>
-                                                <div className="space-y-1.5">
-                                                    <Label htmlFor="salary_amount" className="flex items-center gap-1.5">
-                                                        <DollarSign className="size-3.5 text-muted-foreground" />
-                                                        Gross / Net Monthly Salary *
-                                                    </Label>
-                                                    <Input
-                                                        id="salary_amount"
-                                                        value={salaryAmount}
-                                                        onChange={(e) => setSalaryAmount(e.target.value)}
-                                                        placeholder="e.g. AED 18,500"
-                                                    />
-                                                </div>
-
-                                                {request.document_code === 'salary_transfer_letter' && (
-                                                    <div className="space-y-1.5">
-                                                        <Label htmlFor="bank_iban" className="flex items-center gap-1.5">
-                                                            <Landmark className="size-3.5 text-muted-foreground" />
-                                                            Employee Bank IBAN *
-                                                        </Label>
-                                                        <Input
-                                                            id="bank_iban"
-                                                            value={bankIban}
-                                                            onChange={(e) => setBankIban(e.target.value)}
-                                                            placeholder="e.g. AE070331234567890123456"
-                                                        />
-                                                    </div>
-                                                )}
-                                            </>
+                                        {request.approval_fields.includes('salary_amount') && (
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="salary_amount" className="flex items-center gap-1.5">
+                                                    <DollarSign className="size-3.5 text-muted-foreground" />
+                                                    Salary Amount *
+                                                </Label>
+                                                <Input
+                                                    id="salary_amount"
+                                                    value={salaryAmount}
+                                                    onChange={(e) => setSalaryAmount(e.target.value)}
+                                                    placeholder="e.g. 18,500"
+                                                    required
+                                                />
+                                            </div>
                                         )}
 
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="to_address">Addressed To *</Label>
-                                            <textarea
-                                                id="to_address"
-                                                rows={2}
-                                                value={toAddress}
-                                                onChange={(e) => setToAddress(e.target.value)}
-                                                placeholder="e.g. To Whom It May Concern, Consulate General, etc."
-                                                className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                            />
-                                        </div>
+                                        {request.approval_fields.includes('currency') && (
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="currency">Currency *</Label>
+                                                <Input
+                                                    id="currency"
+                                                    maxLength={3}
+                                                    value={currency}
+                                                    onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                                                    placeholder="e.g. AED"
+                                                    required
+                                                />
+                                            </div>
+                                        )}
 
-                                        {isNocLetter && (
-                                            <>
-                                                <div className="space-y-1.5">
-                                                    <Label htmlFor="destination_country">Destination Country *</Label>
-                                                    <Input
-                                                        id="destination_country"
-                                                        value={destinationCountry}
-                                                        onChange={(e) => setDestinationCountry(e.target.value)}
-                                                        placeholder="e.g. Kingdom of the Netherlands"
-                                                    />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label htmlFor="purpose">Detailed Purpose & Visit Dates *</Label>
-                                                    <textarea
-                                                        id="purpose"
-                                                        rows={3}
-                                                        value={purpose}
-                                                        onChange={(e) => setPurpose(e.target.value)}
-                                                        placeholder="e.g. attending technical and commercial meetings with ALMI... from 15th Sep to 30th Sep"
-                                                        className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                    />
-                                                </div>
-                                            </>
+                                        {request.approval_fields.includes('bank_iban') && (
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="bank_iban" className="flex items-center gap-1.5">
+                                                    <Landmark className="size-3.5 text-muted-foreground" />
+                                                    Employee Bank IBAN *
+                                                </Label>
+                                                <Input
+                                                    id="bank_iban"
+                                                    value={bankIban}
+                                                    onChange={(e) => setBankIban(e.target.value)}
+                                                    placeholder="e.g. AE070331234567890123456"
+                                                    required
+                                                />
+                                            </div>
+                                        )}
+
+                                        {request.approval_fields.includes('to_address') && (
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="to_address">Addressed To *</Label>
+                                                <textarea
+                                                    id="to_address"
+                                                    rows={2}
+                                                    value={toAddress}
+                                                    onChange={(e) => setToAddress(e.target.value)}
+                                                    placeholder="e.g. To Whom It May Concern, Consulate General, etc."
+                                                    className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                    required
+                                                />
+                                            </div>
+                                        )}
+
+                                        {request.approval_fields.includes('visa_designation') && (
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="visa_designation">Visa Designation *</Label>
+                                                <Input
+                                                    id="visa_designation"
+                                                    value={visaDesignation}
+                                                    onChange={(e) => setVisaDesignation(e.target.value)}
+                                                    placeholder="e.g. Project Manager"
+                                                    required
+                                                />
+                                            </div>
+                                        )}
+
+                                        {request.approval_fields.includes('purpose') && (
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="purpose">Purpose *</Label>
+                                                <textarea
+                                                    id="purpose"
+                                                    rows={3}
+                                                    value={purpose}
+                                                    onChange={(e) => setPurpose(e.target.value)}
+                                                    placeholder="Enter the purpose for this letter."
+                                                    className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                    required
+                                                />
+                                            </div>
                                         )}
 
                                         <div className="space-y-1.5">
@@ -315,7 +353,7 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                         </Button>
                                         <Button
                                             className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                            disabled={processing}
+                                            disabled={processing || !hasRequiredApprovalFields}
                                             onClick={handleApprove}
                                         >
                                             Approve & Issue Certificate

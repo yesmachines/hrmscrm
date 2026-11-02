@@ -160,6 +160,7 @@ export default function DocumentTemplateFormFields({
                                     '{{joining_date}}',
                                     '{{basic_salary}}',
                                     '{{gross_salary}}',
+                                    '{{currency}}',
                                     '{{purpose}}',
                                     '{{to_address}}',
                                     '{{issue_date}}',

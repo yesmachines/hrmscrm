@@ -40,7 +40,7 @@ jobs:
             fi
 
             php artisan migrate --force
-
+            php artisan db:seed --class='Database\Seeders\DocumentSeeder' --no-interaction            
             # Frontend build using npm
             npm install
             npm run build

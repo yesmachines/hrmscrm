@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\EmployeeDocument;
+use App\Support\LetterRequestApprovalFields;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -39,7 +40,11 @@ class HrLetterRequestResource extends JsonResource
             'destination_country' => $requestDetails->firstWhere('field_key', 'destination_country')?->field_value,
             'visa_designation' => $requestDetails->firstWhere('field_key', 'visa_designation')?->field_value,
             'salary_amount' => $requestDetails->firstWhere('field_key', 'salary_amount')?->field_value,
+            'currency' => $requestDetails->firstWhere('field_key', 'currency')?->field_value,
             'bank_iban' => $requestDetails->firstWhere('field_key', 'bank_iban')?->field_value,
+            'approval_fields' => LetterRequestApprovalFields::forDocumentCode(
+                $this->documentType?->document_code,
+            ),
             'status' => $this->status,
             'status_label' => match ($this->status) {
                 'under_review', 'submitted' => 'Pending Approval',

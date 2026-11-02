@@ -33,6 +33,16 @@ beforeEach(function () {
             ]);
         }
     }
+
+    $this->departmentId = (int) $sales->table('departments')->max('id') + 1;
+    $sales->table('departments')->insert([
+        'id' => $this->departmentId,
+        'name' => 'Employee Test Department',
+        'code' => 'EMP-TEST-DEPT',
+        'status' => 1,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
 });
 
 afterEach(function () {
@@ -44,8 +54,9 @@ afterEach(function () {
         'old.employee@example.com',
         'delete.me@example.com',
         'upload.employee@example.com',
+        'missing.department@example.com',
     ];
-    $testEmpNums = ['T-9001', 'T-9002', 'T-9003', 'T-9999', 'T-9010'];
+    $testEmpNums = ['T-9001', 'T-9002', 'T-9003', 'T-9999', 'T-9010', 'T-9011'];
 
     $userIds = $sales->table('users')->whereIn('email', $testEmails)->pluck('id');
     $employeeIds = $sales->table('employees')->whereIn('emp_num', $testEmpNums)->pluck('id');
@@ -59,6 +70,8 @@ afterEach(function () {
         SalesCrmRoles::revokeAllRolesForUsers($userIds->all());
         $sales->table('users')->whereIn('id', $userIds)->delete();
     }
+
+    $sales->table('departments')->where('code', 'EMP-TEST-DEPT')->delete();
 });
 
 test('guests cannot access employees', function () {
@@ -85,6 +98,7 @@ test('authenticated users can create an employee across salescrm and hrms', func
             'roles' => 'salesmanager',
             'emp_num' => 'T-9001',
             'designation' => 'Engineer',
+            'department_id' => $this->departmentId,
             'division' => 'ops',
             'employment_status' => 'fulltime',
             'status' => 1,
@@ -130,6 +144,7 @@ test('employee division is optional on create and edit', function () {
             'roles' => 'salesmanager',
             'emp_num' => 'T-9010',
             'designation' => 'Engineer',
+            'department_id' => $this->departmentId,
         ])
         ->assertRedirect();
 
@@ -143,11 +158,55 @@ test('employee division is optional on create and edit', function () {
             'email' => 'optional.division@example.com',
             'emp_num' => 'T-9010',
             'designation' => 'Engineer',
+            'department_id' => $this->departmentId,
             'division' => '',
         ])
         ->assertRedirect(route('employees.show', $employee));
 
     expect($employee->fresh()->division)->toBe('');
+});
+
+test('department is required when creating and editing an employee', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $this->actingAs($admin)
+        ->from(route('employees.create'))
+        ->post(route('employees.store'), [
+            'name' => 'Missing Department Employee',
+            'email' => 'missing.department@example.com',
+            'password' => 'Password123!',
+            'roles' => 'salesmanager',
+            'emp_num' => 'T-9011',
+            'designation' => 'Engineer',
+        ])
+        ->assertSessionHasErrors(['department_id']);
+
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Missing Department Employee',
+        'email' => 'missing.department@example.com',
+        'password' => 'Password123!',
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'T-9011',
+        'designation' => 'Engineer',
+        'division' => '',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('employees.edit', $employee))
+        ->put(route('employees.update', $employee), [
+            'name' => 'Missing Department Employee',
+            'email' => 'missing.department@example.com',
+            'emp_num' => 'T-9011',
+            'designation' => 'Engineer',
+            'department_id' => '',
+        ])
+        ->assertSessionHasErrors(['department_id']);
 });
 
 test('authenticated users can update an employee', function () {
@@ -180,6 +239,7 @@ test('authenticated users can update an employee', function () {
             'email' => 'old.employee@example.com',
             'emp_num' => 'T-9002',
             'designation' => 'Senior Analyst',
+            'department_id' => $this->departmentId,
             'division' => 'sd',
             'status' => 1,
             'has_report' => 1,
@@ -250,6 +310,7 @@ test('authenticated users can create an employee with image upload, highest educ
             'roles' => 'salesmanager',
             'emp_num' => 'T-9999',
             'designation' => 'Tech Lead',
+            'department_id' => $this->departmentId,
             'division' => 'sd',
             'employment_status' => 'fulltime',
             'status' => 1,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Documents;
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeDocument;
 use App\Services\LetterRequestService;
+use App\Support\LetterRequestApprovalFields;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,18 +38,34 @@ class LetterRequestController extends Controller
 
     public function approve(Request $request, EmployeeDocument $letterRequest): RedirectResponse
     {
-        $request->validate([
-            'salary_amount' => 'nullable|string|max:50',
-            'bank_iban' => 'nullable|string|max:100',
-            'to_address' => 'nullable|string|max:500',
-            'destination_country' => 'nullable|string|max:100',
-            'purpose' => 'nullable|string|max:1000',
+        $letterRequest->loadMissing('documentType');
+        $approvalFields = LetterRequestApprovalFields::forDocumentCode(
+            $letterRequest->documentType?->document_code,
+        );
+        $fieldRules = [
+            'salary_amount' => ['numeric', 'min:0.01', 'max:999999999.99'],
+            'currency' => ['string', 'regex:/\A[A-Z]{3}\z/'],
+            'bank_iban' => ['string', 'max:100'],
+            'to_address' => ['string', 'max:500'],
+            'visa_designation' => ['string', 'max:255'],
+            'purpose' => ['string', 'max:1000'],
+        ];
+        $rules = [
             'remarks' => 'nullable|string|max:500',
-        ]);
+        ];
+
+        foreach ($fieldRules as $field => $fieldRule) {
+            $rules[$field] = [
+                ...(in_array($field, $approvalFields, true) ? ['required'] : ['nullable']),
+                ...$fieldRule,
+            ];
+        }
+
+        $validated = $request->validate($rules);
 
         $this->letterRequestService->approve(
             $letterRequest,
-            $request->only(['salary_amount', 'bank_iban', 'to_address', 'destination_country', 'purpose', 'remarks']),
+            $validated,
             (int) $request->user()->id,
         );
 
@@ -101,7 +118,14 @@ class LetterRequestController extends Controller
             'destination_country' => $details['destination_country'] ?? null,
             'visa_designation' => $details['visa_designation'] ?? null,
             'salary_amount' => $details['salary_amount'] ?? null,
+            'currency' => $details['currency'] ?? null,
             'bank_iban' => $details['bank_iban'] ?? null,
+            'field_requires' => empty($doc->documentType?->field_requires)
+                ? null
+                : (object) $doc->documentType->field_requires,
+            'approval_fields' => LetterRequestApprovalFields::forDocumentCode(
+                $doc->documentType?->document_code,
+            ),
             'status' => $doc->status,
             'remarks' => $doc->remarks,
             'applied_date' => $doc->created_at?->format('d M Y'),

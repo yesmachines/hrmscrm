@@ -6,6 +6,7 @@ use App\Models\EmployeeDocument;
 use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
 use App\Models\SalesCrm\Employee;
+use App\Support\LetterRequestApprovalFields;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -91,7 +92,9 @@ class LetterRequestService
 
             $temporaryDetails = array_intersect_key(
                 $approvedDetails,
-                array_flip(['salary_amount', 'bank_iban', 'to_address', 'destination_country', 'purpose']),
+                array_flip(LetterRequestApprovalFields::forDocumentCode(
+                    $letterRequest->documentType?->document_code,
+                )),
             );
             $html = $this->renderDocumentHtml($letterRequest, null, $temporaryDetails);
 
@@ -177,10 +180,13 @@ class LetterRequestService
         }
 
         $details = $document->requestDetails->pluck('field_value', 'field_key')->all();
-        $details = array_merge($details, array_filter($temporaryDetails));
+        $details = array_merge(
+            $details,
+            array_filter($temporaryDetails, fn ($value) => $value !== null && $value !== ''),
+        );
         $employee?->loadMissing(['user', 'department', 'organisation']);
 
-        $grossSalary = (float) ($employee?->gross_salary ?? 0);
+        $grossSalary = (float) ($details['salary_amount'] ?? $employee?->gross_salary ?? 0);
         $formatter = new \NumberFormatter('en', \NumberFormatter::SPELLOUT);
         $salaryInWords = ucwords($formatter->format($grossSalary));
 
@@ -205,7 +211,7 @@ class LetterRequestService
                 ? number_format((float) $employee->housing_allowance, 2)
                 : '0.00',
             '{{other_allowance}}' => '0.00',
-            '{{gross_salary}}' => $employee?->gross_salary ? number_format($grossSalary, 2) : '0.00',
+            '{{gross_salary}}' => $grossSalary > 0 ? number_format($grossSalary, 2) : '0.00',
             '{{gross_salary_in_words}}' => 'Dirhams '.$salaryInWords.' only',
             '{{document_number}}' => $document->document_number
                 ?: ('DOC-'.str_pad((string) $document->id, 5, '0', STR_PAD_LEFT)),
@@ -229,7 +235,7 @@ class LetterRequestService
             '{{bank_account_masked}}' => '•••• •••• •••• 1234',
             '{{bank_name}}' => 'Emirates NBD',
             '{{account_number}}' => '1234567890',
-            '{{iban_number}}' => 'AE000000000000000000000',
+            '{{iban_number}}' => $details['bank_iban'] ?? 'AE000000000000000000000',
             '{{company_stamp_url}}' => file_exists(public_path('images/sample-stamp.jpg'))
                 ? 'data:image/jpeg;base64,'.base64_encode(file_get_contents(public_path('images/sample-stamp.jpg')))
                 : '',

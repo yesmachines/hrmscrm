@@ -316,10 +316,12 @@ export default function EmployeeProfileFormFields({
                     label="Department"
                     name="department_id"
                     error={errors.department_id}
+                    required
                 >
                     <select
                         id="department_id"
                         name="department_id"
+                        required
                         defaultValue={defaults.department_id ?? ''}
                         className={fieldClass}
                     >
