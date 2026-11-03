@@ -31,6 +31,15 @@ import { dashboard } from '@/routes';
 
 type ApprovalField = 'salary_amount' | 'currency' | 'bank_iban' | 'to_address' | 'visa_designation' | 'purpose';
 
+const approvalFieldLabels: Record<ApprovalField, string> = {
+    salary_amount: 'Salary Amount',
+    currency: 'Currency',
+    bank_iban: 'Employee Bank IBAN',
+    to_address: 'Addressed To',
+    visa_designation: 'Visa Designation',
+    purpose: 'Purpose',
+};
+
 type LetterDetail = {
     id: number;
     employee_id: number;
@@ -97,6 +106,14 @@ export default function LetterRequestShow({ request, employee }: Props) {
         to_address: toAddress,
         visa_designation: visaDesignation,
         purpose,
+    };
+    const requestFieldValues: Record<ApprovalField, string | null> = {
+        salary_amount: request.salary_amount,
+        currency: request.currency,
+        bank_iban: request.bank_iban,
+        to_address: request.to_address,
+        visa_designation: request.visa_designation,
+        purpose: request.purpose,
     };
     const hasRequiredApprovalFields = request.approval_fields.every(
         (field) => approvalValues[field].trim().length > 0
@@ -477,23 +494,21 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                     )}
                                 </div>
 
-                                {/* Approved Financial Meta (if approved) */}
-                                {(request.salary_amount || request.bank_iban) && (
+                                {request.status === 'approved' && request.approval_fields.length > 0 && (
                                     <div className="mt-4 p-4 rounded-xl bg-emerald-50/50 border border-emerald-200/80 space-y-2">
-                                        <h4 className="text-xs font-bold text-emerald-800 tracking-wider uppercase">Approved HR Financial Data</h4>
+                                        <h4 className="text-xs font-bold text-emerald-800 tracking-wider uppercase">HR Approval Fields</h4>
+                                        <p className="text-xs text-muted-foreground">
+                                            Values shown are from the employee&apos;s request. HR changes used in the generated PDF are not saved separately.
+                                        </p>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                            {request.salary_amount && (
-                                                <div>
-                                                    <span className="text-xs text-muted-foreground block">Salary Certified:</span>
-                                                    <span className="font-semibold text-emerald-950">{request.salary_amount}</span>
+                                            {request.approval_fields.map((field) => (
+                                                <div key={field}>
+                                                    <span className="text-xs text-muted-foreground block">{approvalFieldLabels[field]}</span>
+                                                    <span className="font-semibold text-emerald-950">
+                                                        {requestFieldValues[field]?.trim() || 'Not provided'}
+                                                    </span>
                                                 </div>
-                                            )}
-                                            {request.bank_iban && (
-                                                <div>
-                                                    <span className="text-xs text-muted-foreground block">IBAN Number:</span>
-                                                    <span className="font-semibold text-emerald-950">{request.bank_iban}</span>
-                                                </div>
-                                            )}
+                                            ))}
                                         </div>
                                     </div>
                                 )}
