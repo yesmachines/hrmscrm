@@ -487,6 +487,9 @@ class EmployeeDocumentController extends Controller
         $profile = $employee?->profile();
 
         $replacements = [
+            '{{company_logo_url}}' => 'data:image/png;base64,'.base64_encode(
+                file_get_contents(public_path('yes_machinery_logo.png')),
+            ),
             '{{company_name}}' => $employee?->organisation?->org_name ?? config('app.name', 'HRMS'),
             '{{company_address}}' => 'Dubai, United Arab Emirates',
             '{{company_phone}}' => '+971 4 000 0000',
@@ -501,6 +504,7 @@ class EmployeeDocumentController extends Controller
             '{{basic_salary}}' => $employee?->basic_salary ? number_format((float) $employee->basic_salary, 2) : '0.00',
             '{{housing_allowance}}' => $employee?->housing_allowance ? number_format((float) $employee->housing_allowance, 2) : '0.00',
             '{{other_allowance}}' => '0.00',
+            '{{currency}}' => 'AED',
             '{{gross_salary}}' => $employee?->gross_salary ? number_format((float) $employee->gross_salary, 2) : '0.00',
             '{{document_number}}' => $doc->document_number ?: ('DOC-'.str_pad((string) $doc->id, 5, '0', STR_PAD_LEFT)),
             '{{issue_date}}' => $doc->issue_date ? $doc->issue_date->format('d M Y') : Carbon::now()->format('d M Y'),

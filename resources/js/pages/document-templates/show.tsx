@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { Head, Link, setLayoutProps } from '@inertiajs/react';
+import type { ReactNode } from 'react';
 import DocumentTemplateController from '@/actions/App/Http/Controllers/Documents/DocumentTemplateController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
@@ -54,8 +54,10 @@ function Section({
 
 export default function DocumentTemplatesShow({
     template,
+    companyLogoUrl,
 }: {
     template: Template;
+    companyLogoUrl: string;
 }) {
     setLayoutProps({
         breadcrumbs: [
@@ -139,7 +141,12 @@ export default function DocumentTemplatesShow({
                     </div>
                     <div
                         className="rounded-xl border border-slate-200 bg-slate-50/50 p-6 min-h-[250px]"
-                        dangerouslySetInnerHTML={{ __html: template.template_code }}
+                        dangerouslySetInnerHTML={{
+                            __html: template.template_code.replaceAll(
+                                '{{company_logo_url}}',
+                                companyLogoUrl,
+                            ),
+                        }}
                     />
                 </section>
 

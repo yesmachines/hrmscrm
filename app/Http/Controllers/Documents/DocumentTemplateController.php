@@ -55,6 +55,7 @@ class DocumentTemplateController extends Controller
 
         return Inertia::render('document-templates/show', [
             'template' => $this->payload($document_template),
+            'companyLogoUrl' => asset('yes_machinery_logo.png'),
         ]);
     }
 
