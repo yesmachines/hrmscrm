@@ -3,7 +3,10 @@
 use App\Models\DocumentCategory;
 use App\Models\DocumentTemplate;
 use App\Models\DocumentType;
+use App\Models\EmployeeDocument;
 use App\Models\Organisation;
+use App\Services\LetterRequestService;
+use Database\Seeders\DocumentSeeder;
 
 test('authenticated users can manage document categories types and templates', function () {
     $admin = createHrmsLoginUser('admin');
@@ -166,4 +169,156 @@ test('document templates resolve organisation specific template first then fallb
     expect($type->resolveTemplate($org1->id)->id)->toBe($org1Template->id);
     expect($type->resolveTemplate($org2->id)->id)->toBe($globalTemplate->id);
     expect($type->resolveTemplate(null)->id)->toBe($globalTemplate->id);
+});
+
+test('document seeder includes all valid local templates with configurable currency placeholders', function () {
+    $this->seed(DocumentSeeder::class);
+
+    $expectedTemplates = [
+        'air_ticket_claim' => 'Dependent Air Ticket Claim Form Template',
+        'education_allowance_claim' => 'Education Allowance Claim Form Template',
+        'noc' => 'Standard NOC Template',
+        'nomination_form' => 'Employee Nominee Declaration Form Template',
+        'pay_slip' => 'Standard Pay Slip Template',
+        'salary_certificate' => 'Standard Salary Certificate',
+        'salary_transfer_letter' => 'Standard Salary Transfer Letter',
+    ];
+
+    foreach ($expectedTemplates as $documentCode => $templateName) {
+        $documentType = DocumentType::query()
+            ->where('document_code', $documentCode)
+            ->firstOrFail();
+
+        expect(DocumentTemplate::query()
+            ->where('document_type_id', $documentType->id)
+            ->where('template_name', $templateName)
+            ->exists())->toBeTrue();
+    }
+
+    foreach (['education_allowance_claim', 'noc', 'salary_certificate', 'salary_transfer_letter'] as $documentCode) {
+        $template = DocumentTemplate::query()
+            ->whereHas('documentType', fn ($query) => $query->where('document_code', $documentCode))
+            ->firstOrFail();
+
+        expect($template->template_code)
+            ->toContain('{{currency}}')
+            ->not->toContain('AED');
+    }
+
+    foreach (['noc', 'salary_certificate', 'salary_transfer_letter'] as $documentCode) {
+        $template = DocumentTemplate::query()
+            ->whereHas('documentType', fn ($query) => $query->where('document_code', $documentCode))
+            ->firstOrFail();
+
+        expect($template->template_code)
+            ->toContain('<div class="letter-header">')
+            ->toContain('<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">')
+            ->toContain('class="letter-footer"')
+            ->toContain('width: 75px; height: auto;')
+            ->toContain('margin-top: 90px; text-align: center; font-size: 9px; line-height: 1.15;')
+            ->toContain("font-family: 'DejaVu Sans', sans-serif;")
+            ->toContain('height: 6px; background-color: #7AC142;');
+    }
+
+    $paySlipTemplate = DocumentTemplate::query()
+        ->whereHas('documentType', fn ($query) => $query->where('document_code', 'pay_slip'))
+        ->firstOrFail();
+    expect($paySlipTemplate->template_code)
+        ->toContain('src="{{company_logo_url}}"')
+        ->not->toContain('Logo Approximation');
+});
+
+test('letter template renderer uses submitted currency or defaults to AED', function () {
+    $this->seed(DocumentSeeder::class);
+
+    $documentType = DocumentType::query()
+        ->where('document_code', 'noc')
+        ->firstOrFail();
+    $template = DocumentTemplate::query()->create([
+        'document_type_id' => $documentType->id,
+        'template_name' => 'Currency rendering test',
+        'template_code' => '{{currency}} {{gross_salary}}',
+        'status' => 1,
+    ]);
+
+    $document = EmployeeDocument::query()->create([
+        'employee_id' => 999999,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'Currency rendering test',
+        'document_template_id' => $template->id,
+        'status' => 'submitted',
+    ]);
+    $document->requestDetails()->create([
+        'field_name' => 'Currency',
+        'field_key' => 'currency',
+        'field_value' => 'USD',
+    ]);
+
+    $service = new LetterRequestService;
+    expect($service->renderDocumentHtml($document->fresh()))
+        ->toContain('USD 0.00');
+
+    $documentWithoutCurrency = EmployeeDocument::query()->create([
+        'employee_id' => 999998,
+        'document_type_id' => $documentType->id,
+        'document_title' => 'Currency fallback test',
+        'document_template_id' => $template->id,
+        'status' => 'submitted',
+    ]);
+
+    expect($service->renderDocumentHtml($documentWithoutCurrency))
+        ->toContain('AED 0.00');
+});
+
+test('NOC renderer embeds the repository company logo asset', function () {
+    $this->seed(DocumentSeeder::class);
+
+    $nocType = DocumentType::query()
+        ->where('document_code', 'noc')
+        ->firstOrFail();
+    $template = DocumentTemplate::query()
+        ->where('document_type_id', $nocType->id)
+        ->where('template_name', 'Standard NOC Template')
+        ->firstOrFail();
+    $document = EmployeeDocument::query()->create([
+        'employee_id' => 999997,
+        'document_type_id' => $nocType->id,
+        'document_title' => 'NOC Logo Test',
+        'document_template_id' => $template->id,
+        'status' => 'submitted',
+    ]);
+
+    $renderedHtml = (new LetterRequestService)->renderDocumentHtml($document);
+
+    expect($renderedHtml)
+        ->toContain('src="data:image/png;base64,')
+        ->not->toContain('{{company_logo_url}}')
+        ->not->toContain('>YES</div>');
+
+    expect($template->template_code)
+        ->toContain('<div class="letter-header">')
+        ->toContain('<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">')
+        ->toContain('class="letter-footer"')
+        ->toContain('width: 75px; height: auto;')
+        ->toContain('margin-top: 90px; text-align: center; font-size: 9px; line-height: 1.15;')
+        ->toContain('height: 6px; background-color: #7AC142;')
+        ->not->toContain('display: flex');
+});
+
+test('document template preview resolves the logo URL without changing the saved HTML', function () {
+    $admin = createHrmsLoginUser('admin');
+    $this->seed(DocumentSeeder::class);
+
+    $template = DocumentTemplate::query()
+        ->whereHas('documentType', fn ($query) => $query->where('document_code', 'noc'))
+        ->where('template_name', 'Standard NOC Template')
+        ->firstOrFail();
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('document-templates.show', $template))
+        ->assertInertia(fn ($page) => $page
+            ->component('document-templates/show')
+            ->where('companyLogoUrl', asset('yes_machinery_logo.png'))
+            ->where('template.template_code', $template->template_code));
 });

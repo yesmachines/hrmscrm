@@ -1465,7 +1465,9 @@ test('salary letter templates use the currency request placeholder', function ()
         ->firstOrFail();
 
     expect($salaryCertificateTemplate->template_code)
-        ->toContain('Amount ({{currency}})')
+        ->toContain('{{currency}} {{gross_salary}}')
+        ->not->toContain('AED')
         ->and($salaryTransferTemplate->template_code)
-        ->toContain('{{currency}} {{gross_salary}}');
+        ->toContain('{{currency}} {{gross_salary}}')
+        ->not->toContain('AED');
 });

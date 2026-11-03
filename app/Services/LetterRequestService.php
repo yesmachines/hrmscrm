@@ -99,11 +99,21 @@ class LetterRequestService
             $html = $this->renderDocumentHtml($letterRequest, null, $temporaryDetails);
 
             if ($html !== null) {
+                $letterheadStyles = str_contains($html, 'class="letter-header"')
+                    && str_contains($html, 'class="letter-footer"')
+                    ? '
+        @page { margin: 125px 15mm 100px; size: A4 portrait; }
+        .letter-header { position: fixed; top: -105px; left: 20px; right: 20px; margin: 0 !important; }
+        .letter-header table { margin-bottom: 0 !important; }
+        .letter-footer { position: fixed; bottom: -45px; left: 20px; right: 20px; margin-top: 0 !important; }
+                    '
+                    : '';
                 $pdfHtml = '<!DOCTYPE html>
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <style>
+        '.$letterheadStyles.'
         body { font-family: "DejaVu Sans", sans-serif; }
         p, div, span, table { max-width: 100% !important; }
         p { margin-right: 0 !important; padding-right: 0 !important; width: auto !important; }
@@ -191,6 +201,9 @@ class LetterRequestService
         $salaryInWords = ucwords($formatter->format($grossSalary));
 
         $replacements = [
+            '{{company_logo_url}}' => 'data:image/png;base64,'.base64_encode(
+                file_get_contents(public_path('yes_machinery_logo.png')),
+            ),
             '{{company_name}}' => $employee?->organisation?->org_name ?? config('app.name', 'HRMS'),
             '{{company_address}}' => 'Dubai, United Arab Emirates',
             '{{company_phone}}' => '+971 4 000 0000',
@@ -211,6 +224,7 @@ class LetterRequestService
                 ? number_format((float) $employee->housing_allowance, 2)
                 : '0.00',
             '{{other_allowance}}' => '0.00',
+            '{{currency}}' => 'AED',
             '{{gross_salary}}' => $grossSalary > 0 ? number_format($grossSalary, 2) : '0.00',
             '{{gross_salary_in_words}}' => 'Dirhams '.$salaryInWords.' only',
             '{{document_number}}' => $document->document_number

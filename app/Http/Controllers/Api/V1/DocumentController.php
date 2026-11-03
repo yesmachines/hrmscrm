@@ -150,11 +150,15 @@ class DocumentController extends Controller
         $isPureBlank = $request->boolean('pure_blank') || ! $employee;
 
         $replacements = [
+            '{{company_logo_url}}' => 'data:image/png;base64,'.base64_encode(
+                file_get_contents(public_path('yes_machinery_logo.png')),
+            ),
             '{{employee_name}}' => $isPureBlank ? '&nbsp;' : ($employee?->user?->name ?? '&nbsp;'),
             '{{employee_code}}' => $isPureBlank ? '&nbsp;' : ($employee?->emp_num ?? '&nbsp;'),
             '{{department}}' => $isPureBlank ? '&nbsp;' : ($employee?->department?->name ?? '&nbsp;'),
             '{{designation}}' => $isPureBlank ? '&nbsp;' : ($employee?->designation ?? '&nbsp;'),
             '{{joining_date}}' => ($isPureBlank || ! $employee?->joining_date) ? '&nbsp;' : Carbon::parse($employee->joining_date)->format('d M Y'),
+            '{{currency}}' => $isPureBlank ? '&nbsp;' : 'AED',
         ];
 
         $html = str_replace(array_keys($replacements), array_values($replacements), $template->template_code);
