@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\EmployeeDocument;
+use App\Support\GeneratedDocumentExpiry;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -20,6 +21,10 @@ class EmployeeDocumentResource extends JsonResource
         $latestFile = $this->relationLoaded('files')
             ? $this->files->first()
             : null;
+        $isExpired = GeneratedDocumentExpiry::isExpired($this->resource);
+        $fileUrl = $latestFile && ! $isExpired
+            ? Storage::disk('public')->url($latestFile->file_path)
+            : null;
 
         return [
             'id' => $this->id,
@@ -35,8 +40,10 @@ class EmployeeDocumentResource extends JsonResource
             'expiry_date' => $this->expiry_date?->format('Y-m-d'),
             'remarks' => $this->remarks,
             'status' => $this->status,
+            'is_expired' => $isExpired,
             'current_version' => $this->current_version,
-            'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+            'file_url' => $fileUrl,
+            'download_url' => $fileUrl,
             'file_name' => $latestFile ? basename($latestFile->file_path) : null,
             'request_details' => $this->whenLoaded(
                 'requestDetails',

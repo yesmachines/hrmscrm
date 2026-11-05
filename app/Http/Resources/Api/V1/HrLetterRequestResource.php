@@ -3,7 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\EmployeeDocument;
-use App\Support\LetterRequestApprovalFields;
+use App\Support\GeneratedDocumentExpiry;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -22,8 +22,20 @@ class HrLetterRequestResource extends JsonResource
         $requestDetails = $this->relationLoaded('requestDetails')
             ? $this->requestDetails
             : collect();
+        $hrDetails = $requestDetails->first(
+            fn ($detail) => $detail->field_key === 'details'
+                && $detail->field_name === 'HR Provided Details',
+        );
+        $employeeRequestDetails = $requestDetails
+            ->reject(fn ($detail) => in_array($detail->field_key, ['details', 'remarks'], true));
+        $fieldRequires = $this->documentType?->field_requires ?? [];
+        unset($fieldRequires['details'], $fieldRequires['remarks']);
         $latestFile = $this->relationLoaded('files')
             ? $this->files->first()
+            : null;
+        $isExpired = GeneratedDocumentExpiry::isExpired($this->resource);
+        $fileUrl = $latestFile && ! $isExpired
+            ? Storage::disk('public')->url($latestFile->file_path)
             : null;
 
         return [
@@ -35,16 +47,15 @@ class HrLetterRequestResource extends JsonResource
             'document_name' => $this->documentType?->document_name,
             'document_code' => $this->documentType?->document_code,
             'purpose' => $requestDetails->firstWhere('field_key', 'purpose')?->field_value ?? 'General Request',
-            'details' => $requestDetails->firstWhere('field_key', 'details')?->field_value ?? $this->remarks,
+            'details' => $this->status === 'approved' ? $hrDetails?->field_value : null,
             'to_address' => $requestDetails->firstWhere('field_key', 'to_address')?->field_value,
             'destination_country' => $requestDetails->firstWhere('field_key', 'destination_country')?->field_value,
             'visa_designation' => $requestDetails->firstWhere('field_key', 'visa_designation')?->field_value,
             'salary_amount' => $requestDetails->firstWhere('field_key', 'salary_amount')?->field_value,
             'currency' => $requestDetails->firstWhere('field_key', 'currency')?->field_value,
             'bank_iban' => $requestDetails->firstWhere('field_key', 'bank_iban')?->field_value,
-            'approval_fields' => LetterRequestApprovalFields::forDocumentCode(
-                $this->documentType?->document_code,
-            ),
+            'approval_fields' => [],
+            'field_requires' => empty($fieldRequires) ? null : (object) $fieldRequires,
             'status' => $this->status,
             'status_label' => match ($this->status) {
                 'under_review', 'submitted' => 'Pending Approval',
@@ -55,10 +66,12 @@ class HrLetterRequestResource extends JsonResource
             'remarks' => $this->remarks,
             'applied_date' => $this->created_at?->format('d M Y'),
             'approved_date' => $this->status === 'approved' ? $this->updated_at?->format('d M Y') : null,
-            'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
-            'download_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+            'expiry_date' => $this->expiry_date?->format('Y-m-d'),
+            'is_expired' => $isExpired,
+            'file_url' => $fileUrl,
+            'download_url' => $fileUrl,
             'has_generated_file' => $latestFile !== null,
-            'request_details' => $requestDetails->pluck('field_value', 'field_key'),
+            'request_details' => $employeeRequestDetails->pluck('field_value', 'field_key'),
             'histories' => $this->whenLoaded(
                 'histories',
                 fn () => $this->histories->map(fn ($history) => [

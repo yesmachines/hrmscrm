@@ -6,17 +6,13 @@ use App\Models\EmployeeDocument;
 use App\Support\LetterRequestApprovalFields;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class ApproveLetterRequestRequest extends FormRequest
 {
-    private const APPROVAL_FIELD_RULES = [
-        'salary_amount' => ['numeric', 'min:0.01', 'max:999999999.99'],
-        'currency' => ['string', 'regex:/\A[A-Z]{3}\z/'],
-        'bank_iban' => ['string', 'max:100'],
-        'to_address' => ['string', 'max:500'],
-        'visa_designation' => ['string', 'max:255'],
-        'purpose' => ['string', 'max:1000'],
-    ];
+    private ?EmployeeDocument $resolvedLetterRequest = null;
+
+    private bool $letterRequestResolved = false;
 
     public function authorize(): bool
     {
@@ -28,26 +24,63 @@ class ApproveLetterRequestRequest extends FormRequest
      */
     public function rules(): array
     {
-        $letterRequest = EmployeeDocument::query()
-            ->with('documentType')
-            ->whereHas('documentType.category', fn ($query) => $query->where('short_code', 'letter_requests'))
-            ->find($this->route('id'));
-        $approvalFields = in_array($letterRequest?->status, ['submitted', 'under_review'], true)
-            ? LetterRequestApprovalFields::forDocumentCode($letterRequest->documentType?->document_code)
-            : [];
+        $letterRequest = $this->letterRequest();
+        $requiresHrDetails = $letterRequest !== null
+            && in_array($letterRequest->status, ['submitted', 'under_review'], true)
+            && LetterRequestApprovalFields::requiresHrDetails($letterRequest->documentType?->document_code);
 
-        $rules = [
-            'destination_country' => ['nullable', 'string', 'max:100'],
+        return [
+            'details' => [
+                ...($requiresHrDetails ? ['required'] : ['nullable']),
+                'string',
+                'max:2000',
+            ],
             'remarks' => ['nullable', 'string', 'max:500'],
         ];
+    }
 
-        foreach (self::APPROVAL_FIELD_RULES as $field => $fieldRules) {
-            $rules[$field] = [
-                ...(in_array($field, $approvalFields, true) ? ['required'] : ['nullable']),
-                ...$fieldRules,
-            ];
+    public function withValidator(Validator $validator): void
+    {
+        $letterRequest = $this->letterRequest();
+
+        if ($letterRequest === null || ! in_array($letterRequest->status, ['submitted', 'under_review'], true)) {
+            return;
         }
 
-        return $rules;
+        $fieldRequires = $letterRequest->documentType?->field_requires ?? [];
+        $submittedFields = array_diff(array_keys($this->all()), ['details', 'remarks']);
+
+        $validator->after(function (Validator $validator) use ($fieldRequires, $submittedFields): void {
+            foreach ($submittedFields as $field) {
+                $message = array_key_exists($field, $fieldRequires)
+                    ? 'Employee-submitted fields are read-only during HR approval. Only details and remarks may be submitted.'
+                    : 'Only HR details and remarks may be submitted during approval.';
+
+                $validator->errors()->add((string) $field, $message);
+            }
+        });
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'details.required' => 'HR details are required for this letter request.',
+        ];
+    }
+
+    private function letterRequest(): ?EmployeeDocument
+    {
+        if (! $this->letterRequestResolved) {
+            $this->resolvedLetterRequest = EmployeeDocument::query()
+                ->with('documentType')
+                ->whereHas('documentType.category', fn ($query) => $query->where('short_code', 'letter_requests'))
+                ->find($this->route('id'));
+            $this->letterRequestResolved = true;
+        }
+
+        return $this->resolvedLetterRequest;
     }
 }

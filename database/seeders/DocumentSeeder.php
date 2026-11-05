@@ -696,7 +696,7 @@ class DocumentSeeder extends Seeder
     <p style="margin-bottom: 10px;">Dear Sir/Madam,</p>
     <p style="margin-bottom: 15px;">On behalf of HFZA York Engineering Solutions FZC, I hereby state and confirm permission for <span style="color: #16a34a; font-weight: bold;">{{employee_name}}</span> holder of Passport no: <span style="color: #16a34a; font-weight: bold;">{{passport_number}}</span>, working with our company as <span style="color: #16a34a;">{{designation}}</span> since <span style="color: #16a34a;">{{joining_date}}</span>, for a monthly salary of <span style="color: #16a34a;">{{currency}} {{gross_salary}}/- ({{gross_salary_in_words}})</span>, to have <span style="color: red;">{{purpose}}</span>.</p>
     
-    <p style="margin-bottom: 15px;">Therefore, we request you to grant him/her a <span style="color: red;">visa to {{destination_country}}</span>.</p>
+    <p style="margin-bottom: 15px;">Therefore, we request you to grant him/her a <span style="color: red;">{{details}}</span>.</p>
     
     <p style="margin-bottom: 15px;">On behalf of HFZA York Engineering Solutions FZC, I guarantee that all expenses involved in his/her trips will be fully covered by our company (<strong>HFZA York Engineering Solutions FZC</strong>), also we hold ourselves responsible for his/her conduct to comply with the laws of <span style="color: red;">{{destination_country}}</span>.</p>
     

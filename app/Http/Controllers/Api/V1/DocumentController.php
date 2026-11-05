@@ -9,10 +9,12 @@ use App\Http\Resources\Api\V1\EmployeeDocumentResource;
 use App\Models\DocumentCategory;
 use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
+use App\Models\EmployeeDocumentFile;
 use App\Models\EmployeeDocumentHistory;
 use App\Models\EmployeeRequestDetail;
 use App\Models\SalesCrm\Employee;
 use App\Services\EmployeeDocumentService;
+use App\Support\GeneratedDocumentExpiry;
 use App\Support\SalesCrmRoles;
 use App\Traits\ApiResponse;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -41,6 +43,17 @@ class DocumentController extends Controller
         }
 
         return Employee::query()->where('user_id', $user->id)->first();
+    }
+
+    private function documentFileUrl(
+        EmployeeDocument $document,
+        ?EmployeeDocumentFile $file,
+    ): ?string {
+        if (! $file || GeneratedDocumentExpiry::isExpired($document)) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($file->file_path);
     }
 
     /**
@@ -287,8 +300,9 @@ class DocumentController extends Controller
             'expiry_date_raw' => $document->expiry_date?->format('Y-m-d'),
             'remarks' => $document->remarks,
             'status' => $document->status,
+            'is_expired' => GeneratedDocumentExpiry::isExpired($document),
             'current_version' => $document->current_version,
-            'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+            'file_url' => $this->documentFileUrl($document, $latestFile),
             'file_name' => $latestFile ? basename($latestFile->file_path) : null,
             'request_details' => $document->requestDetails->pluck('field_value', 'field_key'),
             'histories' => $document->histories->map(fn ($history) => [
@@ -443,7 +457,8 @@ class DocumentController extends Controller
     ): JsonResponse {
         $documents->setCollection($documents->getCollection()->map(function (EmployeeDocument $doc) use ($employeeDocumentService, $userId, $employeeId, $includeEmployeeDetails) {
             $latestFile = $doc->files->first();
-            $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
+            $fileUrl = $this->documentFileUrl($doc, $latestFile);
+            $status = $doc->status;
 
             return [
                 'id' => $doc->id,
@@ -458,16 +473,17 @@ class DocumentController extends Controller
                 'issue_date_raw' => $doc->issue_date?->format('Y-m-d'),
                 'expiry_date' => $doc->expiry_date?->format('d M Y'),
                 'expiry_date_raw' => $doc->expiry_date?->format('Y-m-d'),
-                'status' => $doc->status,
-                'status_label' => match ($doc->status) {
+                'status' => $status,
+                'is_expired' => GeneratedDocumentExpiry::isExpired($doc),
+                'status_label' => match ($status) {
                     'approved' => 'Approved',
                     'under_review' => 'Pending Approval',
                     'submitted' => 'Pending Approval',
                     'rejected' => 'Rejected',
                     'draft' => 'Draft',
-                    default => ucfirst($doc->status),
+                    default => ucfirst($status),
                 },
-                'status_color' => match ($doc->status) {
+                'status_color' => match ($status) {
                     'approved' => 'green',
                     'under_review', 'submitted' => 'orange',
                     'rejected' => 'red',
@@ -591,6 +607,7 @@ class DocumentController extends Controller
         );
 
         $document->load([
+            'documentType.category',
             'employee.user:id,name',
             'files' => fn ($query) => $query->orderByDesc('id'),
             'requestDetails',
@@ -626,7 +643,7 @@ class DocumentController extends Controller
             'id' => $f->id,
             'version_no' => $f->version_no,
             'file_path' => $f->file_path,
-            'file_url' => Storage::disk('public')->url($f->file_path),
+            'file_url' => $this->documentFileUrl($doc, $f),
             'uploaded_date' => $f->uploaded_date?->format('d M Y H:i'),
             'change_notes' => $f->change_notes,
         ]);
@@ -648,6 +665,7 @@ class DocumentController extends Controller
             'expiry_date' => $doc->expiry_date?->format('d M Y'),
             'remarks' => $doc->remarks,
             'status' => $doc->status,
+            'is_expired' => GeneratedDocumentExpiry::isExpired($doc),
             'current_version' => $doc->current_version,
             'template_name' => $doc->documentTemplate?->template_name,
             'can_edit' => $employeeDocumentService->canEdit($doc, (int) $request->user()->id, (int) $employee->id),
@@ -814,7 +832,7 @@ class DocumentController extends Controller
 
         $letters = EmployeeDocument::query()
             ->with([
-                'documentType',
+                'documentType.category',
                 'documentTemplate',
                 'requestDetails',
                 'files' => fn ($q) => $q->orderByDesc('id'),
@@ -828,6 +846,7 @@ class DocumentController extends Controller
             ->map(function (EmployeeDocument $doc) {
                 $purpose = $doc->requestDetails->firstWhere('field_key', 'purpose')?->field_value ?? 'Official Purpose';
                 $latestFile = $doc->files->first();
+                $status = $doc->status;
 
                 return [
                     'id' => $doc->id,
@@ -836,9 +855,10 @@ class DocumentController extends Controller
                     'purpose' => $purpose,
                     'apply_date' => $doc->created_at?->format('d M Y') ?? '16 JAN 2026',
                     'approved_date' => $doc->status === 'approved' ? ($doc->updated_at?->format('d M Y') ?? '18 JAN 2026') : null,
-                    'status' => $doc->status,
-                    'status_label' => ucfirst($doc->status),
-                    'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+                    'status' => $status,
+                    'is_expired' => GeneratedDocumentExpiry::isExpired($doc),
+                    'status_label' => ucfirst($status),
+                    'file_url' => $this->documentFileUrl($doc, $latestFile),
                 ];
             });
 
@@ -863,7 +883,6 @@ class DocumentController extends Controller
                     new OA\Property(property: 'document_template_id', type: 'integer', nullable: true),
                     new OA\Property(property: 'organisation_id', type: 'integer', nullable: true),
                     new OA\Property(property: 'purpose', type: 'string', example: 'Employment Visa Process'),
-                    new OA\Property(property: 'details', type: 'string', nullable: true),
                     new OA\Property(property: 'to_address', type: 'string', nullable: true),
                     new OA\Property(property: 'visa_designation', type: 'string', nullable: true),
                     new OA\Property(property: 'destination_country', type: 'string', maxLength: 100, nullable: true),
@@ -909,7 +928,6 @@ class DocumentController extends Controller
 
         $fieldRules = [
             'purpose' => ['string', 'max:255'],
-            'details' => ['nullable', 'string'],
             'to_address' => ['string', 'max:255'],
             'visa_designation' => ['string', 'max:255'],
             'destination_country' => ['string', 'max:100'],
@@ -918,22 +936,21 @@ class DocumentController extends Controller
             'bank_iban' => ['string', 'max:100'],
         ];
         $fieldRequires = $docType->field_requires ?? [];
-        $rules = [];
+        unset($fieldRequires['details'], $fieldRequires['remarks']);
+        $rules = [
+            'details' => ['missing'],
+        ];
 
         foreach ($fieldRules as $field => $fieldValidationRules) {
-            if ($field === 'details') {
-                $rules[$field] = $fieldValidationRules;
-
-                continue;
-            }
-
             $rules[$field] = [
                 ...(! empty($fieldRequires[$field]) ? ['required'] : ['nullable']),
                 ...$fieldValidationRules,
             ];
         }
 
-        $validator = Validator::make($request->all(), $rules);
+        $validator = Validator::make($request->all(), $rules, [
+            'details.missing' => 'Details are supplied by HR during approval and cannot be submitted by the employee.',
+        ]);
 
         if ($validator->fails()) {
             return $this->errorResponse('Validation failed', 422, $validator->errors()->toArray());
@@ -1012,19 +1029,24 @@ class DocumentController extends Controller
         }
 
         $doc = EmployeeDocument::query()
-            ->with(['documentType', 'documentTemplate', 'requestDetails', 'histories', 'files' => fn ($q) => $q->orderByDesc('id')])
+            ->with(['documentType.category', 'documentTemplate', 'requestDetails', 'histories', 'files' => fn ($q) => $q->orderByDesc('id')])
             ->where('employee_id', $employee->id)
             ->findOrFail($id);
 
         $details = $doc->requestDetails->pluck('field_value', 'field_key');
+        $hrDetails = $doc->requestDetails->first(
+            fn ($detail) => $detail->field_key === 'details'
+                && $detail->field_name === 'HR Provided Details',
+        );
         $latestFile = $doc->files->first();
-        $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
+        $isExpired = GeneratedDocumentExpiry::isExpired($doc);
+        $fileUrl = $this->documentFileUrl($doc, $latestFile);
 
         return $this->successResponse([
             'id' => $doc->id,
             'title' => ($doc->documentType?->document_name ?? 'Document').' Request Details',
             'purpose' => $details['purpose'] ?? 'Employment Visa Process',
-            'details' => $details['details'] ?? 'Requesting a No Objection Certificate for embassy submission regarding the new employment visa renewal and international mobility transfer.',
+            'details' => $doc->status === 'approved' ? $hrDetails?->field_value : null,
             'to_address' => $details['to_address'] ?? null,
             'visa_designation' => $details['visa_designation'] ?? null,
             'salary_amount' => $details['salary_amount'] ?? null,
@@ -1035,8 +1057,10 @@ class DocumentController extends Controller
             'approved_date' => $doc->status === 'approved' ? ($doc->updated_at?->format('d M Y') ?? null) : null,
             'status' => ucfirst($doc->status),
             'remarks' => $doc->remarks,
+            'expiry_date' => $doc->expiry_date?->format('Y-m-d'),
+            'is_expired' => $isExpired,
             'file_url' => $fileUrl,
-            'download_url' => $latestFile ? url('storage/'.$latestFile->file_path) : null,
+            'download_url' => $this->documentFileUrl($doc, $latestFile),
             'has_generated_file' => (bool) $latestFile,
         ], 'Letter request details retrieved successfully.');
     }

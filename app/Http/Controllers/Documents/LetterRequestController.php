@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Documents;
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeDocument;
 use App\Services\LetterRequestService;
+use App\Support\GeneratedDocumentExpiry;
 use App\Support\LetterRequestApprovalFields;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,27 +41,33 @@ class LetterRequestController extends Controller
     public function approve(Request $request, EmployeeDocument $letterRequest): RedirectResponse
     {
         $letterRequest->loadMissing('documentType');
-        $approvalFields = LetterRequestApprovalFields::forDocumentCode(
-            $letterRequest->documentType?->document_code,
+        $fieldRequires = $letterRequest->documentType?->field_requires ?? [];
+        $submittedFields = array_diff(
+            array_keys($request->except(['_token', '_method'])),
+            ['details', 'remarks'],
         );
-        $fieldRules = [
-            'salary_amount' => ['numeric', 'min:0.01', 'max:999999999.99'],
-            'currency' => ['string', 'regex:/\A[A-Z]{3}\z/'],
-            'bank_iban' => ['string', 'max:100'],
-            'to_address' => ['string', 'max:500'],
-            'visa_designation' => ['string', 'max:255'],
-            'purpose' => ['string', 'max:1000'],
-        ];
-        $rules = [
-            'remarks' => 'nullable|string|max:500',
-        ];
+        $errors = [];
 
-        foreach ($fieldRules as $field => $fieldRule) {
-            $rules[$field] = [
-                ...(in_array($field, $approvalFields, true) ? ['required'] : ['nullable']),
-                ...$fieldRule,
-            ];
+        foreach ($submittedFields as $field) {
+            $errors[$field] = array_key_exists($field, $fieldRequires)
+                ? 'Employee-submitted fields are read-only during HR approval.'
+                : 'Only HR details and remarks may be submitted during approval.';
         }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $rules = [
+            'details' => [
+                ...(LetterRequestApprovalFields::requiresHrDetails($letterRequest->documentType?->document_code)
+                    ? ['required']
+                    : ['nullable']),
+                'string',
+                'max:2000',
+            ],
+            'remarks' => ['nullable', 'string', 'max:500'],
+        ];
 
         $validated = $request->validate($rules);
 
@@ -101,8 +109,15 @@ class LetterRequestController extends Controller
         ]);
         $employee = $doc->employee;
         $details = $doc->requestDetails->pluck('field_value', 'field_key');
+        $hrDetails = $doc->requestDetails->first(
+            fn ($detail) => $detail->field_key === 'details'
+                && $detail->field_name === 'HR Provided Details',
+        );
+        $fieldRequires = $doc->documentType?->field_requires ?? [];
+        unset($fieldRequires['details'], $fieldRequires['remarks']);
 
         $latestFile = $doc->files->first();
+        $isExpired = GeneratedDocumentExpiry::isExpired($doc);
 
         return [
             'id' => $doc->id,
@@ -113,26 +128,29 @@ class LetterRequestController extends Controller
             'document_name' => $doc->documentType?->document_name,
             'document_code' => $doc->documentType?->document_code,
             'purpose' => $details['purpose'] ?? 'General Request',
-            'details' => $details['details'] ?? $doc->remarks,
+            'details' => $doc->status === 'approved' ? $hrDetails?->field_value : null,
             'to_address' => $details['to_address'] ?? null,
             'destination_country' => $details['destination_country'] ?? null,
             'visa_designation' => $details['visa_designation'] ?? null,
             'salary_amount' => $details['salary_amount'] ?? null,
             'currency' => $details['currency'] ?? null,
             'bank_iban' => $details['bank_iban'] ?? null,
-            'field_requires' => empty($doc->documentType?->field_requires)
+            'field_requires' => empty($fieldRequires)
                 ? null
-                : (object) $doc->documentType->field_requires,
-            'approval_fields' => LetterRequestApprovalFields::forDocumentCode(
-                $doc->documentType?->document_code,
-            ),
+                : (object) $fieldRequires,
+            'request_details' => $doc->requestDetails
+                ->reject(fn ($detail) => in_array($detail->field_key, ['details', 'remarks'], true))
+                ->pluck('field_value', 'field_key')
+                ->all(),
             'status' => $doc->status,
             'remarks' => $doc->remarks,
             'applied_date' => $doc->created_at?->format('d M Y'),
             'approved_date' => $doc->status === 'approved' ? $doc->updated_at?->format('d M Y') : null,
-            'rendered_html' => $this->letterRequestService->renderDocumentHtml($doc, $employee),
-            'file_url' => $latestFile ? route('employee-documents.file', $doc->id) : null,
-            'download_url' => $latestFile ? route('employee-documents.download', $doc->id) : null,
+            'expiry_date' => $doc->expiry_date?->format('Y-m-d'),
+            'is_expired' => $isExpired,
+            'rendered_html' => $isExpired ? null : $this->letterRequestService->renderDocumentHtml($doc, $employee),
+            'file_url' => $latestFile && ! $isExpired ? route('employee-documents.file', $doc->id) : null,
+            'download_url' => $latestFile && ! $isExpired ? route('employee-documents.download', $doc->id) : null,
             'histories' => $doc->histories->map(fn ($h) => [
                 'id' => $h->id,
                 'action_type' => $h->action_type,

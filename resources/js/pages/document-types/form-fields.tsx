@@ -24,6 +24,7 @@ type DocumentTypeFormValues = {
     requires_uid?: boolean | number | string | null;
     requires_total_experience?: boolean | number | string | null;
     record_source?: string | null;
+    validity_days?: number | string | null;
 };
 
 type Props = {
@@ -168,6 +169,22 @@ export default function DocumentTypeFormFields({
                         <option value="uploaded">Uploaded</option>
                         <option value="generated">Generated</option>
                     </select>
+                </Field>
+
+                <Field
+                    label="Generated document validity (days)"
+                    name="validity_days"
+                    error={errors.validity_days}
+                >
+                    <Input
+                        id="validity_days"
+                        name="validity_days"
+                        type="number"
+                        min={1}
+                        step={1}
+                        placeholder="Leave blank for 3 months from PDF generation"
+                        defaultValue={defaults.validity_days ?? ''}
+                    />
                 </Field>
 
                 <Field

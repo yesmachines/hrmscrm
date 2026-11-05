@@ -20,6 +20,11 @@ class DocumentTypeResource extends JsonResource
         $type = $this->resource;
         $templates = $type?->documentTemplates ?? collect();
         $hasTemplate = $templates->isNotEmpty();
+        $fieldRequires = $type?->field_requires ?? [];
+
+        if ($type?->category?->short_code === 'letter_requests') {
+            unset($fieldRequires['details'], $fieldRequires['remarks']);
+        }
 
         return [
             'id' => $type?->id,
@@ -32,7 +37,7 @@ class DocumentTypeResource extends JsonResource
             'requires_hr_approval' => $type ? (bool) $type->requires_hr_approval : null,
             'requires_reminder' => $type ? (bool) $type->requires_reminder : null,
             'record_source' => $type?->record_source,
-            'field_requires' => empty($type?->field_requires) ? null : (object) $type->field_requires,
+            'field_requires' => empty($fieldRequires) ? null : (object) $fieldRequires,
             'has_blank_form' => $hasTemplate,
             'blank_form_url' => $hasTemplate ? route('api.v1.documents.blank-form', $type->id) : null,
             'templates' => $templates->map(fn ($template) => [

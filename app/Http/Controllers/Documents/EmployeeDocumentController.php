@@ -8,6 +8,7 @@ use App\Models\DocumentType;
 use App\Models\EmployeeDocument;
 use App\Models\SalesCrm\Employee;
 use App\Services\EmployeeDocumentService;
+use App\Support\GeneratedDocumentExpiry;
 use App\Support\SalesCrmRoles;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -436,9 +437,7 @@ class EmployeeDocumentController extends Controller
 
     public function file(EmployeeDocument $employeeDocument): BinaryFileResponse
     {
-        if ($employeeDocument->documentType?->category?->short_code === 'letter_requests'
-            && $employeeDocument->created_at
-            && $employeeDocument->created_at->copy()->addMonths(3)->isPast()) {
+        if (GeneratedDocumentExpiry::isExpired($employeeDocument)) {
             abort(403, 'This letter request has expired and is no longer available.');
         }
 
@@ -452,9 +451,7 @@ class EmployeeDocumentController extends Controller
 
     public function download(EmployeeDocument $employeeDocument): BinaryFileResponse
     {
-        if ($employeeDocument->documentType?->category?->short_code === 'letter_requests'
-            && $employeeDocument->created_at
-            && $employeeDocument->created_at->copy()->addMonths(3)->isPast()) {
+        if (GeneratedDocumentExpiry::isExpired($employeeDocument)) {
             abort(403, 'This letter request has expired and is no longer available.');
         }
 
@@ -482,7 +479,14 @@ class EmployeeDocumentController extends Controller
             return null;
         }
 
-        $details = $doc->requestDetails->pluck('field_value', 'field_key')->all();
+        $isLetterRequest = $doc->documentType?->category?->short_code === 'letter_requests';
+        $details = $doc->requestDetails
+            ->reject(fn ($detail) => $isLetterRequest
+                && $detail->field_key === 'details'
+                && $detail->field_name !== 'HR Provided Details')
+            ->pluck('field_value', 'field_key')
+            ->all();
+
         $employee?->loadMissing(['user', 'department', 'organisation']);
         $profile = $employee?->profile();
 
@@ -509,6 +513,7 @@ class EmployeeDocumentController extends Controller
             '{{document_number}}' => $doc->document_number ?: ('DOC-'.str_pad((string) $doc->id, 5, '0', STR_PAD_LEFT)),
             '{{issue_date}}' => $doc->issue_date ? $doc->issue_date->format('d M Y') : Carbon::now()->format('d M Y'),
             '{{purpose}}' => $details['purpose'] ?? 'Official Purpose',
+            '{{details}}' => $details['details'] ?? '',
             '{{to_address}}' => $details['to_address'] ?? 'To Whom It May Concern',
             '{{visa_designation}}' => $details['visa_designation'] ?? ($employee?->designation ?? 'Employee'),
             '{{payroll_month}}' => Carbon::now()->format('F Y'),
@@ -534,11 +539,11 @@ class EmployeeDocumentController extends Controller
     protected function payload(EmployeeDocument $doc, bool $canEdit = false): array
     {
         $employee = Employee::query()->with(['user:id,name,email', 'department:id,name', 'organisation'])->find($doc->employee_id);
+        $isLetterRequest = $doc->documentType?->category?->short_code === 'letter_requests';
         $latestFile = $doc->files->first();
         $ext = $latestFile ? strtolower(pathinfo($latestFile->file_path, PATHINFO_EXTENSION)) : null;
 
-        $isLetterRequest = $doc->documentType?->category?->short_code === 'letter_requests';
-        $isExpiredLetter = $isLetterRequest && $doc->created_at && $doc->created_at->copy()->addMonths(3)->isPast();
+        $isExpiredLetter = GeneratedDocumentExpiry::isExpired($doc);
         $canAccessFile = ! $isExpiredLetter;
 
         return [
@@ -561,7 +566,8 @@ class EmployeeDocumentController extends Controller
             'expiry_date_display' => $doc->expiry_date?->format('d M Y'),
             'remarks' => $doc->remarks,
             'current_version' => $doc->current_version ?? '1.0',
-            'status' => $isExpiredLetter ? 'expired' : $doc->status,
+            'status' => $doc->status,
+            'is_expired' => $isExpiredLetter,
             'can_edit' => $canEdit && ! $isExpiredLetter,
             'created_at' => $doc->created_at?->format('d M Y H:i'),
             'file_url' => ($latestFile && $canAccessFile) ? route('employee-documents.file', $doc->id) : null,
@@ -576,8 +582,8 @@ class EmployeeDocumentController extends Controller
                 'id' => $f->id,
                 'version_no' => $f->version_no,
                 'file_path' => $f->file_path,
-                'file_url' => route('employee-documents.file', $doc->id),
-                'download_url' => route('employee-documents.download', $doc->id),
+                'file_url' => $canAccessFile ? route('employee-documents.file', $doc->id) : null,
+                'download_url' => $canAccessFile ? route('employee-documents.download', $doc->id) : null,
                 'uploaded_date' => $f->uploaded_date?->format('d M Y H:i'),
                 'change_notes' => $f->change_notes,
             ]),
@@ -587,11 +593,15 @@ class EmployeeDocumentController extends Controller
                 'remarks' => $h->remarks,
                 'action_on' => $h->action_on?->format('d M Y H:i'),
             ]),
-            'request_details' => $doc->requestDetails->map(fn ($d) => [
-                'field_name' => $d->field_name,
-                'field_key' => $d->field_key,
-                'field_value' => $d->field_value,
-            ]),
+            'request_details' => $doc->requestDetails
+                ->reject(fn ($detail) => $isLetterRequest
+                    && $detail->field_key === 'details'
+                    && $detail->field_name !== 'HR Provided Details')
+                ->map(fn ($d) => [
+                    'field_name' => $d->field_name,
+                    'field_key' => $d->field_key,
+                    'field_value' => $d->field_value,
+                ]),
         ];
     }
 }
