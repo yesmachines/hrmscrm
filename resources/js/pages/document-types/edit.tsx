@@ -26,6 +26,7 @@ type DocumentType = {
     requires_uid: boolean;
     requires_total_experience: boolean;
     record_source: string | null;
+    validity_days: number | null;
     category: { id: number; name: string } | null;
 };
 

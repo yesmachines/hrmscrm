@@ -1,11 +1,8 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
-    Calendar,
     CheckCircle2,
-    Clock,
     Download,
-    Eye,
     FileCheck,
     FileText,
     History,
@@ -16,8 +13,6 @@ import {
     XCircle,
 } from 'lucide-react';
 import { useState } from 'react';
-import Heading from '@/components/heading';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -49,6 +44,7 @@ type DocumentDetail = {
     expiry_date: string | null;
     expiry_date_display: string | null;
     remarks: string | null;
+    is_expired: boolean;
     current_version: string;
     status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived' | 'expired';
     can_edit: boolean;
@@ -112,7 +108,10 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
     };
 
     const handleReject = () => {
-        if (!rejectRemarks.trim()) return;
+        if (!rejectRemarks.trim()) {
+            return;
+        }
+
         setProcessing(true);
         router.post(
             `/employee-documents/${document.id}/reject`,
@@ -272,6 +271,22 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                     {document.rendered_html && !document.file_url ? 'Generated Letter Document' : `Document File (Version ${document.current_version})`}
                                 </h3>
                                 <div className="flex items-center gap-2">
+                                    {document.is_expired && (
+                                        <>
+                                            <span title="Document expired">
+                                                <Button variant="outline" size="sm" disabled>
+                                                    <Printer className="size-3.5" />
+                                                    View / Print
+                                                </Button>
+                                            </span>
+                                            <span title="Document expired">
+                                                <Button variant="outline" size="sm" disabled>
+                                                    <Download className="size-3.5" />
+                                                    Download File
+                                                </Button>
+                                            </span>
+                                        </>
+                                    )}
                                     {document.rendered_html && (
                                         <Button
                                             variant="outline"
@@ -279,6 +294,7 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                             className="gap-1.5"
                                             onClick={() => {
                                                 const printWindow = window.open('', '_blank');
+
                                                 if (printWindow) {
                                                     printWindow.document.write(`
                                                         <html>
@@ -323,6 +339,7 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                             onError={(e) => {
                                                 e.currentTarget.style.display = 'none';
                                                 const parent = e.currentTarget.parentElement;
+
                                                 if (parent && !parent.querySelector('.img-error-fallback')) {
                                                     const fallback = window.document.createElement('div');
                                                     fallback.className = 'img-error-fallback text-center p-8 space-y-2';
@@ -346,6 +363,14 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                             </Button>
                                         </div>
                                     )}
+                                </div>
+                            ) : document.is_expired ? (
+                                <div className="rounded-xl border border-border/80 bg-neutral-50 p-8 text-center">
+                                    <FileText className="size-12 mx-auto text-muted-foreground/50 mb-2" />
+                                    <p className="font-medium">Document expired</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Viewing and downloading are no longer available.
+                                    </p>
                                 </div>
                             ) : document.rendered_html ? (
                                 <div className="rounded-xl border border-border/80 bg-slate-50/60 p-6 overflow-x-auto">

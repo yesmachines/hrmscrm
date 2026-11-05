@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Documents;
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeDocument;
 use App\Services\LetterRequestService;
+use App\Support\GeneratedDocumentExpiry;
 use App\Support\LetterRequestApprovalFields;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -103,6 +104,7 @@ class LetterRequestController extends Controller
         $details = $doc->requestDetails->pluck('field_value', 'field_key');
 
         $latestFile = $doc->files->first();
+        $isExpired = GeneratedDocumentExpiry::isExpired($doc);
 
         return [
             'id' => $doc->id,
@@ -130,9 +132,11 @@ class LetterRequestController extends Controller
             'remarks' => $doc->remarks,
             'applied_date' => $doc->created_at?->format('d M Y'),
             'approved_date' => $doc->status === 'approved' ? $doc->updated_at?->format('d M Y') : null,
-            'rendered_html' => $this->letterRequestService->renderDocumentHtml($doc, $employee),
-            'file_url' => $latestFile ? route('employee-documents.file', $doc->id) : null,
-            'download_url' => $latestFile ? route('employee-documents.download', $doc->id) : null,
+            'expiry_date' => $doc->expiry_date?->format('Y-m-d'),
+            'is_expired' => $isExpired,
+            'rendered_html' => $isExpired ? null : $this->letterRequestService->renderDocumentHtml($doc, $employee),
+            'file_url' => $latestFile && ! $isExpired ? route('employee-documents.file', $doc->id) : null,
+            'download_url' => $latestFile && ! $isExpired ? route('employee-documents.download', $doc->id) : null,
             'histories' => $doc->histories->map(fn ($h) => [
                 'id' => $h->id,
                 'action_type' => $h->action_type,

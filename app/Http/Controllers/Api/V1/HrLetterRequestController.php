@@ -59,10 +59,9 @@ class HrLetterRequestController extends Controller
     {
         $letterRequest = $letterRequestService->findForHr($id);
         $data = HrLetterRequestResource::make($letterRequest)->resolve($request);
-        $data['rendered_html'] = $letterRequestService->renderDocumentHtml(
-            $letterRequest,
-            $letterRequest->employee,
-        );
+        $data['rendered_html'] = $data['is_expired']
+            ? null
+            : $letterRequestService->renderDocumentHtml($letterRequest, $letterRequest->employee);
         $fieldRequires = $letterRequest->documentType?->field_requires;
         $data['field_requires'] = empty($fieldRequires) ? null : (object) $fieldRequires;
 

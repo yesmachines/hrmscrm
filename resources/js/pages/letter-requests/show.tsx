@@ -61,6 +61,8 @@ type LetterDetail = {
     remarks: string | null;
     applied_date: string;
     approved_date: string | null;
+    expiry_date: string | null;
+    is_expired: boolean;
     rendered_html?: string | null;
     file_url?: string | null;
     download_url?: string | null;
@@ -256,7 +258,7 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                     <DialogHeader>
                                         <DialogTitle className="text-emerald-700 flex items-center gap-2">
                                             <FileCheck className="size-5" />
-                                            Approve Letter & Provide HR Details
+                                            Approve {request.document_name}
                                         </DialogTitle>
                                         <DialogDescription>
                                             Enter the official verification details below to embed into the generated document.
@@ -421,6 +423,34 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                 </div>
                                 <div className="rounded-xl border border-border/80 bg-slate-50/60 h-[600px] overflow-hidden">
                                     <iframe src={request.file_url} className="w-full h-full border-0" title="PDF Preview" />
+                                </div>
+                            </div>
+                        ) : request.is_expired ? (
+                            <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-base font-semibold flex items-center gap-2">
+                                            <FileText className="size-4 text-primary" />
+                                            Generated Official Letter Document
+                                        </h3>
+                                        <p className="mt-1 text-sm text-destructive">
+                                            Document expired{request.expiry_date ? ` on ${request.expiry_date}` : ''}.
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <span title="Document expired">
+                                            <Button variant="outline" size="sm" disabled>
+                                                <Printer className="size-3.5" />
+                                                View / Print PDF
+                                            </Button>
+                                        </span>
+                                        <span title="Document expired">
+                                            <Button variant="default" size="sm" disabled>
+                                                <Printer className="size-3.5" />
+                                                Download PDF
+                                            </Button>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         ) : request.rendered_html ? (

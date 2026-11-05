@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\EmployeeDocument;
+use App\Support\GeneratedDocumentExpiry;
 use App\Support\LetterRequestApprovalFields;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -24,6 +25,10 @@ class HrLetterRequestResource extends JsonResource
             : collect();
         $latestFile = $this->relationLoaded('files')
             ? $this->files->first()
+            : null;
+        $isExpired = GeneratedDocumentExpiry::isExpired($this->resource);
+        $fileUrl = $latestFile && ! $isExpired
+            ? Storage::disk('public')->url($latestFile->file_path)
             : null;
 
         return [
@@ -55,8 +60,10 @@ class HrLetterRequestResource extends JsonResource
             'remarks' => $this->remarks,
             'applied_date' => $this->created_at?->format('d M Y'),
             'approved_date' => $this->status === 'approved' ? $this->updated_at?->format('d M Y') : null,
-            'file_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
-            'download_url' => $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null,
+            'expiry_date' => $this->expiry_date?->format('Y-m-d'),
+            'is_expired' => $isExpired,
+            'file_url' => $fileUrl,
+            'download_url' => $fileUrl,
             'has_generated_file' => $latestFile !== null,
             'request_details' => $requestDetails->pluck('field_value', 'field_key'),
             'histories' => $this->whenLoaded(

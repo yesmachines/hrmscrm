@@ -21,6 +21,7 @@ type DocumentType = {
     requires_uid: boolean;
     requires_total_experience: boolean;
     record_source: string | null;
+    validity_days: number | null;
     category: { id: number; name: string } | null;
 };
 
@@ -132,6 +133,10 @@ export default function DocumentTypesShow({
                     <Detail
                         label="Record source"
                         value={formatRecordSource(documentType.record_source)}
+                    />
+                    <Detail
+                        label="Generated document validity (days)"
+                        value={documentType.validity_days}
                     />
                     <Detail
                         label="Editable before approval"
