@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Designation\StoreDesignationRequest;
 use App\Http\Requests\Designation\UpdateDesignationRequest;
 use App\Models\Designation;
-use App\Models\SalesCrm\Division;
+use App\Models\SalesCrm\Department;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -30,8 +30,8 @@ class DesignationController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        $divisions = $this->divisions();
-        $divisionsMap = collect($divisions)->keyBy('id');
+        $departments = $this->departments();
+        $departmentsMap = collect($departments)->keyBy('id');
 
         $designations->setCollection(
             $designations->getCollection()->map(fn (Designation $designation): array => [
@@ -40,7 +40,7 @@ class DesignationController extends Controller
                 'title' => $designation->title,
                 'shortcode' => $designation->shortcode,
                 'status' => $designation->status,
-                'department' => $divisionsMap->get($designation->department_id),
+                'department' => $departmentsMap->get($designation->department_id),
             ])
         );
 
@@ -52,7 +52,7 @@ class DesignationController extends Controller
     public function create(): Response
     {
         return Inertia::render('designations/create', [
-            'departments' => $this->divisions(),
+            'departments' => $this->departments(),
         ]);
     }
 
@@ -70,8 +70,8 @@ class DesignationController extends Controller
 
     public function show(Designation $designation): Response
     {
-        $divisions = $this->divisions();
-        $department = collect($divisions)->firstWhere('id', $designation->department_id);
+        $department = collect($this->departments())
+            ->firstWhere('id', $designation->department_id);
 
         return Inertia::render('designations/show', [
             'designation' => [
@@ -97,7 +97,7 @@ class DesignationController extends Controller
                 'shortcode' => $designation->shortcode,
                 'status' => $designation->status,
             ],
-            'departments' => $this->divisions(),
+            'departments' => $this->departments(),
         ]);
     }
 
@@ -138,20 +138,20 @@ class DesignationController extends Controller
     /**
      * @return list<array{id: int, name: string, code: string}>
      */
-    private function divisions(): array
+    private function departments(): array
     {
-        if (! Schema::connection('salescrm')->hasTable('divisions')) {
+        if (! Schema::connection('salescrm')->hasTable('departments')) {
             return [];
         }
 
-        return Division::query()
+        return Department::query()
             ->where('status', 1)
             ->orderBy('name')
             ->get(['id', 'name', 'code'])
-            ->map(fn (Division $division): array => [
-                'id' => $division->id,
-                'name' => $division->name,
-                'code' => $division->code,
+            ->map(fn (Department $department): array => [
+                'id' => $department->id,
+                'name' => $department->name,
+                'code' => $department->code,
             ])
             ->all();
     }

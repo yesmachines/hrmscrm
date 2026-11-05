@@ -169,7 +169,7 @@ export default function EmployeesShow({
                                 {name.charAt(0).toUpperCase()}
                             </div>
                         )}
-                        <Heading title={name} description={employee.email ?? undefined} />
+                        <Heading title={name} />
                     </div>
                     <div className="flex gap-2">
                         <Button variant="outline" asChild>
@@ -190,6 +190,7 @@ export default function EmployeesShow({
                 </div>
 
                 <Section title="Employee">
+                    <Detail label="Work email" value={employee.email} />
                     <Detail label="Employee reference number" value={employee.emp_num} />
                     <Detail label="Employee code" value={employee.employee_code}/>
                     <Detail label="ACL / Role" value={employee.roles} />

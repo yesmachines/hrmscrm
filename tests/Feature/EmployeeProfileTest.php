@@ -123,6 +123,22 @@ test('authenticated users can create an employee across salescrm and hrms', func
         'personal_email' => 'personal@example.com',
     ]);
 
+    $this->actingAs($admin)
+        ->get(route('employees.edit', $employee))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('employees/edit')
+            ->where('employee.email', 'test.employee@example.com')
+            ->where('employee.profile.personal_email', 'personal@example.com'));
+
+    $this->actingAs($admin)
+        ->get(route('employees.show', $employee))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('employees/show')
+            ->where('employee.email', 'test.employee@example.com')
+            ->where('employee.profile.personal_email', 'personal@example.com'));
+
     $roleId = DB::connection('salescrm')->table('roles')->where('name', 'salesmanager')->value('id');
     expect(
         DB::connection('salescrm')
