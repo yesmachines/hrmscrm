@@ -479,7 +479,14 @@ class EmployeeDocumentController extends Controller
             return null;
         }
 
-        $details = $doc->requestDetails->pluck('field_value', 'field_key')->all();
+        $isLetterRequest = $doc->documentType?->category?->short_code === 'letter_requests';
+        $details = $doc->requestDetails
+            ->reject(fn ($detail) => $isLetterRequest
+                && $detail->field_key === 'details'
+                && $detail->field_name !== 'HR Provided Details')
+            ->pluck('field_value', 'field_key')
+            ->all();
+
         $employee?->loadMissing(['user', 'department', 'organisation']);
         $profile = $employee?->profile();
 
@@ -506,6 +513,7 @@ class EmployeeDocumentController extends Controller
             '{{document_number}}' => $doc->document_number ?: ('DOC-'.str_pad((string) $doc->id, 5, '0', STR_PAD_LEFT)),
             '{{issue_date}}' => $doc->issue_date ? $doc->issue_date->format('d M Y') : Carbon::now()->format('d M Y'),
             '{{purpose}}' => $details['purpose'] ?? 'Official Purpose',
+            '{{details}}' => $details['details'] ?? '',
             '{{to_address}}' => $details['to_address'] ?? 'To Whom It May Concern',
             '{{visa_designation}}' => $details['visa_designation'] ?? ($employee?->designation ?? 'Employee'),
             '{{payroll_month}}' => Carbon::now()->format('F Y'),
@@ -531,6 +539,7 @@ class EmployeeDocumentController extends Controller
     protected function payload(EmployeeDocument $doc, bool $canEdit = false): array
     {
         $employee = Employee::query()->with(['user:id,name,email', 'department:id,name', 'organisation'])->find($doc->employee_id);
+        $isLetterRequest = $doc->documentType?->category?->short_code === 'letter_requests';
         $latestFile = $doc->files->first();
         $ext = $latestFile ? strtolower(pathinfo($latestFile->file_path, PATHINFO_EXTENSION)) : null;
 
@@ -584,11 +593,15 @@ class EmployeeDocumentController extends Controller
                 'remarks' => $h->remarks,
                 'action_on' => $h->action_on?->format('d M Y H:i'),
             ]),
-            'request_details' => $doc->requestDetails->map(fn ($d) => [
-                'field_name' => $d->field_name,
-                'field_key' => $d->field_key,
-                'field_value' => $d->field_value,
-            ]),
+            'request_details' => $doc->requestDetails
+                ->reject(fn ($detail) => $isLetterRequest
+                    && $detail->field_key === 'details'
+                    && $detail->field_name !== 'HR Provided Details')
+                ->map(fn ($d) => [
+                    'field_name' => $d->field_name,
+                    'field_key' => $d->field_key,
+                    'field_value' => $d->field_value,
+                ]),
         ];
     }
 }

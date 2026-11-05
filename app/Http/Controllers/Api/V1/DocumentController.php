@@ -883,7 +883,6 @@ class DocumentController extends Controller
                     new OA\Property(property: 'document_template_id', type: 'integer', nullable: true),
                     new OA\Property(property: 'organisation_id', type: 'integer', nullable: true),
                     new OA\Property(property: 'purpose', type: 'string', example: 'Employment Visa Process'),
-                    new OA\Property(property: 'details', type: 'string', nullable: true),
                     new OA\Property(property: 'to_address', type: 'string', nullable: true),
                     new OA\Property(property: 'visa_designation', type: 'string', nullable: true),
                     new OA\Property(property: 'destination_country', type: 'string', maxLength: 100, nullable: true),
@@ -929,7 +928,6 @@ class DocumentController extends Controller
 
         $fieldRules = [
             'purpose' => ['string', 'max:255'],
-            'details' => ['nullable', 'string'],
             'to_address' => ['string', 'max:255'],
             'visa_designation' => ['string', 'max:255'],
             'destination_country' => ['string', 'max:100'],
@@ -938,22 +936,21 @@ class DocumentController extends Controller
             'bank_iban' => ['string', 'max:100'],
         ];
         $fieldRequires = $docType->field_requires ?? [];
-        $rules = [];
+        unset($fieldRequires['details'], $fieldRequires['remarks']);
+        $rules = [
+            'details' => ['missing'],
+        ];
 
         foreach ($fieldRules as $field => $fieldValidationRules) {
-            if ($field === 'details') {
-                $rules[$field] = $fieldValidationRules;
-
-                continue;
-            }
-
             $rules[$field] = [
                 ...(! empty($fieldRequires[$field]) ? ['required'] : ['nullable']),
                 ...$fieldValidationRules,
             ];
         }
 
-        $validator = Validator::make($request->all(), $rules);
+        $validator = Validator::make($request->all(), $rules, [
+            'details.missing' => 'Details are supplied by HR during approval and cannot be submitted by the employee.',
+        ]);
 
         if ($validator->fails()) {
             return $this->errorResponse('Validation failed', 422, $validator->errors()->toArray());
@@ -1037,6 +1034,10 @@ class DocumentController extends Controller
             ->findOrFail($id);
 
         $details = $doc->requestDetails->pluck('field_value', 'field_key');
+        $hrDetails = $doc->requestDetails->first(
+            fn ($detail) => $detail->field_key === 'details'
+                && $detail->field_name === 'HR Provided Details',
+        );
         $latestFile = $doc->files->first();
         $isExpired = GeneratedDocumentExpiry::isExpired($doc);
         $fileUrl = $this->documentFileUrl($doc, $latestFile);
@@ -1045,7 +1046,7 @@ class DocumentController extends Controller
             'id' => $doc->id,
             'title' => ($doc->documentType?->document_name ?? 'Document').' Request Details',
             'purpose' => $details['purpose'] ?? 'Employment Visa Process',
-            'details' => $details['details'] ?? 'Requesting a No Objection Certificate for embassy submission regarding the new employment visa renewal and international mobility transfer.',
+            'details' => $doc->status === 'approved' ? $hrDetails?->field_value : null,
             'to_address' => $details['to_address'] ?? null,
             'visa_designation' => $details['visa_designation'] ?? null,
             'salary_amount' => $details['salary_amount'] ?? null,

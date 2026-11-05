@@ -2,11 +2,9 @@ import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     CheckCircle2,
-    DollarSign,
     FileCheck,
     FileText,
     History,
-    Landmark,
     Printer,
     ShieldAlert,
     User,
@@ -29,14 +27,13 @@ import { Label } from '@/components/ui/label';
 import { formatDateTime } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
-type ApprovalField = 'salary_amount' | 'currency' | 'bank_iban' | 'to_address' | 'visa_designation' | 'purpose';
-
-const approvalFieldLabels: Record<ApprovalField, string> = {
+const employeeRequestFieldLabels: Record<string, string> = {
     salary_amount: 'Salary Amount',
     currency: 'Currency',
     bank_iban: 'Employee Bank IBAN',
     to_address: 'Addressed To',
     visa_designation: 'Visa Designation',
+    destination_country: 'Destination Country',
     purpose: 'Purpose',
 };
 
@@ -56,7 +53,8 @@ type LetterDetail = {
     salary_amount: string | null;
     currency: string | null;
     bank_iban: string | null;
-    approval_fields: ApprovalField[];
+    field_requires: Record<string, boolean> | null;
+    request_details: Record<string, string>;
     status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived' | 'expired';
     remarks: string | null;
     applied_date: string;
@@ -90,50 +88,28 @@ type Props = {
 export default function LetterRequestShow({ request, employee }: Props) {
     const [approveOpen, setApproveOpen] = useState(false);
     const [rejectOpen, setRejectOpen] = useState(false);
-    const [salaryAmount, setSalaryAmount] = useState(request.salary_amount || '');
-    const [currency, setCurrency] = useState(request.currency || '');
-    const [bankIban, setBankIban] = useState(request.bank_iban || '');
-    const [toAddress, setToAddress] = useState(request.to_address || '');
-    const [visaDesignation, setVisaDesignation] = useState(request.visa_designation || '');
-    const [purpose, setPurpose] = useState(request.purpose || '');
+    const [hrDetails, setHrDetails] = useState('');
     const [remarks, setRemarks] = useState(request.remarks || '');
     const [rejectRemarks, setRejectRemarks] = useState('');
     const [processing, setProcessing] = useState(false);
 
     const isPending = request.status === 'submitted' || request.status === 'under_review';
-    const approvalValues: Record<ApprovalField, string> = {
-        salary_amount: salaryAmount,
-        currency,
-        bank_iban: bankIban,
-        to_address: toAddress,
-        visa_designation: visaDesignation,
-        purpose,
-    };
-    const requestFieldValues: Record<ApprovalField, string | null> = {
-        salary_amount: request.salary_amount,
-        currency: request.currency,
-        bank_iban: request.bank_iban,
-        to_address: request.to_address,
-        visa_designation: request.visa_designation,
-        purpose: request.purpose,
-    };
-    const hasRequiredApprovalFields = request.approval_fields.every(
-        (field) => approvalValues[field].trim().length > 0
+    const employeeRequestFields = Object.entries(request.field_requires ?? {}).filter(
+        ([field, isRequired]) => isRequired && field !== 'details' && field !== 'remarks',
     );
+    const requiresHrDetails = ['noc', 'salary_transfer_letter'].includes(request.document_code);
+    const hasRequiredHrDetails = !requiresHrDetails || hrDetails.trim().length > 0;
 
     const handleApprove = () => {
-        if (!hasRequiredApprovalFields) {
+        if (!hasRequiredHrDetails) {
             return;
         }
 
         setProcessing(true);
-        const approvedDetails = Object.fromEntries(
-            request.approval_fields.map((field) => [field, approvalValues[field]])
-        );
         router.post(
             `/letter-requests/${request.id}/approve`,
             {
-                ...approvedDetails,
+                details: hrDetails.trim(),
                 remarks,
             },
             {
@@ -261,98 +237,44 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                             Approve {request.document_name}
                                         </DialogTitle>
                                         <DialogDescription>
-                                            Enter the official verification details below to embed into the generated document.
+                                            Employee-provided fields are read-only. Enter HR details and remarks; HR details are saved with the request and included in the generated letter.
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-4 py-2">
-                                        {request.approval_fields.includes('salary_amount') && (
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="salary_amount" className="flex items-center gap-1.5">
-                                                    <DollarSign className="size-3.5 text-muted-foreground" />
-                                                    Salary Amount *
-                                                </Label>
-                                                <Input
-                                                    id="salary_amount"
-                                                    value={salaryAmount}
-                                                    onChange={(e) => setSalaryAmount(e.target.value)}
-                                                    placeholder="e.g. 18,500"
-                                                    required
-                                                />
+                                        {employeeRequestFields.length > 0 && (
+                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                {employeeRequestFields.map(([field]) => (
+                                                    <div key={field} className="space-y-1.5">
+                                                        <Label htmlFor={`employee_${field}`}>
+                                                            {employeeRequestFieldLabels[field] ??
+                                                                field.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                                                        </Label>
+                                                        <Input
+                                                            id={`employee_${field}`}
+                                                            value={request.request_details[field] ?? ''}
+                                                            placeholder="Not provided"
+                                                            readOnly
+                                                        />
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
 
-                                        {request.approval_fields.includes('currency') && (
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="currency">Currency *</Label>
-                                                <Input
-                                                    id="currency"
-                                                    maxLength={3}
-                                                    value={currency}
-                                                    onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                                                    placeholder="e.g. AED"
-                                                    required
-                                                />
-                                            </div>
-                                        )}
-
-                                        {request.approval_fields.includes('bank_iban') && (
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="bank_iban" className="flex items-center gap-1.5">
-                                                    <Landmark className="size-3.5 text-muted-foreground" />
-                                                    Employee Bank IBAN *
-                                                </Label>
-                                                <Input
-                                                    id="bank_iban"
-                                                    value={bankIban}
-                                                    onChange={(e) => setBankIban(e.target.value)}
-                                                    placeholder="e.g. AE070331234567890123456"
-                                                    required
-                                                />
-                                            </div>
-                                        )}
-
-                                        {request.approval_fields.includes('to_address') && (
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="to_address">Addressed To *</Label>
-                                                <textarea
-                                                    id="to_address"
-                                                    rows={2}
-                                                    value={toAddress}
-                                                    onChange={(e) => setToAddress(e.target.value)}
-                                                    placeholder="e.g. To Whom It May Concern, Consulate General, etc."
-                                                    className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                    required
-                                                />
-                                            </div>
-                                        )}
-
-                                        {request.approval_fields.includes('visa_designation') && (
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="visa_designation">Visa Designation *</Label>
-                                                <Input
-                                                    id="visa_designation"
-                                                    value={visaDesignation}
-                                                    onChange={(e) => setVisaDesignation(e.target.value)}
-                                                    placeholder="e.g. Project Manager"
-                                                    required
-                                                />
-                                            </div>
-                                        )}
-
-                                        {request.approval_fields.includes('purpose') && (
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="purpose">Purpose *</Label>
-                                                <textarea
-                                                    id="purpose"
-                                                    rows={3}
-                                                    value={purpose}
-                                                    onChange={(e) => setPurpose(e.target.value)}
-                                                    placeholder="Enter the purpose for this letter."
-                                                    className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                    required
-                                                />
-                                            </div>
-                                        )}
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="hr_details">
+                                                HR Details {requiresHrDetails ? '*' : ''}
+                                            </Label>
+                                            <textarea
+                                                id="hr_details"
+                                                rows={4}
+                                                maxLength={2000}
+                                                value={hrDetails}
+                                                onChange={(e) => setHrDetails(e.target.value)}
+                                                placeholder="Enter the details to appear in the generated letter."
+                                                className="w-full rounded-lg border border-input bg-background p-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                required={requiresHrDetails}
+                                            />
+                                        </div>
 
                                         <div className="space-y-1.5">
                                             <Label htmlFor="app_remarks">HR Endorsement Remarks</Label>
@@ -372,10 +294,10 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                         </Button>
                                         <Button
                                             className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                                            disabled={processing || !hasRequiredApprovalFields}
+                                            disabled={processing || !hasRequiredHrDetails}
                                             onClick={handleApprove}
                                         >
-                                            Approve & Issue Certificate
+                                            Approve & Generate Letter
                                         </Button>
                                     </DialogFooter>
                                 </DialogContent>
@@ -524,18 +446,21 @@ export default function LetterRequestShow({ request, employee }: Props) {
                                     )}
                                 </div>
 
-                                {request.status === 'approved' && request.approval_fields.length > 0 && (
+                                {request.status === 'approved' && employeeRequestFields.length > 0 && (
                                     <div className="mt-4 p-4 rounded-xl bg-emerald-50/50 border border-emerald-200/80 space-y-2">
-                                        <h4 className="text-xs font-bold text-emerald-800 tracking-wider uppercase">HR Approval Fields</h4>
+                                        <h4 className="text-xs font-bold text-emerald-800 tracking-wider uppercase">Employee-Provided Fields</h4>
                                         <p className="text-xs text-muted-foreground">
-                                            Values shown are from the employee&apos;s request. HR changes used in the generated PDF are not saved separately.
+                                            These values came from the employee&apos;s request and were not editable during approval.
                                         </p>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                            {request.approval_fields.map((field) => (
+                                            {employeeRequestFields.map(([field]) => (
                                                 <div key={field}>
-                                                    <span className="text-xs text-muted-foreground block">{approvalFieldLabels[field]}</span>
+                                                    <span className="text-xs text-muted-foreground block">
+                                                        {employeeRequestFieldLabels[field] ??
+                                                            field.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())}
+                                                    </span>
                                                     <span className="font-semibold text-emerald-950">
-                                                        {requestFieldValues[field]?.trim() || 'Not provided'}
+                                                        {request.request_details[field]?.trim() || 'Not provided'}
                                                     </span>
                                                 </div>
                                             ))}

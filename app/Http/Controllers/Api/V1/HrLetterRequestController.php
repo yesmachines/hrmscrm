@@ -62,8 +62,6 @@ class HrLetterRequestController extends Controller
         $data['rendered_html'] = $data['is_expired']
             ? null
             : $letterRequestService->renderDocumentHtml($letterRequest, $letterRequest->employee);
-        $fieldRequires = $letterRequest->documentType?->field_requires;
-        $data['field_requires'] = empty($fieldRequires) ? null : (object) $fieldRequires;
 
         return $this->successResponse($data, 'Letter request details retrieved successfully.');
     }
@@ -78,16 +76,10 @@ class HrLetterRequestController extends Controller
         ],
         requestBody: new OA\RequestBody(
             required: true,
-            description: 'Fields listed in approval_fields on the letter detail response are required for approval. field_requires describes employee-submitted fields.',
+            description: 'Submit only HR-provided details and remarks. Employee-submitted fields are read-only. Details are required for NOC and Salary Transfer Letter requests.',
             content: new OA\JsonContent(
                 properties: [
-                    new OA\Property(property: 'salary_amount', type: 'number', format: 'float', nullable: true),
-                    new OA\Property(property: 'currency', type: 'string', maxLength: 3, pattern: '^[A-Z]{3}$', nullable: true),
-                    new OA\Property(property: 'bank_iban', type: 'string', nullable: true),
-                    new OA\Property(property: 'to_address', type: 'string', nullable: true),
-                    new OA\Property(property: 'visa_designation', type: 'string', nullable: true),
-                    new OA\Property(property: 'destination_country', type: 'string', nullable: true),
-                    new OA\Property(property: 'purpose', type: 'string', nullable: true),
+                    new OA\Property(property: 'details', type: 'string', maxLength: 2000, nullable: true),
                     new OA\Property(property: 'remarks', type: 'string', nullable: true),
                 ],
             ),
@@ -98,7 +90,7 @@ class HrLetterRequestController extends Controller
             new OA\Response(response: 403, description: 'Forbidden'),
             new OA\Response(response: 404, description: 'Letter request not found'),
             new OA\Response(response: 409, description: 'Letter request is no longer pending'),
-            new OA\Response(response: 422, description: 'Required approval fields are missing or invalid'),
+            new OA\Response(response: 422, description: 'HR details are missing or invalid, or employee fields were submitted'),
         ]
     )]
     public function approve(

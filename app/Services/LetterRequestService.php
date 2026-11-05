@@ -15,6 +15,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class LetterRequestService
@@ -86,18 +87,35 @@ class LetterRequestService
             $this->ensureLetterRequest($letterRequest);
             $this->ensurePending($letterRequest);
 
+            $documentCode = $letterRequest->documentType?->document_code;
+            $hrDetails = $approvedDetails['details'] ?? null;
+            $hrDetails = is_string($hrDetails) ? trim($hrDetails) : null;
+
+            if (
+                LetterRequestApprovalFields::requiresHrDetails($documentCode)
+                && ($hrDetails === null || $hrDetails === '')
+            ) {
+                throw ValidationException::withMessages([
+                    'details' => 'HR details are required for this letter request.',
+                ]);
+            }
+
+            $letterRequest->requestDetails()->where('field_key', 'details')->delete();
+
+            if ($hrDetails !== null && $hrDetails !== '') {
+                $letterRequest->requestDetails()->create([
+                    'field_name' => 'HR Provided Details',
+                    'field_key' => 'details',
+                    'field_value' => $hrDetails,
+                ]);
+            }
+
             $letterRequest->update([
                 'status' => 'approved',
                 'remarks' => $approvedDetails['remarks'] ?? null,
             ]);
 
-            $temporaryDetails = array_intersect_key(
-                $approvedDetails,
-                array_flip(LetterRequestApprovalFields::forDocumentCode(
-                    $letterRequest->documentType?->document_code,
-                )),
-            );
-            $html = $this->renderDocumentHtml($letterRequest, null, $temporaryDetails);
+            $html = $this->renderDocumentHtml($letterRequest);
 
             if ($html !== null) {
                 $letterheadStyles = str_contains($html, 'class="letter-header"')
@@ -186,7 +204,6 @@ class LetterRequestService
     public function renderDocumentHtml(
         EmployeeDocument $document,
         ?Employee $employee = null,
-        array $temporaryDetails = [],
     ): ?string {
         $document->loadMissing(['documentType.category', 'documentTemplate', 'requestDetails']);
         $employee ??= Employee::query()
@@ -200,11 +217,11 @@ class LetterRequestService
             return null;
         }
 
-        $details = $document->requestDetails->pluck('field_value', 'field_key')->all();
-        $details = array_merge(
-            $details,
-            array_filter($temporaryDetails, fn ($value) => $value !== null && $value !== ''),
-        );
+        $details = $document->requestDetails
+            ->reject(fn ($detail) => $detail->field_key === 'details' && $detail->field_name !== 'HR Provided Details')
+            ->pluck('field_value', 'field_key')
+            ->all();
+
         $employee?->loadMissing(['user', 'department', 'organisation']);
 
         $grossSalary = (float) ($details['salary_amount'] ?? $employee?->gross_salary ?? 0);
@@ -244,6 +261,7 @@ class LetterRequestService
                 ? $document->issue_date->format('d M Y')
                 : Carbon::now()->format('d M Y'),
             '{{purpose}}' => $details['purpose'] ?? 'Official Purpose',
+            '{{details}}' => $details['details'] ?? '',
             '{{to_address}}' => $details['to_address'] ?? 'To Whom It May Concern',
             '{{visa_designation}}' => $details['visa_designation'] ?? ($employee?->designation ?? 'Employee'),
             '{{payroll_month}}' => Carbon::now()->format('F Y'),

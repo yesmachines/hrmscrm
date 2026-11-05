@@ -94,9 +94,7 @@ test('approved letter generation saves expiry days and stores the PDF publicly',
     ]);
 
     (new LetterRequestService)->approve($document, [
-        'to_address' => 'Embassy',
-        'visa_designation' => 'Analyst',
-        'purpose' => 'Visa application',
+        'details' => 'Employment verification for visa application',
     ], 1);
 
     $document->refresh();
@@ -113,6 +111,8 @@ test('approved letter generation saves expiry days and stores the PDF publicly',
     $this->withToken($employeeToken)
         ->getJson("/api/v1/documents/letters/{$document->id}")
         ->assertOk()
+        ->assertJsonPath('data.purpose', 'Visa application')
+        ->assertJsonPath('data.details', 'Employment verification for visa application')
         ->assertJsonPath('data.file_url', $publicFileUrl)
         ->assertJsonPath('data.download_url', $publicFileUrl);
 
