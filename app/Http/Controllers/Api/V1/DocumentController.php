@@ -19,6 +19,7 @@ use App\Support\SalesCrmRoles;
 use App\Traits\ApiResponse;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -753,16 +754,31 @@ class DocumentController extends Controller
     /**
      * HR Policy Documents Screen (Matching iPhone 16 Plus - 11).
      */
+    #[OA\Get(
+        path: '/api/v1/documents/policies',
+        summary: 'Get policy documents',
+        security: [['sanctum' => []]],
+        tags: ['Documents'],
+        parameters: [
+            new OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1)),
+            new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 15)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'HR Policies retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function policies(Request $request): JsonResponse
     {
+        $perPage = max(1, min(100, (int) $request->input('per_page', 15)));
         $policies = EmployeeDocument::query()
             ->with(['documentType', 'files' => fn ($q) => $q->orderByDesc('id')])
             ->whereHas('documentType.category', function ($q) {
                 $q->where('short_code', 'hr_docs');
             })
             ->orderBy('id')
-            ->get()
-            ->map(function (EmployeeDocument $doc) {
+            ->paginate($perPage)
+            ->through(function (EmployeeDocument $doc) {
                 $latestFile = $doc->files->first();
                 $fileUrl = $latestFile ? Storage::disk('public')->url($latestFile->file_path) : null;
 
@@ -776,9 +792,8 @@ class DocumentController extends Controller
                 ];
             });
 
-        // If no policies in DB yet, supply standard defaults
-        if ($policies->isEmpty()) {
-            $policies = collect([
+        if ($policies->total() === 0) {
+            $defaultPolicies = collect([
                 [
                     'id' => 1,
                     'policy_name' => 'HR Policy 2026',
@@ -804,9 +819,18 @@ class DocumentController extends Controller
                     'file_url' => null,
                 ],
             ]);
+
+            $page = max(1, (int) $request->input('page', 1));
+            $policies = new LengthAwarePaginator(
+                $defaultPolicies->forPage($page, $perPage)->values(),
+                $defaultPolicies->count(),
+                $perPage,
+                $page,
+                ['path' => $request->url(), 'query' => $request->query()],
+            );
         }
 
-        return $this->successResponse($policies, 'HR Policies retrieved successfully.');
+        return $this->successPaginatedResponse($policies, 'policies', 'HR Policies retrieved successfully.');
     }
 
     /**
@@ -817,6 +841,12 @@ class DocumentController extends Controller
         summary: 'Get employee letter requests list',
         security: [['sanctum' => []]],
         tags: ['Documents - Letters'],
+        parameters: [
+            new OA\Parameter(name: 'status', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'search', in: 'query', required: false, description: 'Search document title or document type name', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 1)),
+            new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', default: 15)),
+        ],
         responses: [
             new OA\Response(response: 200, description: 'Letter requests retrieved successfully'),
             new OA\Response(response: 401, description: 'Unauthenticated'),
@@ -841,9 +871,21 @@ class DocumentController extends Controller
             ->whereHas('documentType.category', function ($q) {
                 $q->where('short_code', 'letter_requests');
             })
+            ->when($request->filled('status'), function (Builder $query) use ($request): void {
+                $query->where('status', $request->input('status'));
+            })
+            ->when($request->filled('search'), function (Builder $query) use ($request): void {
+                $search = $request->input('search');
+                $query->where(function (Builder $searchQuery) use ($search): void {
+                    $searchQuery->where('document_title', 'like', "%{$search}%")
+                        ->orWhereHas('documentType', function (Builder $typeQuery) use ($search): void {
+                            $typeQuery->where('document_name', 'like', "%{$search}%");
+                        });
+                });
+            })
             ->orderByDesc('id')
-            ->get()
-            ->map(function (EmployeeDocument $doc) {
+            ->paginate(max(1, min(100, (int) $request->input('per_page', 15))))
+            ->through(function (EmployeeDocument $doc) {
                 $purpose = $doc->requestDetails->firstWhere('field_key', 'purpose')?->field_value ?? 'Official Purpose';
                 $latestFile = $doc->files->first();
                 $status = $doc->status;
@@ -862,7 +904,7 @@ class DocumentController extends Controller
                 ];
             });
 
-        return $this->successResponse($letters, 'Letter requests retrieved successfully.');
+        return $this->successPaginatedResponse($letters, 'letters', 'Letter requests retrieved successfully.');
     }
 
     /**

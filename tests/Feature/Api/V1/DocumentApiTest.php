@@ -75,6 +75,110 @@ test('documents categories hub returns categories with live count', function () 
         ]);
 });
 
+test('employee policy lists are paginated', function () {
+    $employeeUser = SalesCrmUser::query()->create([
+        'name' => 'Policy List Employee',
+        'email' => 'policy.list.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    Employee::query()->create([
+        'user_id' => $employeeUser->id,
+        'emp_num' => 'EMP-POLICY-LIST-001',
+        'designation' => 'Analyst',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $employeeResponse = $this->withToken($employeeUser->createToken('test')->plainTextToken)
+        ->getJson('/api/v1/documents/policies?page=2&per_page=2');
+
+    $employeeResponse->assertOk()
+        ->assertJsonCount(1, 'data.policies')
+        ->assertJsonPath('data.pagination.total', 3)
+        ->assertJsonPath('data.pagination.per_page', 2)
+        ->assertJsonPath('data.pagination.current_page', 2)
+        ->assertJsonPath('data.pagination.last_page', 2);
+
+});
+
+test('HR policy lists are paginated', function () {
+    $hrUser = createHrmsLoginUser('hr', [
+        'name' => 'Policy List HR',
+        'email' => 'policy.list.hr@example.com',
+    ]);
+
+    $hrResponse = $this->withToken($hrUser->createToken('test')->plainTextToken)
+        ->getJson('/api/v1/hr/documents/policies?page=2&per_page=2');
+
+    $hrResponse->assertOk()
+        ->assertJsonCount(1, 'data.policies')
+        ->assertJsonPath('data.pagination.total', 3)
+        ->assertJsonPath('data.pagination.per_page', 2)
+        ->assertJsonPath('data.pagination.current_page', 2)
+        ->assertJsonPath('data.pagination.last_page', 2);
+});
+
+test('employee letter lists support pagination and status and search filters', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Letter List Employee',
+        'email' => 'letter.list.employee@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-LETTER-LIST-001',
+        'designation' => 'Analyst',
+        'division' => 'Finance',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $nocType = DocumentType::query()->where('document_code', 'noc')->firstOrFail();
+    $firstSubmittedLetter = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $nocType->id,
+        'document_title' => 'NOC First Request',
+        'status' => 'submitted',
+    ]);
+    $secondSubmittedLetter = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $nocType->id,
+        'document_title' => 'NOC Second Request',
+        'status' => 'submitted',
+    ]);
+    $approvedLetter = EmployeeDocument::query()->create([
+        'employee_id' => $employee->id,
+        'document_type_id' => $nocType->id,
+        'document_title' => 'NOC Approved Request',
+        'status' => 'approved',
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+    $paginatedResponse = $this->withToken($token)
+        ->getJson('/api/v1/documents/letters?status=submitted&search=NOC&page=2&per_page=1');
+
+    $paginatedResponse->assertOk()
+        ->assertJsonCount(1, 'data.letters')
+        ->assertJsonPath('data.letters.0.id', $firstSubmittedLetter->id)
+        ->assertJsonPath('data.pagination.total', 2)
+        ->assertJsonPath('data.pagination.per_page', 1)
+        ->assertJsonPath('data.pagination.current_page', 2)
+        ->assertJsonPath('data.pagination.last_page', 2);
+
+    $filteredResponse = $this->withToken($token)
+        ->getJson('/api/v1/documents/letters?status=approved&search=Approved');
+
+    $filteredResponse->assertOk()
+        ->assertJsonCount(1, 'data.letters')
+        ->assertJsonPath('data.letters.0.id', $approvedLetter->id)
+        ->assertJsonPath('data.pagination.total', 1);
+});
+
 test('documents list nests document type details separately from document fields', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Document List User',
