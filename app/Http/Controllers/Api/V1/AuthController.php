@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LoginRequest;
 use App\Http\Resources\Api\V1\UserResource;
+use App\Models\EmployeeProfile;
+use App\Models\SalesCrm\Division;
 use App\Models\SalesCrm\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -103,12 +106,26 @@ class AuthController extends Controller
         responses: [
             new OA\Response(
                 response: 200,
-                description: 'User details',
+                description: 'User details, including all employee and employee profile fields shown in the admin profile',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: 'id', type: 'integer'),
-                        new OA\Property(property: 'name', type: 'string'),
-                        new OA\Property(property: 'email', type: 'string'),
+                        new OA\Property(property: 'statusCode', type: 'integer'),
+                        new OA\Property(property: 'message', type: 'string'),
+                        new OA\Property(
+                            property: 'data',
+                            type: 'object',
+                            properties: [
+                                new OA\Property(property: 'id', type: 'integer'),
+                                new OA\Property(property: 'name', type: 'string'),
+                                new OA\Property(property: 'email', type: 'string'),
+                                new OA\Property(property: 'roles', type: 'array', items: new OA\Items(type: 'string')),
+                                new OA\Property(
+                                    property: 'employee',
+                                    type: 'object',
+                                    description: 'Complete employment details and personal, contact, visa, and education profile fields; null when no employee record exists'
+                                ),
+                            ]
+                        ),
                     ]
                 )
             ),
@@ -119,7 +136,52 @@ class AuthController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $user->load('employee');
+        $user->load([
+            'employee.user:id,name,email',
+            'employee.department:id,name',
+            'employee.organisation:id,org_name,short_name',
+            'employee.officeLocation:id,office_name,city',
+        ]);
+
+        if ($user->employee !== null) {
+            $employee = $user->employee;
+            $profile = EmployeeProfile::query()
+                ->where('employee_id', $employee->id)
+                ->first();
+
+            $employee->setAttribute(
+                'division_name',
+                Division::query()
+                    ->whereRaw('LOWER(code) = ?', [strtolower($employee->division)])
+                    ->value('name'),
+            );
+            $employee->setRelation('profileDetails', $profile);
+
+            if ($profile !== null) {
+                $countryIds = array_filter([
+                    is_numeric($profile->nationality) ? (int) $profile->nationality : null,
+                    $profile->home_country,
+                ]);
+                $countries = $countryIds === []
+                    ? collect()
+                    : DB::connection('salescrm')
+                        ->table('countries')
+                        ->whereIn('id', $countryIds)
+                        ->pluck('name', 'id');
+
+                if (is_numeric($profile->nationality)) {
+                    $profile->setAttribute(
+                        'nationality',
+                        $countries[(int) $profile->nationality] ?? $profile->nationality,
+                    );
+                }
+
+                $profile->setAttribute(
+                    'home_country_name',
+                    $profile->home_country ? ($countries[$profile->home_country] ?? null) : null,
+                );
+            }
+        }
 
         return $this->successResponse(new UserResource($user));
     }
