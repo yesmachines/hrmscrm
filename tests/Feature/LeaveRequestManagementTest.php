@@ -80,6 +80,53 @@ test('hr user can apply leave on behalf of employee with applied status', functi
         ->and($history->remarks)->toContain('Applied by HR');
 });
 
+test('hr user can create a half-day leave request and half-day requests must use one date', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $salesUser = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Designer',
+        'division' => 'Creative',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL',
+        'is_paid' => 1,
+        'status' => 1,
+    ]);
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'request_type' => 'firsthalf',
+            'start_date' => '2026-09-15',
+            'end_date' => '2026-09-15',
+            'total_days' => 1,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
+    expect($leaveRequest->request_type)->toBe('firsthalf')
+        ->and((float) $leaveRequest->total_days)->toBe(0.5);
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.edit', $leaveRequest))
+        ->put(route('leave-requests.update', $leaveRequest), [
+            'leave_type_id' => $leaveType->id,
+            'request_type' => 'secondhalf',
+            'start_date' => '2026-09-15',
+            'end_date' => '2026-09-16',
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.edit', $leaveRequest))
+        ->assertSessionHasErrors(['request_type']);
+});
+
 test('hr user can apply and directly approve leave on behalf of employee with quota deduction', function () {
     $hrUser = createHrmsLoginUser('hr');
 
@@ -593,6 +640,7 @@ test('hr user can view edit leave page', function () {
             ->has('leaveRequest')
             ->has('employees')
             ->has('leaveTypes')
+            ->where('leaveRequest.request_type', 'full_day')
         );
 });
 

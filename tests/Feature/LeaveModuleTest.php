@@ -3,6 +3,23 @@
 use App\Models\LeavePolicy;
 use App\Models\LeaveType;
 use App\Models\Organisation;
+use Illuminate\Support\Facades\Schema;
+
+test('leave schema includes workbook policy and balance fields', function () {
+    expect(Schema::hasColumns('leave_policies', [
+        'annual_limit',
+        'allow_once',
+        'allow_balance',
+        'requires_handover',
+        'carry_forward_weeks',
+        'exclude_rules',
+    ]))->toBeTrue()
+        ->and(Schema::hasColumn('leave_requests', 'request_type'))->toBeTrue()
+        ->and(Schema::hasColumn('leave_balances', 'leave_validity'))->toBeTrue()
+        ->and(Schema::hasTable('employee_wfh_schedules'))->toBeTrue()
+        ->and(Schema::hasTable('leave_policy_tiers'))->toBeTrue()
+        ->and(Schema::hasTable('leave_balance_transactions'))->toBeTrue();
+});
 
 test('authenticated users can manage leave types and leave policies', function () {
     $admin = createHrmsLoginUser('admin');
@@ -51,17 +68,23 @@ test('authenticated users can manage leave types and leave policies', function (
         ->post(route('leave-policies.store'), [
             'leave_type_id' => $leaveType->id,
             'organisation_id' => $organisation->id,
+            'annual_limit' => 24,
+            'allow_once' => 1,
+            'allow_balance' => 0,
             'full_pay_days' => 15,
             'half_pay_days' => 5,
             'no_pay_days' => 1,
             'requires_document_after_days' => 3,
             'requires_weekend_document' => 0,
+            'requires_handover' => 1,
             'carry_forward' => 1,
+            'carry_forward_weeks' => 8,
             'encashment' => 0,
             'remarks' => 'Standard annual leave policy',
             'requires_attachment' => 0,
             'probation_applicable' => 0,
             'minimum_service_months' => 3,
+            'exclude_rules' => '{"weekends":true}',
         ])
         ->assertRedirect();
 
@@ -71,7 +94,47 @@ test('authenticated users can manage leave types and leave policies', function (
         ->first();
 
     expect($policy)->not->toBeNull()
-        ->and($policy->carry_forward)->toBeTrue();
+        ->and($policy->carry_forward)->toBeTrue()
+        ->and($policy->annual_limit)->toBe(24)
+        ->and($policy->allow_once)->toBeTrue()
+        ->and($policy->allow_balance)->toBeFalse()
+        ->and($policy->requires_handover)->toBeTrue()
+        ->and($policy->carry_forward_weeks)->toBe(8)
+        ->and($policy->exclude_rules)->toBe(['weekends' => true]);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('leave-policies.edit', $policy))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-policies/edit')
+            ->where('leavePolicy.annual_limit', 24)
+            ->where('leavePolicy.allow_once', 1)
+            ->where('leavePolicy.allow_balance', 0)
+            ->where('leavePolicy.requires_handover', 1)
+            ->where('leavePolicy.carry_forward_weeks', 8)
+            ->where('leavePolicy.exclude_rules', ['weekends' => true])
+        );
+
+    $this->actingAs($admin)
+        ->put(route('leave-policies.update', $policy), [
+            'leave_type_id' => $leaveType->id,
+            'organisation_id' => $organisation->id,
+            'annual_limit' => 30,
+            'allow_once' => 0,
+            'allow_balance' => 1,
+            'requires_handover' => 0,
+            'carry_forward_weeks' => 4,
+            'exclude_rules' => '{"public_holidays":true}',
+        ])
+        ->assertRedirect(route('leave-policies.show', $policy));
+
+    expect($policy->fresh()->annual_limit)->toBe(30)
+        ->and($policy->fresh()->allow_once)->toBeFalse()
+        ->and($policy->fresh()->allow_balance)->toBeTrue()
+        ->and($policy->fresh()->requires_handover)->toBeFalse()
+        ->and($policy->fresh()->carry_forward_weeks)->toBe(4)
+        ->and($policy->fresh()->exclude_rules)->toBe(['public_holidays' => true]);
 
     $this->actingAs($admin)
         ->delete(route('leave-types.destroy', $leaveType))
@@ -88,6 +151,42 @@ test('authenticated users can manage leave types and leave policies', function (
         ->assertRedirect(route('leave-types.index'));
 
     expect(LeaveType::query()->find($leaveType->id))->toBeNull();
+});
+
+test('leave policy validates new policy settings and exclusion JSON', function () {
+    $admin = createHrmsLoginUser('admin');
+    $organisation = Organisation::query()->create([
+        'org_name' => 'Validation Org',
+        'short_name' => 'VAL',
+        'status' => 1,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Validation Leave',
+        'code' => 'VALIDATION',
+        'status' => 1,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('leave-policies.create'))
+        ->post(route('leave-policies.store'), [
+            'leave_type_id' => $leaveType->id,
+            'organisation_id' => $organisation->id,
+            'annual_limit' => -1,
+            'allow_once' => 'invalid',
+            'allow_balance' => 2,
+            'requires_handover' => 'invalid',
+            'carry_forward_weeks' => 0,
+            'exclude_rules' => '{invalid json',
+        ])
+        ->assertRedirect(route('leave-policies.create'))
+        ->assertSessionHasErrors([
+            'annual_limit',
+            'allow_once',
+            'allow_balance',
+            'requires_handover',
+            'carry_forward_weeks',
+            'exclude_rules',
+        ]);
 });
 
 test('leave policy create page marks leave types as disabled only if they already have a policy', function () {

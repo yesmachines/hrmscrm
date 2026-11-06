@@ -23,6 +23,7 @@ class LeaveValidationService
      *     policy: LeavePolicy|null,
      *     start_date: Carbon,
      *     end_date: Carbon,
+     *     request_type: string,
      *     total_days: float,
      *     pay_breakdown: array{full_pay: float, half_pay: float, no_pay: float},
      *     attachment_required: bool,
@@ -75,9 +76,24 @@ class LeaveValidationService
             ]);
         }
 
-        $totalDays = ! empty($data['total_days'])
-            ? (float) $data['total_days']
-            : (float) ($startDate->diffInDays($endDate) + 1);
+        $requestType = $data['request_type'] ?? 'full_day';
+        if (! in_array($requestType, ['full_day', 'firsthalf', 'secondhalf'], true)) {
+            throw ValidationException::withMessages([
+                'request_type' => ['The selected leave request type is invalid.'],
+            ]);
+        }
+
+        if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+            throw ValidationException::withMessages([
+                'request_type' => ['Half-day leave must start and end on the same date.'],
+            ]);
+        }
+
+        $totalDays = $requestType === 'full_day'
+            ? (! empty($data['total_days'])
+                ? (float) $data['total_days']
+                : (float) ($startDate->diffInDays($endDate) + 1))
+            : 0.5;
 
         if ($totalDays < 0.5) {
             throw ValidationException::withMessages([
@@ -480,6 +496,7 @@ class LeaveValidationService
             'policy' => $policy,
             'start_date' => $startDate,
             'end_date' => $endDate,
+            'request_type' => $requestType,
             'total_days' => $totalDays,
             'pay_breakdown' => [
                 'full_pay' => $fullPayDays,

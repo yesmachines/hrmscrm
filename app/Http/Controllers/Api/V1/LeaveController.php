@@ -261,6 +261,7 @@ class LeaveController extends Controller
                         new OA\Property(property: 'leave_type_id', type: 'integer'),
                         new OA\Property(property: 'start_date', type: 'string', format: 'date'),
                         new OA\Property(property: 'end_date', type: 'string', format: 'date'),
+                        new OA\Property(property: 'request_type', type: 'string', enum: ['full_day', 'firsthalf', 'secondhalf']),
                         new OA\Property(property: 'reason', type: 'string'),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),
@@ -308,6 +309,7 @@ class LeaveController extends Controller
         $policy = $validation['policy'];
         $startDate = $validation['start_date'];
         $endDate = $validation['end_date'];
+        $requestType = $validation['request_type'];
         $totalDays = $validation['total_days'];
         $remarks = $validation['remarks'];
         $payBreakdown = $validation['pay_breakdown'];
@@ -315,6 +317,7 @@ class LeaveController extends Controller
         $leaveRequest = LeaveRequest::create([
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
+            'request_type' => $requestType,
             'start_date' => $startDate->toDateTimeString(),
             'end_date' => $endDate->toDateTimeString(),
             'total_days' => $totalDays,
@@ -620,6 +623,7 @@ class LeaveController extends Controller
             'employee_id' => $leaveRequest->employee_id,
             'leave_type_id' => $leaveRequest->leave_type_id,
             'leave_type' => $leaveRequest->leaveType,
+            'request_type' => $leaveRequest->request_type ?? 'full_day',
             'start_date' => $leaveRequest->start_date?->format('Y-m-d'),
             'end_date' => $leaveRequest->end_date?->format('Y-m-d'),
             'total_days' => $leaveRequest->total_days,

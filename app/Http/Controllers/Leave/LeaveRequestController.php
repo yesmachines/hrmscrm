@@ -85,6 +85,7 @@ class LeaveRequestController extends Controller
             'leave_type_id' => 'required|exists:leave_types,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
+            'request_type' => 'nullable|in:full_day,firsthalf,secondhalf',
             'total_days' => 'nullable|numeric|min:0.5',
             'status' => 'required|in:applied,approved',
             'remarks' => 'nullable|string',
@@ -152,6 +153,13 @@ class LeaveRequestController extends Controller
 
         $startDate = Carbon::parse($validated['start_date'])->startOfDay();
         $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+        $requestType = $validated['request_type'] ?? 'full_day';
+
+        if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+            throw ValidationException::withMessages([
+                'request_type' => ['Half-day leave must start and end on the same date.'],
+            ]);
+        }
 
         $handoverPersonId = $validated['handover_person_id'] ?? null;
 
@@ -187,13 +195,16 @@ class LeaveRequestController extends Controller
             }
         }
 
-        $totalDays = $validated['total_days'] ?? (
-            Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-        );
+        $totalDays = $requestType === 'full_day'
+            ? ($validated['total_days'] ?? (
+                Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
+            ))
+            : 0.5;
 
         $leaveRequest = LeaveRequest::create([
             'employee_id' => $validated['employee_id'],
             'leave_type_id' => $validated['leave_type_id'],
+            'request_type' => $requestType,
             'start_date' => $validated['start_date'],
             'end_date' => $validated['end_date'],
             'total_days' => $totalDays,
@@ -354,6 +365,7 @@ class LeaveRequestController extends Controller
                 'leave_type_id' => $leave_request->leave_type_id,
                 'start_date' => Carbon::parse($leave_request->start_date)->format('Y-m-d'),
                 'end_date' => Carbon::parse($leave_request->end_date)->format('Y-m-d'),
+                'request_type' => $leave_request->request_type ?? 'full_day',
                 'total_days' => $leave_request->total_days,
                 'status' => $leave_request->status,
                 'remarks' => $leave_request->remarks,
@@ -379,6 +391,7 @@ class LeaveRequestController extends Controller
                 'leave_type_id' => 'required|exists:leave_types,id',
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
+                'request_type' => 'nullable|in:full_day,firsthalf,secondhalf',
                 'total_days' => 'nullable|numeric|min:0.5',
                 'status' => 'required|in:applied,approved,rejected,cancelled',
                 'remarks' => 'nullable|string',
@@ -447,6 +460,13 @@ class LeaveRequestController extends Controller
 
             $startDate = Carbon::parse($validated['start_date'])->startOfDay();
             $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+            $requestType = $validated['request_type'] ?? 'full_day';
+
+            if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+                throw ValidationException::withMessages([
+                    'request_type' => ['Half-day leave must start and end on the same date.'],
+                ]);
+            }
 
             // Check overlapping active/approved leave for the employee (excluding this leave request!)
             if (in_array($validated['status'], ['applied', 'approved'])) {
@@ -492,9 +512,11 @@ class LeaveRequestController extends Controller
                 }
             }
 
-            $totalDays = $validated['total_days'] ?? (
-                Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-            );
+            $totalDays = $requestType === 'full_day'
+                ? ($validated['total_days'] ?? (
+                    Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
+                ))
+                : 0.5;
 
             $oldState = [
                 'status' => $leave_request->status,
@@ -518,6 +540,7 @@ class LeaveRequestController extends Controller
             $leave_request->update([
                 'employee_id' => $employeeId,
                 'leave_type_id' => $validated['leave_type_id'],
+                'request_type' => $requestType,
                 'start_date' => $validated['start_date'],
                 'end_date' => $validated['end_date'],
                 'total_days' => $totalDays,

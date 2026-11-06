@@ -60,6 +60,49 @@ test('leave submission validates emergency and travel contact numbers', function
         ->assertJsonValidationErrors(['emergency_contact_no', 'travel_contact_no']);
 });
 
+test('leave submission stores half-day request type and duration', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Half Day User',
+        'email' => 'leave.half-day@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-HALF-01',
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL',
+        'is_paid' => true,
+        'requires_attachment' => false,
+        'requires_approval' => true,
+        'allow_balance' => false,
+        'status' => 1,
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'request_type' => 'secondhalf',
+        'start_date' => '2026-09-15',
+        'end_date' => '2026-09-15',
+        'total_days' => 1,
+    ]);
+
+    $response->assertCreated()
+        ->assertJsonPath('data.request_type', 'secondhalf')
+        ->assertJsonPath('data.total_days', 0.5);
+
+    $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
+    expect($leaveRequest->request_type)->toBe('secondhalf')
+        ->and((float) $leaveRequest->total_days)->toBe(0.5);
+});
+
 test('get leave detail returns full leave request with attachments, history, details, and approvals', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Leave User',

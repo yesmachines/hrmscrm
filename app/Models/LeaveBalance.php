@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'earned',
     'last_calculated_at',
     'pending',
+    'leave_validity',
 ])]
 class LeaveBalance extends Model
 {
@@ -38,6 +39,7 @@ class LeaveBalance extends Model
             'earned' => 'float',
             'pending' => 'float',
             'last_calculated_at' => 'datetime',
+            'leave_validity' => 'datetime',
         ];
     }
 

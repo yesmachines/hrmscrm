@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'remarks',
     'status',
     'created_by',
+    'request_type',
 ])]
 class LeaveRequest extends Model
 {

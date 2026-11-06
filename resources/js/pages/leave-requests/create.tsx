@@ -87,6 +87,7 @@ export default function LeaveRequestsCreate({
 }: Props) {
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
+    const requestTypeSelectId = useId();
     const startDateId = useId();
     const endDateId = useId();
     const totalDaysId = useId();
@@ -101,6 +102,7 @@ export default function LeaveRequestsCreate({
     const { data, setData, post, processing, errors } = useForm({
         employee_id: '',
         leave_type_id: '',
+        request_type: 'full_day',
         start_date: '',
         end_date: '',
         total_days: '',
@@ -134,10 +136,10 @@ export default function LeaveRequestsCreate({
             if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                setData('total_days', String(diffDays));
+                setData('total_days', data.request_type === 'full_day' ? String(diffDays) : '0.5');
             }
         }
-    }, [data.start_date, data.end_date]);
+    }, [data.start_date, data.end_date, data.request_type, setData]);
 
     // Find current balance for selected employee and leave type
     const selectedBalance = useMemo(() => {
@@ -340,6 +342,29 @@ export default function LeaveRequestsCreate({
                                 )}
                             </div>
 
+                            <div className="space-y-2">
+                                <Label htmlFor={requestTypeSelectId}>Leave duration type</Label>
+                                <select
+                                    id={requestTypeSelectId}
+                                    value={data.request_type}
+                                    onChange={(e) => setData('request_type', e.target.value)}
+                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                    required
+                                >
+                                    <option value="full_day">Full day</option>
+                                    <option value="firsthalf">First half</option>
+                                    <option value="secondhalf">Second half</option>
+                                </select>
+                                {data.request_type !== 'full_day' && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Half-day leave must cover one date only.
+                                    </p>
+                                )}
+                                {errors.request_type && (
+                                    <p className="text-sm text-destructive">{errors.request_type}</p>
+                                )}
+                            </div>
+
                             {/* Dates & Duration Grid */}
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 <div className="space-y-2">
@@ -364,6 +389,7 @@ export default function LeaveRequestsCreate({
                                     <FormattedDatePicker
                                         id={endDateId}
                                         min={data.start_date}
+                                        max={data.request_type === 'full_day' ? undefined : data.start_date}
                                         value={data.end_date}
                                         onChange={(value) => setData('end_date', value)}
                                         required
@@ -382,6 +408,7 @@ export default function LeaveRequestsCreate({
                                         min="0.5"
                                         placeholder="e.g. 1 or 0.5"
                                         value={data.total_days}
+                                        disabled={data.request_type !== 'full_day'}
                                         onChange={(e) => setData('total_days', e.target.value)}
                                     />
                                     {errors.total_days && (

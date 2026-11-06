@@ -77,6 +77,7 @@ interface LeaveRequestItem {
     id: number;
     employee_id: number;
     leave_type_id: number;
+    request_type: string;
     start_date: string;
     end_date: string;
     total_days: number;
@@ -106,6 +107,7 @@ export default function LeaveRequestsEdit({
 }: Props) {
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
+    const requestTypeSelectId = useId();
     const startDateId = useId();
     const endDateId = useId();
     const totalDaysId = useId();
@@ -121,6 +123,7 @@ export default function LeaveRequestsEdit({
         _method: 'PUT',
         employee_id: String(leaveRequest.employee_id),
         leave_type_id: String(leaveRequest.leave_type_id),
+        request_type: leaveRequest.request_type ?? 'full_day',
         start_date: leaveRequest.start_date,
         end_date: leaveRequest.end_date,
         total_days: String(leaveRequest.total_days),
@@ -139,10 +142,10 @@ export default function LeaveRequestsEdit({
             if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                setData('total_days', String(diffDays));
+                setData('total_days', data.request_type === 'full_day' ? String(diffDays) : '0.5');
             }
         }
-    }, [data.start_date, data.end_date]);
+    }, [data.start_date, data.end_date, data.request_type, setData]);
 
     const selectedEmployee = useMemo(() => {
         if (!data.employee_id) return null;
@@ -412,6 +415,29 @@ export default function LeaveRequestsEdit({
                                         )}
                                     </div>
 
+                                    <div>
+                                        <Label htmlFor={requestTypeSelectId}>Leave duration type</Label>
+                                        <select
+                                            id={requestTypeSelectId}
+                                            value={data.request_type}
+                                            onChange={(e) => setData('request_type', e.target.value)}
+                                            className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                                            required
+                                        >
+                                            <option value="full_day">Full day</option>
+                                            <option value="firsthalf">First half</option>
+                                            <option value="secondhalf">Second half</option>
+                                        </select>
+                                        {data.request_type !== 'full_day' && (
+                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                Half-day leave must cover one date only.
+                                            </p>
+                                        )}
+                                        {errors.request_type && (
+                                            <p className="mt-1 text-xs text-destructive">{errors.request_type}</p>
+                                        )}
+                                    </div>
+
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                         <div>
                                             <Label htmlFor={startDateId}>Start Date</Label>
@@ -433,6 +459,7 @@ export default function LeaveRequestsEdit({
                                                 id={endDateId}
                                                 value={data.end_date}
                                                 min={data.start_date}
+                                                max={data.request_type === 'full_day' ? undefined : data.start_date}
                                                 onChange={(value) => setData('end_date', value)}
                                                 className="mt-1.5"
                                                 required
@@ -450,6 +477,7 @@ export default function LeaveRequestsEdit({
                                                 step="0.5"
                                                 min="0.5"
                                                 value={data.total_days}
+                                                disabled={data.request_type !== 'full_day'}
                                                 onChange={(e) => setData('total_days', e.target.value)}
                                                 className="mt-1.5 font-semibold text-primary"
                                                 required
