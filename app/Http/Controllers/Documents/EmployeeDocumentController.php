@@ -23,6 +23,8 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class EmployeeDocumentController extends Controller
 {
+    private const EXCLUDED_CATEGORY_CODES = ['hr_docs', 'letter_requests'];
+
     public function index(Request $request, EmployeeDocumentService $employeeDocumentService): Response
     {
         $query = EmployeeDocument::query()
@@ -30,7 +32,8 @@ class EmployeeDocumentController extends Controller
                 'documentType.category',
                 'documentTemplate',
                 'files' => fn ($q) => $q->orderByDesc('id'),
-            ]);
+            ])
+            ->whereDoesntHave('documentType.category', fn ($q) => $q->whereIn('short_code', self::EXCLUDED_CATEGORY_CODES));
 
         if ($request->filled('employee_id')) {
             $query->where('employee_id', $request->input('employee_id'));
@@ -79,7 +82,10 @@ class EmployeeDocumentController extends Controller
                 'download_url' => route('document-types.blank-form', ['document_type' => $t->id, 'download' => 1]),
             ]);
 
-        $categories = DocumentCategory::query()->where('status', 1)->get(['id', 'category_name', 'short_code']);
+        $categories = DocumentCategory::query()
+            ->where('status', 1)
+            ->whereNotIn('short_code', self::EXCLUDED_CATEGORY_CODES)
+            ->get(['id', 'category_name', 'short_code']);
         $documentTypes = DocumentType::query()->get(['id', 'category_id', 'document_name', 'document_code']);
         $employees = Employee::query()->with('user:id,name,email')->get(['id', 'user_id', 'emp_num', 'designation']);
 
@@ -138,7 +144,11 @@ class EmployeeDocumentController extends Controller
         $categoryQuery = DocumentCategory::query()
             ->with(['documentTypes.documentTemplates' => fn ($q) => $q->where('status', 1)])
             ->where(function ($query) use ($includeCategoryId) {
-                $query->where('status', 1);
+                $query->where(function ($activeCategories) {
+                    $activeCategories
+                        ->where('status', 1)
+                        ->whereNotIn('short_code', self::EXCLUDED_CATEGORY_CODES);
+                });
                 if ($includeCategoryId !== null) {
                     $query->orWhere('id', $includeCategoryId);
                 }

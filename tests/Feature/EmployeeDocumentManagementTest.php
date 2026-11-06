@@ -70,6 +70,55 @@ test('admin can view employee documents in crm and approve submissions', functio
         ->toBe('Passport verified against physical original copy.');
 });
 
+test('all documents excludes HR and letter request categories and direct upload hides them', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $hrDocumentType = DocumentType::query()->where('document_code', 'hr_policy')->firstOrFail();
+    $letterRequestType = DocumentType::query()->where('document_code', 'noc')->firstOrFail();
+    $personalDocumentType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+
+    $hrDocument = EmployeeDocument::query()->create([
+        'employee_id' => 1001,
+        'document_type_id' => $hrDocumentType->id,
+        'document_title' => 'HR Policy Document',
+        'status' => 'approved',
+    ]);
+    $letterRequest = EmployeeDocument::query()->create([
+        'employee_id' => 1001,
+        'document_type_id' => $letterRequestType->id,
+        'document_title' => 'NOC Letter Request',
+        'status' => 'submitted',
+    ]);
+    $personalDocument = EmployeeDocument::query()->create([
+        'employee_id' => 1001,
+        'document_type_id' => $personalDocumentType->id,
+        'document_title' => 'Passport Document',
+        'status' => 'approved',
+    ]);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employee-documents.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('employee-documents/index')
+            ->where('documents.data', fn ($documents) => collect($documents)->pluck('id')->all() === [$personalDocument->id])
+            ->where('categories', fn ($categories) => collect($categories)->every(
+                fn ($category) => ! in_array($category['short_code'], ['hr_docs', 'letter_requests'], true),
+            )));
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employee-documents.create'))
+        ->assertInertia(fn ($page) => $page
+            ->component('employee-documents/create')
+            ->where('categories', fn ($categories) => collect($categories)->every(
+                fn ($category) => ! in_array($category['short_code'], ['hr_docs', 'letter_requests'], true),
+            )));
+
+    expect($hrDocument->exists)->toBeTrue()
+        ->and($letterRequest->exists)->toBeTrue();
+});
+
 test('admin document edit page is available only to the matching creator role when enabled before approval', function () {
     $admin = createHrmsLoginUser('admin');
     $hr = createHrmsLoginUser('hr');
