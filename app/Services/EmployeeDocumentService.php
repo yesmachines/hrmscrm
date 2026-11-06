@@ -24,7 +24,7 @@ class EmployeeDocumentService
      */
     private array $roleNamesByUserId = [];
 
-    public function list(Request $request, ?int $employeeId = null, int $perPage = 15, bool $applyHrOnlyFilters = false, bool $includeEmployeeDetails = false,): LengthAwarePaginator 
+    public function list(Request $request, ?int $employeeId = null, int $perPage = 15, bool $applyHrOnlyFilters = false, bool $includeEmployeeDetails = false): LengthAwarePaginator
     {
         $query = EmployeeDocument::query()
             ->with([
@@ -40,7 +40,15 @@ class EmployeeDocumentService
         }
 
         if ($employeeId !== null) {
-            $query->where('employee_id', $employeeId);
+            $query->where(function ($q) use ($employeeId) {
+                $q->where('employee_id', $employeeId)
+                    ->orWhere(function ($globalDocuments) {
+                        $globalDocuments->where('employee_id', 0)
+                            ->whereHas('documentType.category', function ($category) {
+                                $category->where('short_code', 'hr_docs');
+                            });
+                    });
+            });
         }
 
         if ($applyHrOnlyFilters && $request->filled('employee_id')) {

@@ -265,6 +265,43 @@ test('documents list nests document type details separately from document fields
         ->and($documentData)->not->toHaveKey('document_code');
 });
 
+test('employee document list includes company-wide hr policies filtered by category code', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Company Policy User',
+        'email' => 'company.policy.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-COMPANY-POLICY-001',
+        'designation' => 'Software Engineer',
+        'division' => 'Tech',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $policyType = DocumentType::query()
+        ->where('document_code', 'hr_policy')
+        ->firstOrFail();
+    $policy = EmployeeDocument::query()->create([
+        'employee_id' => 0,
+        'document_type_id' => $policyType->id,
+        'document_title' => 'Company HR Policy',
+        'status' => 'approved',
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+    $response = $this->withToken($token)
+        ->getJson('/api/v1/documents?category_code=hr_docs');
+
+    $response->assertOk()
+        ->assertJsonPath('data.pagination.total', 1)
+        ->assertJsonPath('data.documents.0.id', $policy->id)
+        ->assertJsonPath('data.documents.0.document_type.category_code', 'hr_docs');
+});
+
 test('employee document edit option and endpoint require creator, enabled type, and pre-approval status', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Editable Document Employee',
