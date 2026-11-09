@@ -23,7 +23,20 @@ type LeaveType = {
     requires_handover: number;
 };
 
-export default function LeaveTypesEdit({ leaveType }: { leaveType: LeaveType }) {
+type Option = {
+    value: string;
+    label: string;
+};
+
+export default function LeaveTypesEdit({
+    leaveType,
+    genderOptions,
+    religionOptions,
+}: {
+    leaveType: LeaveType;
+    genderOptions: Option[];
+    religionOptions: Option[];
+}) {
     setLayoutProps({
         breadcrumbs: [
             { title: 'Dashboard', href: dashboard() },
@@ -61,6 +74,8 @@ export default function LeaveTypesEdit({ leaveType }: { leaveType: LeaveType }) 
                             <LeaveTypeFormFields
                                 errors={errors}
                                 defaults={leaveType}
+                                genderOptions={genderOptions}
+                                religionOptions={religionOptions}
                             />
 
                             <div className="flex items-center justify-end gap-3">

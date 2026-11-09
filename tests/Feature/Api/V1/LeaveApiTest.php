@@ -1096,7 +1096,7 @@ test('applying pilgrimage leave fails for non-muslim employee with validation er
         ->assertJsonValidationErrors(['leave_type_id']);
 
     expect($response->json('errors.leave_type_id.0'))
-        ->toBe('Pilgrimage Leave is only applicable for Muslim employees.');
+        ->toBe('Pilgrimage Leave is only applicable for Islam employees.');
 });
 
 test('applying pilgrimage leave succeeds for muslim employee', function () {

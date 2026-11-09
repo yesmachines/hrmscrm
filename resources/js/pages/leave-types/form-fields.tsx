@@ -24,6 +24,8 @@ type LeaveTypeFormValues = {
 type Props = {
     errors: Errors;
     defaults?: LeaveTypeFormValues;
+    genderOptions: { value: string; label: string }[];
+    religionOptions: { value: string; label: string }[];
 };
 
 const fieldClass =
@@ -85,6 +87,8 @@ function YesNoSelect({
 export default function LeaveTypeFormFields({
     errors,
     defaults = {},
+    genderOptions,
+    religionOptions,
 }: Props) {
     return (
         <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
@@ -145,19 +149,28 @@ export default function LeaveTypeFormFields({
                         className={fieldClass}
                     >
                         <option value="">Any</option>
-                        <option value="all">All</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
+                        {genderOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
                     </select>
                 </Field>
 
                 <Field label="Religion" name="religion" error={errors.religion}>
-                    <Input
+                    <select
                         id="religion"
                         name="religion"
-                        placeholder="e.g. Muslim, Christian, Hindu (optional)"
                         defaultValue={defaults.religion ?? ''}
-                    />
+                        className={fieldClass}
+                    >
+                        <option value="">Any</option>
+                        {religionOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
 
                 <Field label="Max days (optional)" name="max_days" error={errors.max_days}>

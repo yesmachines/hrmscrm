@@ -35,6 +35,17 @@ class UpdateLeaveTypeRequest extends FormRequest
             }
         }
 
+        foreach (['gender', 'religion'] as $field) {
+            $value = $this->input($field);
+            if (is_string($value)) {
+                $this->merge([
+                    $field => $field === 'gender'
+                        ? LeaveType::normalizeGender($value)
+                        : LeaveType::normalizeReligion($value),
+                ]);
+            }
+        }
+
         if ($this->has('status') && $this->input('status') !== null && $this->input('status') !== '') {
             $this->merge(['status' => (int) $this->input('status')]);
         }
@@ -61,8 +72,8 @@ class UpdateLeaveTypeRequest extends FormRequest
             'requires_approval' => ['nullable', 'boolean'],
             'max_days' => ['nullable', 'integer', 'min:0'],
             'annual_limit' => ['required', 'integer', 'min:0'],
-            'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'all'])],
-            'religion' => ['nullable', 'string', 'max:100'],
+            'gender' => ['nullable', 'string', Rule::in(array_keys(config('params.leave_type.gender_options', [])))],
+            'religion' => ['nullable', 'string', 'max:100', Rule::in(config('params.leave_type.religion_options', []))],
             'allow_once' => ['nullable', 'boolean'],
             'allow_balance' => ['nullable', 'boolean'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
@@ -96,8 +107,8 @@ class UpdateLeaveTypeRequest extends FormRequest
             'requires_approval' => (bool) ($validated['requires_approval'] ?? true),
             'max_days' => isset($validated['max_days']) && $validated['max_days'] !== null ? (int) $validated['max_days'] : null,
             'annual_limit' => (int) $validated['annual_limit'],
-            'gender' => $validated['gender'] ?? null,
-            'religion' => $validated['religion'] ?? null,
+            'gender' => LeaveType::normalizeGender($validated['gender'] ?? null),
+            'religion' => LeaveType::normalizeReligion($validated['religion'] ?? null),
             'allow_once' => (bool) ($validated['allow_once'] ?? false),
             'allow_balance' => (bool) ($validated['allow_balance'] ?? true),
             'status' => (int) ($validated['status'] ?? 1),

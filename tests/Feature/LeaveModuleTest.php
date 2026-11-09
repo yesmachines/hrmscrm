@@ -51,7 +51,8 @@ test('authenticated users can manage leave types and leave policies', function (
     expect($leaveType)->not->toBeNull()
         ->and($leaveType->is_paid)->toBeTrue()
         ->and($leaveType->requires_approval)->toBeTrue()
-        ->and($leaveType->religion)->toBe('Muslim');
+        ->and($leaveType->gender)->toBeNull()
+        ->and($leaveType->religion)->toBe('Islam');
 
     $organisation = Organisation::query()->create([
         'org_name' => 'Acme Corp',
@@ -187,6 +188,96 @@ test('leave policy validates new policy settings and exclusion JSON', function (
             'carry_forward_weeks',
             'exclude_rules',
         ]);
+});
+
+test('leave type create and edit use configured gender and religion options', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('leave-types.create'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-types/create')
+            ->where('genderOptions', [
+                ['value' => 'male', 'label' => 'Male'],
+                ['value' => 'female', 'label' => 'Female'],
+            ])
+            ->where('religionOptions', [
+                ['value' => 'Other', 'label' => 'Other'],
+                ['value' => 'Hinduism', 'label' => 'Hinduism'],
+                ['value' => 'Islam', 'label' => 'Islam'],
+                ['value' => 'Christianity', 'label' => 'Christianity'],
+                ['value' => 'Sikhism', 'label' => 'Sikhism'],
+                ['value' => 'Buddhism', 'label' => 'Buddhism'],
+                ['value' => 'Jainism', 'label' => 'Jainism'],
+                ['value' => 'Judaism', 'label' => 'Judaism'],
+            ])
+        );
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Legacy Leave',
+        'code' => 'LEGACY',
+        'gender' => 'Female',
+        'religion' => 'Christianity',
+        'status' => 1,
+    ]);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('leave-types.edit', $leaveType))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-types/edit')
+            ->where('leaveType.gender', 'female')
+            ->where('leaveType.religion', 'Christianity')
+            ->has('genderOptions', 2)
+            ->has('religionOptions', 8)
+        );
+});
+
+test('leave type gender and religion are validated against configured options and normalized', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $this->actingAs($admin)
+        ->from(route('leave-types.create'))
+        ->post(route('leave-types.store'), [
+            'leave_name' => 'Configured Leave',
+            'code' => 'CONFIGURED',
+            'annual_limit' => 12,
+            'gender' => 'unknown',
+            'religion' => 'Zoroastrianism',
+        ])
+        ->assertRedirect(route('leave-types.create'))
+        ->assertSessionHasErrors(['gender', 'religion']);
+
+    $this->actingAs($admin)
+        ->post(route('leave-types.store'), [
+            'leave_name' => 'Islam Leave',
+            'code' => 'ISLAM',
+            'annual_limit' => 12,
+            'gender' => 'FEMALE',
+            'religion' => 'Islam',
+        ])
+        ->assertRedirect(route('leave-types.index'));
+
+    $leaveType = LeaveType::query()->where('code', 'ISLAM')->firstOrFail();
+    expect($leaveType->gender)->toBe('female')
+        ->and($leaveType->religion)->toBe('Islam');
+
+    $this->actingAs($admin)
+        ->from(route('leave-types.edit', $leaveType))
+        ->put(route('leave-types.update', $leaveType), [
+            'leave_name' => 'Islam Leave',
+            'code' => 'ISLAM',
+            'annual_limit' => 12,
+            'gender' => 'all',
+            'religion' => 'Hinduism',
+        ])
+        ->assertRedirect(route('leave-types.show', $leaveType));
+
+    expect($leaveType->fresh()->gender)->toBeNull()
+        ->and($leaveType->fresh()->religion)->toBe('Hinduism');
 });
 
 test('leave policy create page marks leave types as disabled only if they already have a policy', function () {

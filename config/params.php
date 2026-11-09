@@ -13,6 +13,22 @@ return [
         'issue_date',
         'total_experience',
     ],
+    'leave_type' => [
+        'gender_options' => [
+            'male' => 'Male',
+            'female' => 'Female',
+        ],
+        'religion_options' => [
+            'Other',
+            'Hinduism',
+            'Islam',
+            'Christianity',
+            'Sikhism',
+            'Buddhism',
+            'Jainism',
+            'Judaism',
+        ],
+    ],
     'letter_request' => [
         'status' => [
             'draft' => 'Draft',

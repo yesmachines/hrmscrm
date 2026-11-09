@@ -51,16 +51,10 @@ class LeaveController extends Controller
         // Fetch active leave types filtered by employee gender
         $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
-        $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
-            'm', 'male' => 'male',
-            'f', 'female' => 'female',
-            default => null,
-        };
+        $employeeGender = LeaveType::normalizeGender($rawEmployeeGender);
 
-        $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
-        $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
-            || str_contains($rawEmployeeReligion, 'muslim')
-            || str_contains($rawEmployeeReligion, 'islam');
+        $rawEmployeeReligion = $profile?->religion;
+        $isMuslim = LeaveType::normalizeReligion($rawEmployeeReligion) === 'Islam';
 
         $leaveTypes = LeaveType::where('status', 1)->get()->filter(function ($type) use ($employeeGender, $rawEmployeeReligion, $isMuslim) {
             $isMaternity = $type->code === 'MATERNITY' || str_contains(strtolower($type->leave_name), 'maternity');
@@ -68,25 +62,14 @@ class LeaveController extends Controller
             $isPilgrimage = $type->code === 'PILGRIMAGE' || str_contains(strtolower($type->leave_name), 'pilgrim') || str_contains(strtolower($type->leave_name), 'hajj');
 
             if (! empty($type->religion)) {
-                $requiredReligion = strtolower(trim($type->religion));
-                if ($requiredReligion === 'muslim') {
-                    if (! $isMuslim) {
-                        return false;
-                    }
-                } elseif ($requiredReligion !== $rawEmployeeReligion
-                    && ! str_contains($rawEmployeeReligion, $requiredReligion)
-                    && ! str_contains($requiredReligion, $rawEmployeeReligion)) {
+                if (! LeaveType::religionsMatch($rawEmployeeReligion, $type->religion)) {
                     return false;
                 }
             } elseif ($isPilgrimage && ! $isMuslim) {
                 return false;
             }
 
-            $typeGender = match (strtolower(trim($type->gender ?? ''))) {
-                'female', 'f' => 'female',
-                'male', 'm' => 'male',
-                default => null,
-            };
+            $typeGender = LeaveType::normalizeGender($type->gender);
 
             if ($isMaternity) {
                 $typeGender = 'female';

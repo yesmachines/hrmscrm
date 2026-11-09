@@ -123,20 +123,12 @@ class LeaveValidationService
         // 5. Gender Eligibility Check (from Leave Type & Special Cases like Maternity / Paternity)
         $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
-        $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
-            'm', 'male' => 'male',
-            'f', 'female' => 'female',
-            default => null,
-        };
+        $employeeGender = LeaveType::normalizeGender($rawEmployeeGender);
 
         $isMaternity = $leaveType->code === 'MATERNITY' || str_contains(strtolower($leaveType->leave_name), 'maternity');
         $isPaternity = $leaveType->code === 'PATERNITY' || str_contains(strtolower($leaveType->leave_name), 'paternity');
 
-        $leaveTypeGender = match (strtolower(trim($leaveType->gender ?? ''))) {
-            'female', 'f' => 'female',
-            'male', 'm' => 'male',
-            default => null,
-        };
+        $leaveTypeGender = LeaveType::normalizeGender($leaveType->gender);
 
         if ($isMaternity) {
             $leaveTypeGender = 'female';
@@ -153,23 +145,14 @@ class LeaveValidationService
         // 6. Religious Eligibility Check
         $isPilgrimage = $leaveType->code === 'PILGRIMAGE' || str_contains(strtolower($leaveType->leave_name), 'pilgrim') || str_contains(strtolower($leaveType->leave_name), 'hajj');
         if (! empty($leaveType->religion) || $isPilgrimage) {
-            $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
-            $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
-                || str_contains($rawEmployeeReligion, 'muslim')
-                || str_contains($rawEmployeeReligion, 'islam');
-
-            $requiredReligion = strtolower(trim($leaveType->religion ?: 'muslim'));
-            $matched = false;
-            if ($requiredReligion === 'muslim') {
-                $matched = $isMuslim;
-            } else {
-                $matched = ($rawEmployeeReligion === $requiredReligion)
-                    || str_contains($rawEmployeeReligion, $requiredReligion)
-                    || str_contains($requiredReligion, $rawEmployeeReligion);
-            }
+            $requiredReligion = LeaveType::normalizeReligion($leaveType->religion) ?? 'Islam';
+            $matched = LeaveType::religionsMatch($profile?->religion, $requiredReligion);
 
             if (! $matched) {
-                $religionLabel = $leaveType->religion ?: 'Muslim';
+                $religionOptions = config('params.leave_type.religion_options', []);
+                $religionLabel = is_array($religionOptions)
+                    ? ($religionOptions[$requiredReligion] ?? $requiredReligion)
+                    : $requiredReligion;
                 throw ValidationException::withMessages([
                     'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$religionLabel} employees."],
                 ]);
