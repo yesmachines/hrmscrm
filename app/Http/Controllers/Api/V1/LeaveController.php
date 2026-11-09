@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeProfile;
 use App\Models\LeaveBalance;
-use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestFile;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
+use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveValidationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -34,7 +34,7 @@ class LeaveController extends Controller
             new OA\Response(response: 404, description: 'Employee not found'),
         ]
     )]
-    public function meta(Request $request)
+    public function meta(Request $request, LeaveTypeEligibilityService $eligibilityService)
     {
         $user = $request->user();
         if (! $user) {
@@ -51,59 +51,15 @@ class LeaveController extends Controller
         // Fetch active leave types filtered by employee gender
         $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
-        $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
-            'm', 'male' => 'male',
-            'f', 'female' => 'female',
-            default => null,
-        };
-
-        $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
-        $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
-            || str_contains($rawEmployeeReligion, 'muslim')
-            || str_contains($rawEmployeeReligion, 'islam');
-
-        $leaveTypes = LeaveType::where('status', 1)->get()->filter(function ($type) use ($employeeGender, $rawEmployeeReligion, $isMuslim) {
-            $isMaternity = $type->code === 'MATERNITY' || str_contains(strtolower($type->leave_name), 'maternity');
-            $isPaternity = $type->code === 'PATERNITY' || str_contains(strtolower($type->leave_name), 'paternity');
-            $isPilgrimage = $type->code === 'PILGRIMAGE' || str_contains(strtolower($type->leave_name), 'pilgrim') || str_contains(strtolower($type->leave_name), 'hajj');
-
-            if (! empty($type->religion)) {
-                $requiredReligion = strtolower(trim($type->religion));
-                if ($requiredReligion === 'muslim') {
-                    if (! $isMuslim) {
-                        return false;
-                    }
-                } elseif ($requiredReligion !== $rawEmployeeReligion
-                    && ! str_contains($rawEmployeeReligion, $requiredReligion)
-                    && ! str_contains($requiredReligion, $rawEmployeeReligion)) {
-                    return false;
-                }
-            } elseif ($isPilgrimage && ! $isMuslim) {
-                return false;
-            }
-
-            $typeGender = match (strtolower(trim($type->gender ?? ''))) {
-                'female', 'f' => 'female',
-                'male', 'm' => 'male',
-                default => null,
-            };
-
-            if ($isMaternity) {
-                $typeGender = 'female';
-            } elseif ($isPaternity) {
-                $typeGender = 'male';
-            }
-
-            if ($typeGender !== null && $employeeGender !== null && $employeeGender !== $typeGender) {
-                return false;
-            }
-
-            return true;
-        })->values();
+        $rawEmployeeReligion = $profile?->religion;
+        $leaveTypes = $eligibilityService->filterEligible(
+            LeaveType::with('policy')->where('status', 1)->get(),
+            $rawEmployeeGender,
+            $rawEmployeeReligion,
+        );
 
         $typesData = $leaveTypes->map(function ($type) use ($employee) {
-            // There is only one policy for a single leave type
-            $policy = $type->policy ?? LeavePolicy::where('leave_type_id', $type->id)->first();
+            $policy = $type->policy;
 
             // Get current year balance
             $balance = LeaveBalance::where('leave_type_id', $type->id)
@@ -111,23 +67,17 @@ class LeaveController extends Controller
                 ->where('year', date('Y'))
                 ->first();
 
-            // Combined attachment condition
-            $requiresAttachment = (bool) ($type->requires_attachment || ($policy && $policy->requires_attachment));
-
             return [
                 'id' => $type->id,
                 'leave_name' => $type->leave_name,
                 'code' => $type->code,
                 'is_paid' => (bool) $type->is_paid,
-                'requires_attachment' => $requiresAttachment,
                 'requires_approval' => (bool) $type->requires_approval,
-                'requires_handover' => (bool) $type->requires_handover,
-                'max_days' => $type->max_days,
-                'annual_limit' => $type->annual_limit,
+                'annual_limit' => $policy?->annual_limit,
                 'gender' => $type->gender,
                 'religion' => $type->religion,
-                'allow_once' => (bool) $type->allow_once,
-                'allow_balance' => (bool) $type->allow_balance,
+                'allow_once' => (bool) ($policy?->allow_once ?? false),
+                'allow_balance' => (bool) ($policy?->allow_balance ?? true),
                 'balance' => [
                     'total' => $balance ? (float) $balance->allocated : 0,
                     'used' => $balance ? (float) $balance->used : 0,
@@ -142,6 +92,7 @@ class LeaveController extends Controller
                     'requires_document_after_days' => $policy->requires_document_after_days,
                     'requires_weekend_document' => (bool) $policy->requires_weekend_document,
                     'requires_attachment' => (bool) $policy->requires_attachment,
+                    'requires_handover' => (bool) $policy->requires_handover,
                     'carry_forward' => (bool) $policy->carry_forward,
                     'encashment' => (bool) $policy->encashment,
                     'probation_applicable' => (bool) $policy->probation_applicable,
@@ -261,6 +212,7 @@ class LeaveController extends Controller
                         new OA\Property(property: 'leave_type_id', type: 'integer'),
                         new OA\Property(property: 'start_date', type: 'string', format: 'date'),
                         new OA\Property(property: 'end_date', type: 'string', format: 'date'),
+                        new OA\Property(property: 'request_type', type: 'string', enum: ['full_day', 'firsthalf', 'secondhalf']),
                         new OA\Property(property: 'reason', type: 'string'),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),
@@ -308,6 +260,7 @@ class LeaveController extends Controller
         $policy = $validation['policy'];
         $startDate = $validation['start_date'];
         $endDate = $validation['end_date'];
+        $requestType = $validation['request_type'];
         $totalDays = $validation['total_days'];
         $remarks = $validation['remarks'];
         $payBreakdown = $validation['pay_breakdown'];
@@ -315,6 +268,7 @@ class LeaveController extends Controller
         $leaveRequest = LeaveRequest::create([
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
+            'request_type' => $requestType,
             'start_date' => $startDate->toDateTimeString(),
             'end_date' => $endDate->toDateTimeString(),
             'total_days' => $totalDays,
@@ -329,6 +283,14 @@ class LeaveController extends Controller
             'done_by' => $user->id,
             'action_on' => now(),
         ]);
+
+        if ($request->filled('festival_id')) {
+            $leaveRequest->details()->create([
+                'field_name' => 'Festival ID',
+                'field_key' => 'festival_id',
+                'field_value' => (string) $request->input('festival_id'),
+            ]);
+        }
 
         if ($request->hasFile('certificate')) {
             $path = $request->file('certificate')->store('leave-certificates', 'public');
@@ -369,7 +331,7 @@ class LeaveController extends Controller
         }
 
         // Store handover details if required
-        if ($leaveType->requires_handover) {
+        if ($policy?->requires_handover) {
             $details = [
                 ['field_name' => 'Handover Person ID', 'field_key' => 'handover_person_id', 'field_value' => (string) $request->input('handover_person_id')],
                 ['field_name' => 'Handover Description', 'field_key' => 'handover_description', 'field_value' => (string) $request->input('handover_description')],
@@ -418,7 +380,7 @@ class LeaveController extends Controller
         ]);
 
         // Update pending balance if balance tracking enabled
-        if ($leaveType->allow_balance) {
+        if ($policy?->allow_balance ?? true) {
             $currentYear = $startDate->year;
             $balance = LeaveBalance::where('leave_type_id', $leaveType->id)
                 ->where('employee_id', $employee->id)
@@ -435,6 +397,278 @@ class LeaveController extends Controller
             $leaveRequest->load(['files', 'details', 'leaveType']),
             'Leave request submitted successfully.',
             201
+        );
+    }
+
+    /**
+     * Update an applied leave request belonging to the authenticated employee.
+     */
+    #[OA\Patch(
+        path: '/api/v1/leaves/{id}',
+        summary: 'Update an applied leave request',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave request updated successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Leave request not found'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
+    public function update(Request $request, int|string $id, LeaveValidationService $validationService)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        $employee = Employee::where('user_id', $user->id)->first();
+        if (! $employee) {
+            return $this->errorResponse('Employee record not found.', 404);
+        }
+
+        $leaveRequest = LeaveRequest::with('details')
+            ->where('employee_id', $employee->id)
+            ->find($id);
+
+        if (! $leaveRequest) {
+            return $this->errorResponse('Leave request not found.', 404);
+        }
+
+        if ($leaveRequest->status !== 'applied') {
+            return $this->errorResponse(
+                'Only leave requests with applied status can be edited.',
+                422,
+                ['status' => ['Only leave requests with applied status can be edited.']],
+            );
+        }
+
+        $validated = $request->validate([
+            'leave_type_id' => ['sometimes', 'integer', 'exists:leave_types,id'],
+            'start_date' => ['sometimes', 'date'],
+            'end_date' => ['sometimes', 'date'],
+            'request_type' => ['sometimes', 'in:full_day,firsthalf,secondhalf'],
+            'total_days' => ['sometimes', 'nullable', 'numeric', 'min:0.5'],
+            'status' => ['sometimes', 'in:applied'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
+            'certificate' => ['sometimes', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:10240'],
+            'signature' => ['sometimes', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'handover_person_id' => ['sometimes', 'nullable', 'exists:salescrm.employees,id'],
+            'handover_description' => ['sometimes', 'nullable', 'string'],
+            'emergency_contact_no' => ['sometimes', 'nullable', 'string', 'regex:/^\+?[0-9]+$/'],
+            'travel_contact_no' => ['sometimes', 'nullable', 'string', 'regex:/^\+?[0-9]+$/'],
+            'traveling_outside_country' => ['sometimes', 'boolean'],
+            'destination' => ['sometimes', 'nullable', 'string'],
+            'due_date' => ['sometimes', 'nullable', 'date'],
+            'child_birth_date' => ['sometimes', 'nullable', 'date'],
+            'festival_id' => ['sometimes', 'nullable', 'exists:festivals,id'],
+            'declaration' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        if (
+            isset($validated['leave_type_id'])
+            && (int) $validated['leave_type_id'] !== (int) $leaveRequest->leave_type_id
+        ) {
+            return $this->errorResponse(
+                'Leave type cannot be changed after the request is created.',
+                422,
+                ['leave_type_id' => ['Leave type cannot be changed after the request is created.']],
+            );
+        }
+
+        $details = $leaveRequest->details->keyBy('field_key');
+        $detailValue = fn (string $key): ?string => $details->get($key)?->field_value;
+        $datesChanged = $request->exists('start_date') || $request->exists('end_date');
+
+        $validationData = array_merge([
+            'leave_type_id' => $leaveRequest->leave_type_id,
+            'start_date' => $leaveRequest->start_date->toDateString(),
+            'end_date' => $leaveRequest->end_date?->toDateString(),
+            'request_type' => $leaveRequest->request_type ?? 'full_day',
+            'total_days' => $datesChanged ? null : $leaveRequest->total_days,
+            'remarks' => $leaveRequest->remarks,
+            'handover_person_id' => $detailValue('handover_person_id'),
+            'handover_description' => $detailValue('handover_description'),
+            'emergency_contact_no' => $detailValue('emergency_contact_no'),
+            'travel_contact_no' => $detailValue('travel_contact_no'),
+            'traveling_outside_country' => $detailValue('traveling_outside_country') === 'Yes',
+            'destination' => $detailValue('destination'),
+            'due_date' => $detailValue('due_date'),
+            'child_birth_date' => $detailValue('child_birth_date'),
+            'festival_id' => $detailValue('festival_id'),
+        ], $validated);
+
+        try {
+            $validation = $validationService->validateApplication(
+                $employee,
+                $validationData,
+                $request->hasFile('certificate') || $leaveRequest->files()->exists(),
+                (int) $leaveRequest->id,
+            );
+        } catch (ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
+        }
+
+        if (! $request->exists('remarks')) {
+            $validation['remarks'] = $leaveRequest->remarks;
+        }
+
+        $oldYear = $leaveRequest->start_date->year;
+        $newYear = $validation['start_date']->year;
+        $oldTotalDays = (float) $leaveRequest->total_days;
+        $balanceTrackingEnabled = $validation['policy']?->allow_balance ?? true;
+
+        DB::transaction(function () use (
+            $request,
+            $user,
+            $leaveRequest,
+            $validation,
+            $validationData,
+            $balanceTrackingEnabled,
+            $oldYear,
+            $newYear,
+            $oldTotalDays,
+        ): void {
+            $leaveRequest->update([
+                'start_date' => $validation['start_date']->toDateTimeString(),
+                'end_date' => $validation['end_date']->toDateTimeString(),
+                'request_type' => $validation['request_type'],
+                'total_days' => $validation['total_days'],
+                'remarks' => $validation['remarks'],
+            ]);
+
+            if ($balanceTrackingEnabled) {
+                $pendingChanges = [$oldYear => -$oldTotalDays];
+                $pendingChanges[$newYear] = ($pendingChanges[$newYear] ?? 0.0) + $validation['total_days'];
+
+                foreach ($pendingChanges as $year => $change) {
+                    if ($change === 0.0) {
+                        continue;
+                    }
+
+                    $balance = LeaveBalance::query()
+                        ->where('employee_id', $leaveRequest->employee_id)
+                        ->where('leave_type_id', $leaveRequest->leave_type_id)
+                        ->where('year', $year)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($balance) {
+                        $balance->pending = max(0, (float) $balance->pending + $change);
+                        $balance->save();
+                    }
+                }
+            }
+
+            if ($validation['policy']?->requires_handover) {
+                $this->updateLeaveRequestDetail(
+                    $leaveRequest,
+                    'handover_person_id',
+                    'Handover Person ID',
+                    $validationData['handover_person_id'] ?? null,
+                );
+                $this->updateLeaveRequestDetail(
+                    $leaveRequest,
+                    'handover_description',
+                    'Handover Description',
+                    $validationData['handover_description'] ?? null,
+                );
+            }
+
+            $detailUpdates = [
+                'emergency_contact_no' => ['Emergency Contact No', 'emergency_contact_no'],
+                'travel_contact_no' => ['Travel Contact No', 'travel_contact_no'],
+                'destination' => ['Destination', 'destination'],
+                'due_date' => ['Expected Due Date', 'due_date'],
+                'child_birth_date' => ['Child Birth Date', 'child_birth_date'],
+                'declaration' => ['Declaration', 'declaration_text'],
+            ];
+
+            foreach ($detailUpdates as $input => [$label, $key]) {
+                if ($request->exists($input)) {
+                    $this->updateLeaveRequestDetail(
+                        $leaveRequest,
+                        $key,
+                        $label,
+                        $request->input($input),
+                    );
+                }
+            }
+
+            if ($request->exists('festival_id')) {
+                $this->updateLeaveRequestDetail(
+                    $leaveRequest,
+                    'festival_id',
+                    'Festival ID',
+                    $request->input('festival_id'),
+                );
+            }
+
+            if ($request->exists('traveling_outside_country')) {
+                if ($request->boolean('traveling_outside_country')) {
+                    $this->updateLeaveRequestDetail($leaveRequest, 'traveling_outside_country', 'Traveling Outside Country', 'Yes');
+                } else {
+                    $leaveRequest->details()
+                        ->whereIn('field_key', ['traveling_outside_country', 'destination', 'travel_contact_no'])
+                        ->delete();
+                    $this->updateLeaveRequestDetail($leaveRequest, 'declaration_signed', 'Declaration Signed', 'Yes');
+                }
+            }
+
+            $payBreakdown = $validation['pay_breakdown'];
+            $this->updateLeaveRequestDetail(
+                $leaveRequest,
+                'pay_tier_breakdown',
+                'Pay Tier Breakdown',
+                "Full Pay: {$payBreakdown['full_pay']} days, Half Pay: {$payBreakdown['half_pay']} days, No Pay: {$payBreakdown['no_pay']} days",
+            );
+
+            if ($request->hasFile('certificate')) {
+                $path = $request->file('certificate')->store('leave-certificates', 'public');
+                $leaveRequest->files()->create([
+                    'file_path' => $path,
+                    'uploaded_by' => $user->id,
+                    'uploaded_date' => now(),
+                ]);
+            }
+
+            if ($request->hasFile('signature')) {
+                $signaturePath = $request->file('signature')->store('leave-signatures', 'public');
+                $this->updateLeaveRequestDetail($leaveRequest, 'signature_path', 'Signature', $signaturePath);
+            }
+
+            $leaveRequest->histories()->create([
+                'action_type' => 'applied',
+                'remarks' => 'Leave request updated via API.',
+                'done_by' => $user->id,
+                'action_on' => now(),
+            ]);
+        });
+
+        return $this->successResponse(
+            $leaveRequest->fresh()->load(['files', 'details', 'leaveType']),
+            'Leave request updated successfully.',
+        );
+    }
+
+    private function updateLeaveRequestDetail(
+        LeaveRequest $leaveRequest,
+        string $fieldKey,
+        string $fieldName,
+        mixed $value,
+    ): void {
+        if ($value === null || $value === '') {
+            $leaveRequest->details()->where('field_key', $fieldKey)->delete();
+
+            return;
+        }
+
+        $leaveRequest->details()->updateOrCreate(
+            ['field_key' => $fieldKey],
+            ['field_name' => $fieldName, 'field_value' => (string) $value],
         );
     }
 
@@ -535,7 +769,7 @@ class LeaveController extends Controller
         }
 
         $leaveRequest = LeaveRequest::with([
-            'leaveType:id,leave_name,code,is_paid,requires_attachment,requires_approval,requires_handover',
+            'leaveType:id,leave_name,code,is_paid,requires_approval',
             'files',
             'details',
             'histories' => function ($query) {
@@ -620,6 +854,7 @@ class LeaveController extends Controller
             'employee_id' => $leaveRequest->employee_id,
             'leave_type_id' => $leaveRequest->leave_type_id,
             'leave_type' => $leaveRequest->leaveType,
+            'request_type' => $leaveRequest->request_type ?? 'full_day',
             'start_date' => $leaveRequest->start_date?->format('Y-m-d'),
             'end_date' => $leaveRequest->end_date?->format('Y-m-d'),
             'total_days' => $leaveRequest->total_days,

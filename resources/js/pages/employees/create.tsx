@@ -42,6 +42,11 @@ type RoleOption = {
     name: string;
 };
 
+type EligibilityOption = {
+    value: string;
+    label: string;
+};
+
 export default function EmployeesCreate({
     departments,
     divisions,
@@ -50,6 +55,8 @@ export default function EmployeesCreate({
     officeLocations,
     roles,
     countries,
+    genderOptions,
+    religionOptions,
 }: {
     departments: DepartmentOption[];
     divisions: DivisionOption[];
@@ -58,6 +65,8 @@ export default function EmployeesCreate({
     officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
     countries: { id: number; name: string }[];
+    genderOptions: EligibilityOption[];
+    religionOptions: EligibilityOption[];
 }) {
     return (
         <>
@@ -97,6 +106,8 @@ export default function EmployeesCreate({
                                 officeLocations={officeLocations}
                                 roles={roles}
                                 countries={countries}
+                                genderOptions={genderOptions}
+                                religionOptions={religionOptions}
                             />
 
                             <div className="sticky bottom-4 z-10 flex items-center justify-end gap-3 rounded-xl border border-border/80 bg-background/95 p-4 shadow-lg backdrop-blur-md">

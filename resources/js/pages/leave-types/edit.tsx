@@ -11,19 +11,26 @@ type LeaveType = {
     leave_name: string;
     code: string;
     is_paid: number;
-    requires_attachment: number;
     requires_approval: number;
-    max_days: number | null;
-    annual_limit: number | null;
     gender: string | null;
     religion: string | null;
-    allow_once: number;
-    allow_balance: number;
     status: number;
-    requires_handover: number;
 };
 
-export default function LeaveTypesEdit({ leaveType }: { leaveType: LeaveType }) {
+type Option = {
+    value: string;
+    label: string;
+};
+
+export default function LeaveTypesEdit({
+    leaveType,
+    genderOptions,
+    religionOptions,
+}: {
+    leaveType: LeaveType;
+    genderOptions: Option[];
+    religionOptions: Option[];
+}) {
     setLayoutProps({
         breadcrumbs: [
             { title: 'Dashboard', href: dashboard() },
@@ -61,6 +68,8 @@ export default function LeaveTypesEdit({ leaveType }: { leaveType: LeaveType }) 
                             <LeaveTypeFormFields
                                 errors={errors}
                                 defaults={leaveType}
+                                genderOptions={genderOptions}
+                                religionOptions={religionOptions}
                             />
 
                             <div className="flex items-center justify-end gap-3">

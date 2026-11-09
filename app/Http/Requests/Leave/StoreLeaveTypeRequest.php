@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Leave;
 
+use App\Models\LeaveType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -17,20 +18,27 @@ class StoreLeaveTypeRequest extends FormRequest
     {
         foreach ([
             'is_paid',
-            'requires_attachment',
             'requires_approval',
-            'allow_once',
-            'allow_balance',
-            'requires_handover',
         ] as $field) {
             if ($this->has($field)) {
                 $this->merge([$field => $this->boolean($field)]);
             }
         }
 
-        foreach (['max_days', 'annual_limit', 'gender', 'religion'] as $field) {
+        foreach (['gender', 'religion'] as $field) {
             if ($this->input($field) === '') {
                 $this->merge([$field => null]);
+            }
+        }
+
+        foreach (['gender', 'religion'] as $field) {
+            $value = $this->input($field);
+            if (is_string($value)) {
+                $this->merge([
+                    $field => $field === 'gender'
+                        ? LeaveType::normalizeGender($value)
+                        : LeaveType::normalizeReligion($value),
+                ]);
             }
         }
 
@@ -48,27 +56,10 @@ class StoreLeaveTypeRequest extends FormRequest
             'leave_name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:255', 'unique:leave_types,code'],
             'is_paid' => ['nullable', 'boolean'],
-            'requires_attachment' => ['nullable', 'boolean'],
             'requires_approval' => ['nullable', 'boolean'],
-            'max_days' => ['nullable', 'integer', 'min:0'],
-            'annual_limit' => ['required', 'integer', 'min:0'],
-            'gender' => ['nullable', 'string', Rule::in(['male', 'female', 'all'])],
-            'religion' => ['nullable', 'string', 'max:100'],
-            'allow_once' => ['nullable', 'boolean'],
-            'allow_balance' => ['nullable', 'boolean'],
+            'gender' => ['nullable', 'string', Rule::in(array_keys(config('params.leave_type.gender_options', [])))],
+            'religion' => ['nullable', 'string', 'max:100', Rule::in(config('params.leave_type.religion_options', []))],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
-            'requires_handover' => ['nullable', 'boolean'],
-        ];
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public function attributes(): array
-    {
-        return [
-            'annual_limit' => 'annual limit',
-            'max_days' => 'max days',
         ];
     }
 
@@ -83,16 +74,10 @@ class StoreLeaveTypeRequest extends FormRequest
             'leave_name' => $validated['leave_name'],
             'code' => $validated['code'],
             'is_paid' => (bool) ($validated['is_paid'] ?? true),
-            'requires_attachment' => (bool) ($validated['requires_attachment'] ?? false),
             'requires_approval' => (bool) ($validated['requires_approval'] ?? true),
-            'max_days' => isset($validated['max_days']) && $validated['max_days'] !== null ? (int) $validated['max_days'] : null,
-            'annual_limit' => (int) $validated['annual_limit'],
-            'gender' => $validated['gender'] ?? null,
-            'religion' => $validated['religion'] ?? null,
-            'allow_once' => (bool) ($validated['allow_once'] ?? false),
-            'allow_balance' => (bool) ($validated['allow_balance'] ?? true),
+            'gender' => LeaveType::normalizeGender($validated['gender'] ?? null),
+            'religion' => LeaveType::normalizeReligion($validated['religion'] ?? null),
             'status' => (int) ($validated['status'] ?? 1),
-            'requires_handover' => (bool) ($validated['requires_handover'] ?? false),
         ];
     }
 }

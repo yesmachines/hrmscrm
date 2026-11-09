@@ -16,17 +16,23 @@ type LeavePolicy = {
     id: number;
     leave_type_id: number;
     organisation_id: number;
+    annual_limit: number | null;
+    allow_once: number;
+    allow_balance: number;
     full_pay_days: number | null;
     half_pay_days: number | null;
     no_pay_days: number | null;
     requires_document_after_days: number | null;
     requires_weekend_document: number;
+    requires_handover: number;
     carry_forward: number;
+    carry_forward_weeks: number | null;
     encashment: number;
     remarks: string | null;
     requires_attachment: number;
     probation_applicable: number;
     minimum_service_months: number | null;
+    exclude_rules: unknown[] | Record<string, unknown> | null;
     leave_type: { id: number; name: string; code: string } | null;
     organisation: { id: number; name: string } | null;
 };
@@ -66,7 +72,7 @@ export default function LeavePoliciesEdit({
         <>
             <Head title={`Edit ${title}`} />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1600px]">
                 <Heading
                     title="Edit leave policy"
                     description="Update leave policy details"

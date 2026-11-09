@@ -91,6 +91,20 @@ test('authenticated users can create an employee across salescrm and hrms', func
     $admin = createHrmsLoginUser('admin');
 
     $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employees.create'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('employees/create')
+            ->where('genderOptions', [
+                ['value' => 'M', 'label' => 'Male'],
+                ['value' => 'F', 'label' => 'Female'],
+            ])
+            ->where('religionOptions', collect(config('params.leave_type.religion_options'))
+                ->map(fn (string $religion) => ['value' => $religion, 'label' => $religion])
+                ->all()));
+
+    $this->actingAs($admin)
         ->post(route('employees.store'), [
             'name' => 'Test Employee',
             'email' => 'test.employee@example.com',
@@ -106,6 +120,7 @@ test('authenticated users can create an employee across salescrm and hrms', func
             'nationality' => 'Indian',
             'personal_email' => 'personal@example.com',
             'gender' => 'M',
+            'religion' => 'Islam',
         ])
         ->assertRedirect();
 
@@ -121,6 +136,7 @@ test('authenticated users can create an employee across salescrm and hrms', func
         'employee_id' => $employee->id,
         'nationality' => 'Indian',
         'personal_email' => 'personal@example.com',
+        'religion' => 'Islam',
     ]);
 
     $this->actingAs($admin)
@@ -129,7 +145,9 @@ test('authenticated users can create an employee across salescrm and hrms', func
         ->assertInertia(fn ($page) => $page
             ->component('employees/edit')
             ->where('employee.email', 'test.employee@example.com')
-            ->where('employee.profile.personal_email', 'personal@example.com'));
+            ->where('employee.profile.personal_email', 'personal@example.com')
+            ->where('genderOptions.0.value', 'M')
+            ->where('religionOptions.2.value', 'Islam'));
 
     $this->actingAs($admin)
         ->get(route('employees.show', $employee))

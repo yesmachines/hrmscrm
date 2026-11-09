@@ -6,7 +6,18 @@ import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
 import LeaveTypeFormFields from './form-fields';
 
-export default function LeaveTypesCreate() {
+type Option = {
+    value: string;
+    label: string;
+};
+
+export default function LeaveTypesCreate({
+    genderOptions,
+    religionOptions,
+}: {
+    genderOptions: Option[];
+    religionOptions: Option[];
+}) {
     return (
         <>
             <Head title="Add leave type" />
@@ -23,7 +34,11 @@ export default function LeaveTypesCreate() {
                 >
                     {({ processing, errors }) => (
                         <>
-                            <LeaveTypeFormFields errors={errors} />
+                            <LeaveTypeFormFields
+                                errors={errors}
+                                genderOptions={genderOptions}
+                                religionOptions={religionOptions}
+                            />
 
                             <div className="flex items-center justify-end gap-3">
                                 <Button type="submit" disabled={processing}>

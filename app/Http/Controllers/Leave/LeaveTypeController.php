@@ -28,7 +28,7 @@ class LeaveTypeController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('leave-types/create');
+        return Inertia::render('leave-types/create', $this->formOptions());
     }
 
     public function store(StoreLeaveTypeRequest $request): RedirectResponse
@@ -54,6 +54,7 @@ class LeaveTypeController extends Controller
     {
         return Inertia::render('leave-types/edit', [
             'leaveType' => $this->payload($leave_type),
+            ...$this->formOptions(),
         ]);
     }
 
@@ -128,16 +129,41 @@ class LeaveTypeController extends Controller
             'leave_name' => $leaveType->leave_name,
             'code' => $leaveType->code,
             'is_paid' => (int) $leaveType->is_paid,
-            'requires_attachment' => (int) $leaveType->requires_attachment,
             'requires_approval' => (int) $leaveType->requires_approval,
-            'max_days' => $leaveType->max_days,
-            'annual_limit' => $leaveType->annual_limit,
-            'gender' => $leaveType->gender,
-            'religion' => $leaveType->religion,
-            'allow_once' => (int) $leaveType->allow_once,
-            'allow_balance' => (int) $leaveType->allow_balance,
+            'gender' => LeaveType::normalizeGender($leaveType->gender),
+            'religion' => LeaveType::normalizeReligion($leaveType->religion),
             'status' => (int) $leaveType->status,
-            'requires_handover' => (int) $leaveType->requires_handover,
         ];
+    }
+
+    /**
+     * @return array{
+     *     genderOptions: list<array{value: string, label: string}>,
+     *     religionOptions: list<array{value: string, label: string}>
+     * }
+     */
+    private function formOptions(): array
+    {
+        return [
+            'genderOptions' => $this->options(config('params.leave_type.gender_options', [])),
+            'religionOptions' => array_map(
+                fn (string $religion): array => ['value' => $religion, 'label' => $religion],
+                config('params.leave_type.religion_options', []),
+            ),
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $options
+     * @return list<array{value: string, label: string}>
+     */
+    private function options(array $options): array
+    {
+        $result = [];
+        foreach ($options as $value => $label) {
+            $result[] = ['value' => $value, 'label' => $label];
+        }
+
+        return $result;
     }
 }

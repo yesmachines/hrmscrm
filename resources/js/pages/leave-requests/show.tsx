@@ -10,6 +10,7 @@ type LeaveRequestDetail = {
     id: number;
     start_date: string;
     end_date: string;
+    request_type?: string;
     total_days: number;
     status: string;
     remarks: string | null;
@@ -18,7 +19,10 @@ type LeaveRequestDetail = {
         id: number;
         leave_name: string;
         is_paid: boolean;
-        requires_handover?: boolean;
+        policy?: {
+            requires_attachment: boolean;
+            requires_handover: boolean;
+        } | null;
     };
     employee: {
         id: number;
@@ -152,6 +156,16 @@ export default function LeaveRequestShow({
                                         }`}>
                                             {leave_request.status.charAt(0).toUpperCase() + leave_request.status.slice(1)}
                                         </span>
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-muted-foreground">Request Type</p>
+                                    <p className="font-medium text-foreground">
+                                        {leave_request.request_type === 'firsthalf'
+                                            ? 'First half'
+                                            : leave_request.request_type === 'secondhalf'
+                                              ? 'Second half'
+                                              : 'Full day'}
                                     </p>
                                 </div>
                                 <div>

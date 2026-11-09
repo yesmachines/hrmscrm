@@ -8,6 +8,7 @@ use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
+use App\Services\LeaveTypeEligibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -53,7 +54,8 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status', 'gender', 'religion', 'requires_handover')
+            ->with('policy:id,leave_type_id,requires_attachment,requires_handover')
+            ->select('id', 'leave_name', 'code', 'is_paid', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
             ->get();
@@ -78,13 +80,14 @@ class LeaveRequestController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, LeaveTypeEligibilityService $eligibilityService): RedirectResponse
     {
         $validated = $request->validate([
             'employee_id' => 'required|exists:salescrm.employees,id',
             'leave_type_id' => 'required|exists:leave_types,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
+            'request_type' => 'nullable|in:full_day,firsthalf,secondhalf',
             'total_days' => 'nullable|numeric|min:0.5',
             'status' => 'required|in:applied,approved',
             'remarks' => 'nullable|string',
@@ -94,70 +97,30 @@ class LeaveRequestController extends Controller
         ]);
 
         $employee = Employee::query()->findOrFail($validated['employee_id']);
-        $leaveType = LeaveType::query()->findOrFail($validated['leave_type_id']);
+        $leaveType = LeaveType::query()
+            ->with('policy')
+            ->findOrFail($validated['leave_type_id']);
+        $policy = $leaveType->policy;
 
         $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
-        $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
-            'm', 'male' => 'male',
-            'f', 'female' => 'female',
-            default => null,
-        };
-
-        $isMaternity = $leaveType->code === 'MATERNITY' || str_contains(strtolower($leaveType->leave_name), 'maternity');
-        $isPaternity = $leaveType->code === 'PATERNITY' || str_contains(strtolower($leaveType->leave_name), 'paternity');
-
-        $leaveTypeGender = match (strtolower(trim($leaveType->gender ?? ''))) {
-            'female', 'f' => 'female',
-            'male', 'm' => 'male',
-            default => null,
-        };
-
-        if ($isMaternity) {
-            $leaveTypeGender = 'female';
-        } elseif ($isPaternity) {
-            $leaveTypeGender = 'male';
-        }
-
-        if ($leaveTypeGender !== null && $employeeGender !== null && $employeeGender !== $leaveTypeGender) {
-            throw ValidationException::withMessages([
-                'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$leaveTypeGender} employees."],
-            ]);
-        }
-
-        $isPilgrimage = $leaveType->code === 'PILGRIMAGE' || str_contains(strtolower($leaveType->leave_name), 'pilgrim') || str_contains(strtolower($leaveType->leave_name), 'hajj');
-        if (! empty($leaveType->religion) || $isPilgrimage) {
-            $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
-            $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
-                || str_contains($rawEmployeeReligion, 'muslim')
-                || str_contains($rawEmployeeReligion, 'islam');
-
-            $requiredReligion = strtolower(trim($leaveType->religion ?: 'muslim'));
-            $matched = false;
-            if ($requiredReligion === 'muslim') {
-                $matched = $isMuslim;
-            } else {
-                $matched = ($rawEmployeeReligion === $requiredReligion)
-                    || str_contains($rawEmployeeReligion, $requiredReligion)
-                    || str_contains($requiredReligion, $rawEmployeeReligion);
-            }
-
-            if (! $matched) {
-                $religionLabel = $leaveType->religion ?: 'Muslim';
-                throw ValidationException::withMessages([
-                    'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$religionLabel} employees."],
-                ]);
-            }
-        }
+        $eligibilityService->assertEligible($leaveType, $rawEmployeeGender, $profile?->religion);
 
         $startDate = Carbon::parse($validated['start_date'])->startOfDay();
         $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+        $requestType = $validated['request_type'] ?? 'full_day';
+
+        if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+            throw ValidationException::withMessages([
+                'request_type' => ['Half-day leave must start and end on the same date.'],
+            ]);
+        }
 
         $handoverPersonId = $validated['handover_person_id'] ?? null;
 
-        if ($leaveType->requires_handover && empty($handoverPersonId)) {
+        if ($policy?->requires_handover && empty($handoverPersonId)) {
             throw ValidationException::withMessages([
-                'handover_person_id' => ['A handover person is required for this leave type.'],
+                'handover_person_id' => ['A handover person is required by this leave policy.'],
             ]);
         }
 
@@ -180,20 +143,29 @@ class LeaveRequestController extends Controller
                 ]);
             }
 
-            if ($leaveType->requires_handover && empty($validated['handover_description'])) {
+            if ($policy?->requires_handover && empty($validated['handover_description'])) {
                 throw ValidationException::withMessages([
                     'handover_description' => ['Handover description is required.'],
                 ]);
             }
         }
 
-        $totalDays = $validated['total_days'] ?? (
-            Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-        );
+        if ($policy?->requires_attachment && ! $request->hasFile('certificate')) {
+            throw ValidationException::withMessages([
+                'certificate' => ['A supporting document is required by this leave policy.'],
+            ]);
+        }
+
+        $totalDays = $requestType === 'full_day'
+            ? ($validated['total_days'] ?? (
+                Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
+            ))
+            : 0.5;
 
         $leaveRequest = LeaveRequest::create([
             'employee_id' => $validated['employee_id'],
             'leave_type_id' => $validated['leave_type_id'],
+            'request_type' => $requestType,
             'start_date' => $validated['start_date'],
             'end_date' => $validated['end_date'],
             'total_days' => $totalDays,
@@ -272,7 +244,8 @@ class LeaveRequestController extends Controller
             'employee:id,user_id,employee_code,designation,department_id,image_url',
             'employee.user:id,name,email',
             'employee.department:id,name',
-            'leaveType:id,leave_name,is_paid,requires_handover',
+            'leaveType:id,leave_name,is_paid',
+            'leaveType.policy:id,leave_type_id,requires_handover,requires_attachment',
             'files',
             'details',
             'histories' => function ($query) {
@@ -302,7 +275,8 @@ class LeaveRequestController extends Controller
             'employee:id,user_id,emp_num,employee_code,designation,department_id',
             'employee.user:id,name',
             'employee.department:id,name',
-            'leaveType:id,leave_name,code,requires_handover',
+            'leaveType:id,leave_name,code',
+            'leaveType.policy:id,leave_type_id,requires_handover,requires_attachment',
             'details',
             'files',
         ]);
@@ -326,7 +300,8 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_attachment', 'status', 'gender', 'religion', 'requires_handover')
+            ->with('policy:id,leave_type_id,requires_attachment,requires_handover')
+            ->select('id', 'leave_name', 'code', 'is_paid', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
             ->get();
@@ -354,6 +329,7 @@ class LeaveRequestController extends Controller
                 'leave_type_id' => $leave_request->leave_type_id,
                 'start_date' => Carbon::parse($leave_request->start_date)->format('Y-m-d'),
                 'end_date' => Carbon::parse($leave_request->end_date)->format('Y-m-d'),
+                'request_type' => $leave_request->request_type ?? 'full_day',
                 'total_days' => $leave_request->total_days,
                 'status' => $leave_request->status,
                 'remarks' => $leave_request->remarks,
@@ -370,8 +346,11 @@ class LeaveRequestController extends Controller
         ]);
     }
 
-    public function update(Request $request, LeaveRequest $leave_request)
-    {
+    public function update(
+        Request $request,
+        LeaveRequest $leave_request,
+        LeaveTypeEligibilityService $eligibilityService,
+    ) {
         // If full edit form submission (has start_date)
         if ($request->has('start_date')) {
             $validated = $request->validate([
@@ -379,6 +358,7 @@ class LeaveRequestController extends Controller
                 'leave_type_id' => 'required|exists:leave_types,id',
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
+                'request_type' => 'nullable|in:full_day,firsthalf,secondhalf',
                 'total_days' => 'nullable|numeric|min:0.5',
                 'status' => 'required|in:applied,approved,rejected,cancelled',
                 'remarks' => 'nullable|string',
@@ -387,66 +367,32 @@ class LeaveRequestController extends Controller
                 'handover_description' => 'nullable|string',
             ]);
 
-            $employeeId = $validated['employee_id'] ?? $leave_request->employee_id;
-            $employee = Employee::query()->findOrFail($employeeId);
-            $leaveType = LeaveType::query()->findOrFail($validated['leave_type_id']);
-
-            $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
-            $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
-            $employeeGender = match (strtolower(trim($rawEmployeeGender ?? ''))) {
-                'm', 'male' => 'male',
-                'f', 'female' => 'female',
-                default => null,
-            };
-
-            $isMaternity = $leaveType->code === 'MATERNITY' || str_contains(strtolower($leaveType->leave_name), 'maternity');
-            $isPaternity = $leaveType->code === 'PATERNITY' || str_contains(strtolower($leaveType->leave_name), 'paternity');
-
-            $leaveTypeGender = match (strtolower(trim($leaveType->gender ?? ''))) {
-                'female', 'f' => 'female',
-                'male', 'm' => 'male',
-                default => null,
-            };
-
-            if ($isMaternity) {
-                $leaveTypeGender = 'female';
-            } elseif ($isPaternity) {
-                $leaveTypeGender = 'male';
-            }
-
-            if ($leaveTypeGender !== null && $employeeGender !== null && $employeeGender !== $leaveTypeGender) {
+            if ((int) $validated['leave_type_id'] !== (int) $leave_request->leave_type_id) {
                 throw ValidationException::withMessages([
-                    'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$leaveTypeGender} employees."],
+                    'leave_type_id' => ['Leave type cannot be changed after the request is created.'],
                 ]);
             }
 
-            $isPilgrimage = $leaveType->code === 'PILGRIMAGE' || str_contains(strtolower($leaveType->leave_name), 'pilgrim') || str_contains(strtolower($leaveType->leave_name), 'hajj');
-            if (! empty($leaveType->religion) || $isPilgrimage) {
-                $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
-                $isMuslim = in_array($rawEmployeeReligion, ['muslim', 'islam', 'islamic'])
-                    || str_contains($rawEmployeeReligion, 'muslim')
-                    || str_contains($rawEmployeeReligion, 'islam');
+            $employeeId = $validated['employee_id'] ?? $leave_request->employee_id;
+            $employee = Employee::query()->findOrFail($employeeId);
+            $leaveType = LeaveType::query()
+                ->with('policy')
+                ->findOrFail($leave_request->leave_type_id);
+            $policy = $leaveType->policy;
 
-                $requiredReligion = strtolower(trim($leaveType->religion ?: 'muslim'));
-                $matched = false;
-                if ($requiredReligion === 'muslim') {
-                    $matched = $isMuslim;
-                } else {
-                    $matched = ($rawEmployeeReligion === $requiredReligion)
-                        || str_contains($rawEmployeeReligion, $requiredReligion)
-                        || str_contains($requiredReligion, $rawEmployeeReligion);
-                }
-
-                if (! $matched) {
-                    $religionLabel = $leaveType->religion ?: 'Muslim';
-                    throw ValidationException::withMessages([
-                        'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$religionLabel} employees."],
-                    ]);
-                }
-            }
+            $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
+            $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
+            $eligibilityService->assertEligible($leaveType, $rawEmployeeGender, $profile?->religion);
 
             $startDate = Carbon::parse($validated['start_date'])->startOfDay();
             $endDate = Carbon::parse($validated['end_date'])->endOfDay();
+            $requestType = $validated['request_type'] ?? 'full_day';
+
+            if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+                throw ValidationException::withMessages([
+                    'request_type' => ['Half-day leave must start and end on the same date.'],
+                ]);
+            }
 
             // Check overlapping active/approved leave for the employee (excluding this leave request!)
             if (in_array($validated['status'], ['applied', 'approved'])) {
@@ -465,6 +411,13 @@ class LeaveRequestController extends Controller
             }
 
             $handoverPersonId = $validated['handover_person_id'] ?? null;
+
+            if ($policy?->requires_handover && empty($handoverPersonId)) {
+                throw ValidationException::withMessages([
+                    'handover_person_id' => ['A handover person is required by this leave policy.'],
+                ]);
+            }
+
             if (! empty($handoverPersonId)) {
                 if ((int) $handoverPersonId === (int) $employee->id) {
                     throw ValidationException::withMessages([
@@ -485,16 +438,28 @@ class LeaveRequestController extends Controller
                     ]);
                 }
 
-                if ($leaveType->requires_handover && empty($validated['handover_description'])) {
+                if ($policy?->requires_handover && empty($validated['handover_description'])) {
                     throw ValidationException::withMessages([
                         'handover_description' => ['Handover description is required.'],
                     ]);
                 }
             }
 
-            $totalDays = $validated['total_days'] ?? (
-                Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-            );
+            if (
+                $policy?->requires_attachment
+                && ! $request->hasFile('certificate')
+                && ! $leave_request->files()->exists()
+            ) {
+                throw ValidationException::withMessages([
+                    'certificate' => ['A supporting document is required by this leave policy.'],
+                ]);
+            }
+
+            $totalDays = $requestType === 'full_day'
+                ? ($validated['total_days'] ?? (
+                    Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
+                ))
+                : 0.5;
 
             $oldState = [
                 'status' => $leave_request->status,
@@ -518,6 +483,7 @@ class LeaveRequestController extends Controller
             $leave_request->update([
                 'employee_id' => $employeeId,
                 'leave_type_id' => $validated['leave_type_id'],
+                'request_type' => $requestType,
                 'start_date' => $validated['start_date'],
                 'end_date' => $validated['end_date'],
                 'total_days' => $totalDays,

@@ -15,6 +15,7 @@ type LeavePolicy = {
     no_pay_days: number | null;
     requires_document_after_days: number | null;
     requires_weekend_document: number;
+    requires_handover: number;
     carry_forward: number;
     encashment: number;
     remarks: string | null;
@@ -155,6 +156,10 @@ export default function LeavePoliciesShow({
                     <Detail
                         label="Requires weekend document"
                         value={yesNo(leavePolicy.requires_weekend_document)}
+                    />
+                    <Detail
+                        label="Requires handover"
+                        value={yesNo(leavePolicy.requires_handover)}
                     />
                     <Detail
                         label="Carry forward"

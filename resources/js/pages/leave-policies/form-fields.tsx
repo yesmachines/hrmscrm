@@ -14,17 +14,23 @@ type Option = {
 type LeavePolicyFormValues = {
     leave_type_id?: number | string | null;
     organisation_id?: number | string | null;
+    annual_limit?: number | string | null;
+    allow_once?: number | string | null;
+    allow_balance?: number | string | null;
     full_pay_days?: number | string | null;
     half_pay_days?: number | string | null;
     no_pay_days?: number | string | null;
     requires_document_after_days?: number | string | null;
     requires_weekend_document?: number | string | null;
+    requires_handover?: number | string | null;
     carry_forward?: number | string | null;
+    carry_forward_weeks?: number | string | null;
     encashment?: number | string | null;
     remarks?: string | null;
     requires_attachment?: number | string | null;
     probation_applicable?: number | string | null;
     minimum_service_months?: number | string | null;
+    exclude_rules?: unknown[] | Record<string, unknown> | null;
 };
 
 type Props = {
@@ -153,6 +159,43 @@ export default function LeavePolicyFormFields({
                 </Field>
 
                 <Field
+                    label="Annual limit"
+                    name="annual_limit"
+                    error={errors.annual_limit}
+                >
+                    <Input
+                        id="annual_limit"
+                        name="annual_limit"
+                        type="number"
+                        min={0}
+                        step={1}
+                        defaultValue={defaults.annual_limit ?? ''}
+                    />
+                </Field>
+
+                <Field
+                    label="Allow once"
+                    name="allow_once"
+                    error={errors.allow_once}
+                >
+                    <YesNoSelect
+                        name="allow_once"
+                        defaultValue={defaults.allow_once}
+                    />
+                </Field>
+
+                <Field
+                    label="Allow balance"
+                    name="allow_balance"
+                    error={errors.allow_balance}
+                >
+                    <YesNoSelect
+                        name="allow_balance"
+                        defaultValue={defaults.allow_balance ?? 1}
+                    />
+                </Field>
+
+                <Field
                     label="Full pay days"
                     name="full_pay_days"
                     error={errors.full_pay_days}
@@ -247,6 +290,32 @@ export default function LeavePolicyFormFields({
                 </Field>
 
                 <Field
+                    label="Requires handover"
+                    name="requires_handover"
+                    error={errors.requires_handover}
+                >
+                    <YesNoSelect
+                        name="requires_handover"
+                        defaultValue={defaults.requires_handover}
+                    />
+                </Field>
+
+                <Field
+                    label="Carry forward weeks (optional)"
+                    name="carry_forward_weeks"
+                    error={errors.carry_forward_weeks}
+                >
+                    <Input
+                        id="carry_forward_weeks"
+                        name="carry_forward_weeks"
+                        type="number"
+                        min={1}
+                        step={1}
+                        defaultValue={defaults.carry_forward_weeks ?? ''}
+                    />
+                </Field>
+
+                <Field
                     label="Encashment"
                     name="encashment"
                     error={errors.encashment}
@@ -278,6 +347,38 @@ export default function LeavePolicyFormFields({
                         defaultValue={defaults.probation_applicable}
                     />
                 </Field>
+
+                <div className="sm:col-span-2">
+                    <Field
+                        label="Exclude rules (JSON object or array)"
+                        name="exclude_rules"
+                        error={errors.exclude_rules}
+                    >
+                        <textarea
+                            id="exclude_rules"
+                            name="exclude_rules"
+                            rows={4}
+                            defaultValue={
+                                defaults.exclude_rules
+                                    ? JSON.stringify(
+                                          defaults.exclude_rules,
+                                          null,
+                                          2,
+                                      )
+                                    : ''
+                            }
+                            placeholder="{}"
+                            aria-describedby="exclude_rules_help"
+                            className="min-h-24 w-full rounded-lg border border-input bg-white px-3 py-2 font-mono text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                        />
+                        <p
+                            id="exclude_rules_help"
+                            className="text-xs text-muted-foreground"
+                        >
+                            Leave empty if there are no exclusion rules.
+                        </p>
+                    </Field>
+                </div>
 
                 <div className="sm:col-span-2">
                     <Field
