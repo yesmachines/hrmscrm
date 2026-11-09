@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -50,10 +51,13 @@ interface LeaveTypeOption {
     leave_name: string;
     code: string;
     is_paid: boolean;
-    requires_attachment: boolean;
-    requires_handover?: boolean;
+    policy?: {
+        requires_attachment: boolean;
+        requires_handover: boolean;
+    } | null;
     status?: number;
     gender?: string | null;
+    religion?: string | null;
 }
 
 interface LeaveBalanceItem {
@@ -116,6 +120,7 @@ export default function LeaveRequestsEdit({
     const certificateId = useId();
     const handoverPersonSelectId = useId();
     const handoverDescId = useId();
+    const hasExistingAttachment = Boolean(leaveRequest.files?.length);
 
     const [isCancelling, setIsCancelling] = useState(false);
 
@@ -167,45 +172,11 @@ export default function LeaveRequestsEdit({
             return leaveTypes;
         }
 
-        const rawGender = selectedEmployee.gender || selectedEmployee.profile?.gender;
-        const normalizedGender = rawGender ? rawGender.toLowerCase().trim() : null;
-        const isMale = normalizedGender === 'm' || normalizedGender === 'male';
-        const isFemale = normalizedGender === 'f' || normalizedGender === 'female';
-
-        const rawReligion = (selectedEmployee.religion || selectedEmployee.profile?.religion || '').toLowerCase().trim();
-        const isMuslim =
-            ['muslim', 'islam', 'islamic'].includes(rawReligion) ||
-            rawReligion.includes('muslim') ||
-            rawReligion.includes('islam');
-
-        return leaveTypes.filter((type) => {
-            const isMaternity = type.code === 'MATERNITY' || type.leave_name.toLowerCase().includes('maternity');
-            const isPaternity = type.code === 'PATERNITY' || type.leave_name.toLowerCase().includes('paternity');
-            const isPilgrimage =
-                type.code === 'PILGRIMAGE' ||
-                type.leave_name.toLowerCase().includes('pilgrim') ||
-                type.leave_name.toLowerCase().includes('hajj');
-
-            if (isPilgrimage && !isMuslim) {
-                return false;
-            }
-
-            const typeGender = type.gender ? type.gender.toLowerCase().trim() : null;
-
-            if (isMale) {
-                if (isMaternity || typeGender === 'female' || typeGender === 'f') {
-                    return false;
-                }
-            }
-
-            if (isFemale) {
-                if (isPaternity || typeGender === 'male' || typeGender === 'm') {
-                    return false;
-                }
-            }
-
-            return true;
-        });
+        return filterEligibleLeaveTypes(
+            leaveTypes,
+            selectedEmployee.gender || selectedEmployee.profile?.gender,
+            selectedEmployee.religion || selectedEmployee.profile?.religion,
+        );
     }, [selectedEmployee, leaveTypes]);
 
     const selectedLeaveType = useMemo(() => {
@@ -397,19 +368,14 @@ export default function LeaveRequestsEdit({
                                 <div className="space-y-4">
                                     <div>
                                         <Label htmlFor={leaveTypeSelectId}>Leave Type</Label>
-                                        <select
+                                        <Input
                                             id={leaveTypeSelectId}
-                                            value={data.leave_type_id}
-                                            onChange={(e) => setData('leave_type_id', e.target.value)}
-                                            className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                                            required
-                                        >
-                                            {availableLeaveTypes.map((type) => (
-                                                <option key={type.id} value={type.id}>
-                                                    {type.leave_name} {type.is_paid ? '(Paid)' : '(Unpaid)'}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            type="text"
+                                            value={selectedLeaveType?.leave_name ?? 'Leave type unavailable'}
+                                            readOnly
+                                            aria-readonly="true"
+                                            className="mt-1.5 bg-muted text-muted-foreground"
+                                        />
                                         {errors.leave_type_id && (
                                             <p className="mt-1 text-xs text-destructive">{errors.leave_type_id}</p>
                                         )}
@@ -516,11 +482,17 @@ export default function LeaveRequestsEdit({
 
                                 <div className="space-y-4">
                                     <div>
-                                        <Label htmlFor={handoverPersonSelectId}>Handover Person</Label>
+                                        <Label htmlFor={handoverPersonSelectId}>
+                                            Handover Person
+                                            {selectedLeaveType?.policy?.requires_handover && (
+                                                <span className="ml-1 text-destructive">*</span>
+                                            )}
+                                        </Label>
                                         <select
                                             id={handoverPersonSelectId}
                                             value={data.handover_person_id}
                                             onChange={(e) => setData('handover_person_id', e.target.value)}
+                                            required={Boolean(selectedLeaveType?.policy?.requires_handover)}
                                             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                         >
                                             <option value="">-- No handover person required / assigned --</option>
@@ -550,11 +522,17 @@ export default function LeaveRequestsEdit({
 
                                     {data.handover_person_id && (
                                         <div>
-                                            <Label htmlFor={handoverDescId}>Handover Tasks & Instructions</Label>
+                                            <Label htmlFor={handoverDescId}>
+                                                Handover Tasks & Instructions
+                                                {selectedLeaveType?.policy?.requires_handover && (
+                                                    <span className="ml-1 text-destructive">*</span>
+                                                )}
+                                            </Label>
                                             <Textarea
                                                 id={handoverDescId}
                                                 value={data.handover_description}
                                                 onChange={(e) => setData('handover_description', e.target.value)}
+                                                required={Boolean(selectedLeaveType?.policy?.requires_handover)}
                                                 placeholder="Key duties, urgent contacts, pending tickets..."
                                                 className="mt-1.5 min-h-[80px]"
                                             />
@@ -626,11 +604,15 @@ export default function LeaveRequestsEdit({
                                 <div>
                                     <Label htmlFor={certificateId} className="text-xs text-muted-foreground">
                                         Upload Replacement or New Document
+                                        {selectedLeaveType?.policy?.requires_attachment && !hasExistingAttachment && (
+                                            <span className="ml-1 text-destructive">*</span>
+                                        )}
                                     </Label>
                                     <Input
                                         id={certificateId}
                                         type="file"
                                         accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                        required={Boolean(selectedLeaveType?.policy?.requires_attachment) && !hasExistingAttachment}
                                         onChange={(e) => setData('certificate', e.target.files?.[0] ?? null)}
                                         className="mt-1.5 text-xs"
                                     />

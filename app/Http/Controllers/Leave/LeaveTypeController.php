@@ -129,16 +129,10 @@ class LeaveTypeController extends Controller
             'leave_name' => $leaveType->leave_name,
             'code' => $leaveType->code,
             'is_paid' => (int) $leaveType->is_paid,
-            'requires_attachment' => (int) $leaveType->requires_attachment,
             'requires_approval' => (int) $leaveType->requires_approval,
-            'max_days' => $leaveType->max_days,
-            'annual_limit' => $leaveType->annual_limit,
             'gender' => LeaveType::normalizeGender($leaveType->gender),
             'religion' => LeaveType::normalizeReligion($leaveType->religion),
-            'allow_once' => (int) $leaveType->allow_once,
-            'allow_balance' => (int) $leaveType->allow_balance,
             'status' => (int) $leaveType->status,
-            'requires_handover' => (int) $leaveType->requires_handover,
         ];
     }
 

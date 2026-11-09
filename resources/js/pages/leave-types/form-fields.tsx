@@ -9,16 +9,10 @@ type LeaveTypeFormValues = {
     leave_name?: string | null;
     code?: string | null;
     is_paid?: number | string | null;
-    requires_attachment?: number | string | null;
     requires_approval?: number | string | null;
-    max_days?: number | string | null;
-    annual_limit?: number | string | null;
     gender?: string | null;
     religion?: string | null;
-    allow_once?: number | string | null;
-    allow_balance?: number | string | null;
     status?: number | string | null;
-    requires_handover?: number | string | null;
 };
 
 type Props = {
@@ -173,49 +167,11 @@ export default function LeaveTypeFormFields({
                     </select>
                 </Field>
 
-                <Field label="Max days (optional)" name="max_days" error={errors.max_days}>
-                    <Input
-                        id="max_days"
-                        name="max_days"
-                        type="number"
-                        min={0}
-                        placeholder="Optional per-request limit"
-                        defaultValue={defaults.max_days ?? ''}
-                    />
-                </Field>
-
-                <Field
-                    label="Annual limit *"
-                    name="annual_limit"
-                    error={errors.annual_limit}
-                >
-                    <Input
-                        id="annual_limit"
-                        name="annual_limit"
-                        type="number"
-                        min={0}
-                        required
-                        placeholder="Mandatory annual limit (e.g. 30)"
-                        defaultValue={defaults.annual_limit ?? ''}
-                    />
-                </Field>
-
                 <Field label="Is paid" name="is_paid" error={errors.is_paid}>
                     <YesNoSelect
                         name="is_paid"
                         defaultValue={defaults.is_paid}
                         fallback="1"
-                    />
-                </Field>
-
-                <Field
-                    label="Requires attachment"
-                    name="requires_attachment"
-                    error={errors.requires_attachment}
-                >
-                    <YesNoSelect
-                        name="requires_attachment"
-                        defaultValue={defaults.requires_attachment}
                     />
                 </Field>
 
@@ -231,39 +187,6 @@ export default function LeaveTypeFormFields({
                     />
                 </Field>
 
-                <Field
-                    label="Allow once"
-                    name="allow_once"
-                    error={errors.allow_once}
-                >
-                    <YesNoSelect
-                        name="allow_once"
-                        defaultValue={defaults.allow_once}
-                    />
-                </Field>
-
-                <Field
-                    label="Allow balance"
-                    name="allow_balance"
-                    error={errors.allow_balance}
-                >
-                    <YesNoSelect
-                        name="allow_balance"
-                        defaultValue={defaults.allow_balance}
-                        fallback="1"
-                    />
-                </Field>
-
-                <Field
-                    label="Requires handover"
-                    name="requires_handover"
-                    error={errors.requires_handover}
-                >
-                    <YesNoSelect
-                        name="requires_handover"
-                        defaultValue={defaults.requires_handover}
-                    />
-                </Field>
             </div>
         </section>
     );

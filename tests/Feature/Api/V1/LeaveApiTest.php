@@ -30,7 +30,12 @@ beforeEach(function () {
     DB::table('leave_policies')->delete();
     DB::table('leave_balances')->delete();
     DB::table('leave_types')->delete();
-    Organisation::query()->firstOrCreate(['id' => 1], ['org_name' => 'Default Org', 'short_name' => 'DEF', 'status' => 1]);
+    DB::table('organisations')->insertOrIgnore([
+        'id' => 1,
+        'org_name' => 'Default Org',
+        'short_name' => 'DEF',
+        'status' => 1,
+    ]);
 });
 
 test('leave submission validates emergency and travel contact numbers', function () {
@@ -79,10 +84,13 @@ test('leave submission stores half-day request type and duration', function () {
         'leave_name' => 'Personal Leave',
         'code' => 'PERSONAL',
         'is_paid' => true,
-        'requires_attachment' => false,
         'requires_approval' => true,
-        'allow_balance' => false,
         'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
     ]);
     $token = $user->createToken('test')->plainTextToken;
 
@@ -101,6 +109,249 @@ test('leave submission stores half-day request type and duration', function () {
     $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
     expect($leaveRequest->request_type)->toBe('secondhalf')
         ->and((float) $leaveRequest->total_days)->toBe(0.5);
+});
+
+test('employee can update their own applied leave request without changing its leave type', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Leave Update User',
+        'email' => 'leave.update@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-UPDATE-01',
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL-UPDATE',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+    ]);
+    $leaveRequest = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-12-01',
+        'end_date' => '2026-12-01',
+        'request_type' => 'full_day',
+        'total_days' => 1,
+        'remarks' => 'Original reason',
+        'status' => 'applied',
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->patchJson("/api/v1/leaves/{$leaveRequest->id}", [
+            'start_date' => '2026-12-03',
+            'end_date' => '2026-12-04',
+            'remarks' => 'Updated reason',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.leave_type_id', $leaveType->id)
+        ->assertJsonPath('data.status', 'applied')
+        ->assertJsonPath('data.total_days', 2)
+        ->assertJsonPath('data.remarks', 'Updated reason');
+
+    expect($leaveRequest->fresh()->start_date->toDateString())->toBe('2026-12-03')
+        ->and($leaveRequest->fresh()->leave_type_id)->toBe($leaveType->id);
+});
+
+test('employee cannot change leave type or edit a non-applied leave request through the api', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Leave Edit Restrictions User',
+        'email' => 'leave.edit-restrictions@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-EDIT-RESTRICTIONS',
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $firstType = LeaveType::query()->create([
+        'leave_name' => 'First Leave',
+        'code' => 'FIRST-EDIT',
+        'status' => 1,
+    ]);
+    $secondType = LeaveType::query()->create([
+        'leave_name' => 'Second Leave',
+        'code' => 'SECOND-EDIT',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $firstType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+    ]);
+    $leaveRequest = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $firstType->id,
+        'start_date' => '2026-12-10',
+        'end_date' => '2026-12-10',
+        'total_days' => 1,
+        'status' => 'applied',
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->patchJson("/api/v1/leaves/{$leaveRequest->id}", [
+            'leave_type_id' => $secondType->id,
+            'start_date' => '2026-12-11',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['leave_type_id']);
+
+    expect($leaveRequest->fresh()->leave_type_id)->toBe($firstType->id)
+        ->and($leaveRequest->fresh()->start_date->toDateString())->toBe('2026-12-10');
+
+    foreach (['approved', 'cancelled', 'rejected'] as $status) {
+        $leaveRequest->update(['status' => $status]);
+
+        $this->withToken($token)
+            ->patchJson("/api/v1/leaves/{$leaveRequest->id}", [
+                'start_date' => '2026-12-12',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+    }
+});
+
+test('leave request update is not capped by a removed max-days field', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Leave Limit Update User',
+        'email' => 'leave.limit-update@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-LIMIT-UPDATE',
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Limited Leave',
+        'code' => 'LIMITED-UPDATE',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+    ]);
+    $leaveRequest = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-12-20',
+        'end_date' => '2026-12-20',
+        'total_days' => 1,
+        'status' => 'applied',
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->patchJson("/api/v1/leaves/{$leaveRequest->id}", [
+            'start_date' => '2026-12-20',
+            'end_date' => '2026-12-21',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.total_days', 2);
+
+    expect($leaveRequest->fresh()->end_date->toDateString())->toBe('2026-12-21');
+});
+
+test('leave application enforces annual and one-time limits from leave policy', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Policy Limit User',
+        'email' => 'leave.policy-limits@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-POLICY-LIMITS',
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $onceLeaveType = LeaveType::query()->create([
+        'leave_name' => 'One Time Leave',
+        'code' => 'ONCE',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $onceLeaveType->id,
+        'organisation_id' => 1,
+        'allow_once' => true,
+        'allow_balance' => false,
+    ]);
+    LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $onceLeaveType->id,
+        'start_date' => '2025-01-02 00:00:00',
+        'end_date' => '2025-01-02 23:59:59',
+        'total_days' => 1,
+        'status' => 'approved',
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+    $this->withToken($token)->getJson('/api/v1/leaves/meta')
+        ->assertOk()
+        ->assertJsonPath('data.leave_types.0.annual_limit', null)
+        ->assertJsonPath('data.leave_types.0.allow_once', true)
+        ->assertJsonPath('data.leave_types.0.allow_balance', false);
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $onceLeaveType->id,
+        'start_date' => '2026-12-01',
+        'end_date' => '2026-12-01',
+        'total_days' => 1,
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['leave_type_id']);
+
+    $annualLeaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Limit Leave',
+        'code' => 'ANNUAL-LIMIT',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $annualLeaveType->id,
+        'organisation_id' => 1,
+        'annual_limit' => 1,
+        'allow_balance' => false,
+    ]);
+    LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $annualLeaveType->id,
+        'start_date' => '2026-01-02 00:00:00',
+        'end_date' => '2026-01-02 23:59:59',
+        'total_days' => 1,
+        'status' => 'approved',
+    ]);
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $annualLeaveType->id,
+        'start_date' => '2026-12-02',
+        'end_date' => '2026-12-02',
+        'total_days' => 1,
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['total_days']);
 });
 
 test('get leave detail returns full leave request with attachments, history, details, and approvals', function () {
@@ -131,9 +382,7 @@ test('get leave detail returns full leave request with attachments, history, det
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL',
         'is_paid' => true,
-        'requires_attachment' => false,
         'requires_approval' => true,
-        'requires_handover' => true,
         'status' => 1,
     ]);
 
@@ -253,7 +502,7 @@ test('get leave detail returns 404 if leave belongs to another employee', functi
         ->assertJsonPath('statusCode', 404);
 });
 
-test('leave meta returns single policy for each leave type with combined requires_attachment', function () {
+test('leave meta returns policy-owned document and handover requirements', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Meta User',
         'email' => 'meta.user@example.com',
@@ -274,9 +523,7 @@ test('leave meta returns single policy for each leave type with combined require
         'leave_name' => 'Sick Leave',
         'code' => 'SICK',
         'is_paid' => true,
-        'requires_attachment' => false,
         'requires_approval' => true,
-        'max_days' => 90,
         'status' => 1,
     ]);
 
@@ -291,6 +538,7 @@ test('leave meta returns single policy for each leave type with combined require
         'requires_document_after_days' => 2,
         'requires_weekend_document' => true,
         'requires_attachment' => true,
+        'requires_handover' => true,
         'carry_forward' => false,
         'encashment' => false,
         'probation_applicable' => true,
@@ -303,9 +551,55 @@ test('leave meta returns single policy for each leave type with combined require
 
     $response->assertOk()
         ->assertJsonPath('data.leave_types.0.id', $leaveType->id)
-        ->assertJsonPath('data.leave_types.0.requires_attachment', true)
+        ->assertJsonPath('data.leave_types.0.policy.requires_attachment', true)
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover', true)
         ->assertJsonPath('data.leave_types.0.policy.requires_document_after_days', 2)
-        ->assertJsonPath('data.leave_types.0.policy.full_pay_days', 15);
+        ->assertJsonPath('data.leave_types.0.policy.full_pay_days', 15)
+        ->assertJsonMissingPath('data.leave_types.0.requires_attachment')
+        ->assertJsonMissingPath('data.leave_types.0.requires_handover')
+        ->assertJsonMissingPath('data.leave_types.0.max_days');
+});
+
+test('leave application requires an attachment when its policy requires one', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Attachment Policy User',
+        'email' => 'attachment.policy@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-ATTACHMENT-POLICY',
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL-ATTACHMENT-POLICY',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+        'requires_attachment' => true,
+    ]);
+
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->postJson('/api/v1/leaves', [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-02',
+            'end_date' => '2026-11-02',
+            'total_days' => 1,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['certificate']);
 });
 
 test('apply leave fails when policy requires document after days and attachment is omitted', function () {
@@ -329,8 +623,6 @@ test('apply leave fails when policy requires document after days and attachment 
         'leave_name' => 'Sick Leave',
         'code' => 'SICK',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => true,
         'status' => 1,
     ]);
 
@@ -371,7 +663,7 @@ test('apply leave fails when policy requires document after days and attachment 
         ->assertJsonValidationErrors(['certificate']);
 });
 
-test('apply leave fails when leave type max days is exceeded', function () {
+test('apply leave is not capped by a max days field on the leave type', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Max User',
         'email' => 'max.user@example.com',
@@ -392,8 +684,12 @@ test('apply leave fails when leave type max days is exceeded', function () {
         'leave_name' => 'Casual Leave',
         'code' => 'CASUAL',
         'is_paid' => true,
-        'max_days' => 3,
         'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
     ]);
 
     $token = $user->createToken('test')->plainTextToken;
@@ -405,8 +701,8 @@ test('apply leave fails when leave type max days is exceeded', function () {
         'total_days' => 5,
     ]);
 
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['total_days']);
+    $response->assertCreated()
+        ->assertJsonPath('data.total_days', 5);
 });
 
 test('sick leave for single mid-week day does not require certificate', function () {
@@ -430,8 +726,6 @@ test('sick leave for single mid-week day does not require certificate', function
         'leave_name' => 'Sick Leave',
         'code' => 'SICK',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => true,
         'status' => 1,
     ]);
 
@@ -481,8 +775,6 @@ test('sick leave for 2 consecutive days requires certificate', function () {
         'leave_name' => 'Sick Leave',
         'code' => 'SICK',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => true,
         'status' => 1,
     ]);
 
@@ -545,8 +837,6 @@ test('sick leave combined with weekend requires certificate', function () {
         'leave_name' => 'Sick Leave',
         'code' => 'SICK',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => true,
         'status' => 1,
     ]);
 
@@ -609,8 +899,6 @@ test('it stores signature image into leave_request_details and exposes signature
         'leave_name' => 'Casual Leave',
         'code' => 'CASUAL',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => true,
         'status' => 1,
     ]);
 
@@ -706,7 +994,6 @@ test('leaves meta hides maternity leave for male employees and shows it for fema
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL',
         'is_paid' => true,
-        'requires_attachment' => false,
         'status' => 1,
         'gender' => null,
     ]);
@@ -715,7 +1002,6 @@ test('leaves meta hides maternity leave for male employees and shows it for fema
         'leave_name' => 'Maternity Leave',
         'code' => 'MATERNITY',
         'is_paid' => true,
-        'requires_attachment' => false,
         'status' => 1,
         'gender' => 'female',
     ]);
@@ -766,9 +1052,13 @@ test('applying maternity leave fails for male employee with validation error', f
         'leave_name' => 'Maternity Leave',
         'code' => 'MATERNITY',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => false,
         'status' => 1,
+        'gender' => 'female',
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $maternityLeave->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
     ]);
 
     $maleToken = $maleUser->createToken('test')->plainTextToken;
@@ -812,9 +1102,13 @@ test('applying maternity leave succeeds for female employee', function () {
         'leave_name' => 'Maternity Leave',
         'code' => 'MATERNITY',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => false,
         'status' => 1,
+        'gender' => 'female',
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $maternityLeave->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
     ]);
 
     $femaleToken = $femaleUser->createToken('test')->plainTextToken;
@@ -872,10 +1166,13 @@ test('applying leave fails if selected handover person is also on leave during r
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'requires_handover' => true,
-        'allow_balance' => false,
         'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+        'requires_handover' => true,
     ]);
 
     // Colleague already has an approved leave from Nov 10 to Nov 15
@@ -945,13 +1242,26 @@ test('applying leave succeeds when selected handover person is not on leave', fu
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'requires_handover' => true,
-        'allow_balance' => false,
         'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+        'requires_handover' => true,
     ]);
 
     $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->postJson('/api/v1/leaves', [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-12',
+            'end_date' => '2026-11-18',
+            'total_days' => 6,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['handover_person_id']);
 
     $response = $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $leaveType->id,
@@ -1020,7 +1330,6 @@ test('leaves meta hides pilgrimage leave for non-muslim employees and shows it f
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL-PLG',
         'is_paid' => true,
-        'requires_attachment' => false,
         'status' => 1,
     ]);
 
@@ -1028,8 +1337,8 @@ test('leaves meta hides pilgrimage leave for non-muslim employees and shows it f
         'leave_name' => 'Pilgrimage Leave',
         'code' => 'PILGRIMAGE',
         'is_paid' => true,
-        'requires_attachment' => false,
         'status' => 1,
+        'religion' => 'Islam',
     ]);
 
     // Non-Muslim token check: should NOT contain Pilgrimage Leave
@@ -1078,9 +1387,13 @@ test('applying pilgrimage leave fails for non-muslim employee with validation er
         'leave_name' => 'Pilgrimage Leave',
         'code' => 'PILGRIMAGE',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => false,
         'status' => 1,
+        'religion' => 'Islam',
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $pilgrimageLeave->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
     ]);
 
     $nonMuslimToken = $nonMuslimUser->createToken('test')->plainTextToken;
@@ -1125,9 +1438,13 @@ test('applying pilgrimage leave succeeds for muslim employee', function () {
         'leave_name' => 'Pilgrimage Leave',
         'code' => 'PILGRIMAGE',
         'is_paid' => true,
-        'requires_attachment' => false,
-        'allow_balance' => false,
         'status' => 1,
+        'religion' => 'Islam',
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $pilgrimageLeave->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
     ]);
 
     $muslimToken = $muslimUser->createToken('test')->plainTextToken;

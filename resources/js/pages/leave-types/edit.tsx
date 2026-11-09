@@ -11,16 +11,10 @@ type LeaveType = {
     leave_name: string;
     code: string;
     is_paid: number;
-    requires_attachment: number;
     requires_approval: number;
-    max_days: number | null;
-    annual_limit: number | null;
     gender: string | null;
     religion: string | null;
-    allow_once: number;
-    allow_balance: number;
     status: number;
-    requires_handover: number;
 };
 
 type Option = {

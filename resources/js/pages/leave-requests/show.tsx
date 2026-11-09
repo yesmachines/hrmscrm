@@ -19,7 +19,10 @@ type LeaveRequestDetail = {
         id: number;
         leave_name: string;
         is_paid: boolean;
-        requires_handover?: boolean;
+        policy?: {
+            requires_attachment: boolean;
+            requires_handover: boolean;
+        } | null;
     };
     employee: {
         id: number;

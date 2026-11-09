@@ -1,4 +1,5 @@
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,11 @@ type OfficeLocationOption = {
 
 type RoleOption = {
     name: string;
+};
+
+type EligibilityOption = {
+    value: string;
+    label: string;
 };
 
 type EmployeeFormValues = {
@@ -97,6 +103,8 @@ type Props = {
     officeLocations?: OfficeLocationOption[];
     roles?: RoleOption[];
     countries?: { id: number; name: string }[];
+    genderOptions: EligibilityOption[];
+    religionOptions: EligibilityOption[];
     isEdit?: boolean;
 };
 
@@ -176,6 +184,8 @@ export default function EmployeeProfileFormFields({
     officeLocations = [],
     roles = [],
     countries = [],
+    genderOptions,
+    religionOptions,
     isEdit = false,
 }: Props) {
     const profile = (defaults as EmployeeFormValues & { profile?: EmployeeFormValues })
@@ -542,12 +552,21 @@ export default function EmployeeProfileFormFields({
                     <select
                         id="gender"
                         name="gender"
-                        defaultValue={profileDefaults.gender ?? ''}
+                        defaultValue={
+                            profileDefaults.gender?.toLowerCase() === 'male'
+                                ? 'M'
+                                : profileDefaults.gender?.toLowerCase() === 'female'
+                                  ? 'F'
+                                  : (profileDefaults.gender ?? '')
+                        }
                         className={fieldClass}
                     >
                         <option value="">Select gender</option>
-                        <option value="M">Male</option>
-                        <option value="F">Female</option>
+                        {genderOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
                     </select>
                 </Field>
                 <Field
@@ -607,12 +626,19 @@ export default function EmployeeProfileFormFields({
                     </select>
                 </Field>
                 <Field label="Religion" name="religion" error={errors.religion}>
-                    <Input
+                    <select
                         id="religion"
                         name="religion"
-                        placeholder="e.g. Islam, Christianity"
                         defaultValue={profileDefaults.religion ?? ''}
-                    />
+                        className={fieldClass}
+                    >
+                        <option value="">Select religion</option>
+                        {religionOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
                 <Field
                     label="Blood group"

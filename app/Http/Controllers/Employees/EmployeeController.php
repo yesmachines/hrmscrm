@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Employees\StoreEmployeeProfileRequest;
 use App\Http\Requests\Employees\UpdateEmployeeProfileRequest;
 use App\Models\Designation;
+use App\Models\LeaveType;
 use App\Models\OfficeLocation;
 use App\Models\Organisation;
 use App\Models\SalesCrm\Department;
@@ -90,6 +91,7 @@ class EmployeeController extends Controller
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
             'countries' => $this->countries(),
+            ...$this->leaveEligibilityOptions(),
         ]);
     }
 
@@ -228,6 +230,7 @@ class EmployeeController extends Controller
             'officeLocations' => $this->officeLocations(),
             'roles' => $this->roles(),
             'countries' => $this->countries(),
+            ...$this->leaveEligibilityOptions(),
         ]);
     }
 
@@ -423,6 +426,35 @@ class EmployeeController extends Controller
     }
 
     /**
+     * @return array{
+     *     genderOptions: list<array{value: string, label: string}>,
+     *     religionOptions: list<array{value: string, label: string}>
+     * }
+     */
+    private function leaveEligibilityOptions(): array
+    {
+        $genderOptions = config('params.leave_type.gender_options', []);
+        $genderValues = ['male' => 'M', 'female' => 'F'];
+
+        return [
+            'genderOptions' => collect($genderOptions)
+                ->map(fn (string $label, string $gender): array => [
+                    'value' => $genderValues[$gender] ?? $gender,
+                    'label' => $label,
+                ])
+                ->values()
+                ->all(),
+            'religionOptions' => collect(config('params.leave_type.religion_options', []))
+                ->map(fn (string $religion): array => [
+                    'value' => $religion,
+                    'label' => $religion,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function employeePayload(Employee $employee): array
@@ -467,6 +499,12 @@ class EmployeeController extends Controller
             }
 
             $profilePayload = array_merge($profile->toArray(), [
+                'gender' => match (LeaveType::normalizeGender($profile->gender)) {
+                    'male' => 'M',
+                    'female' => 'F',
+                    default => null,
+                },
+                'religion' => LeaveType::normalizeReligion($profile->religion),
                 'nationality' => $nationality,
                 'home_country_name' => $homeCountryName,
             ]);

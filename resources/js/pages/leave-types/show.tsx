@@ -11,16 +11,10 @@ type LeaveType = {
     leave_name: string;
     code: string;
     is_paid: number;
-    requires_attachment: number;
     requires_approval: number;
-    max_days: number | null;
-    annual_limit: number | null;
     gender: string | null;
     religion: string | null;
-    allow_once: number;
-    allow_balance: number;
     status: number;
-    requires_handover: number;
 };
 
 function Detail({
@@ -121,31 +115,10 @@ export default function LeaveTypesShow({ leaveType }: { leaveType: LeaveType }) 
                         label="Religion"
                         value={leaveType.religion || 'Any / Universal'}
                     />
-                    <Detail label="Max days" value={leaveType.max_days} />
-                    <Detail
-                        label="Annual limit"
-                        value={leaveType.annual_limit}
-                    />
                     <Detail label="Is paid" value={yesNo(leaveType.is_paid)} />
-                    <Detail
-                        label="Requires attachment"
-                        value={yesNo(leaveType.requires_attachment)}
-                    />
                     <Detail
                         label="Requires approval"
                         value={yesNo(leaveType.requires_approval)}
-                    />
-                    <Detail
-                        label="Allow once"
-                        value={yesNo(leaveType.allow_once)}
-                    />
-                    <Detail
-                        label="Allow balance"
-                        value={yesNo(leaveType.allow_balance)}
-                    />
-                    <Detail
-                        label="Requires handover"
-                        value={yesNo(leaveType.requires_handover)}
                     />
                 </Section>
             </div>

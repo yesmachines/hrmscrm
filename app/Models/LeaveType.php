@@ -12,16 +12,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'leave_name',
     'code',
     'is_paid',
-    'requires_attachment',
     'requires_approval',
-    'max_days',
-    'annual_limit',
     'gender',
     'religion',
-    'allow_once',
-    'allow_balance',
     'status',
-    'requires_handover',
 ])]
 class LeaveType extends Model
 {
@@ -49,8 +43,8 @@ class LeaveType extends Model
 
         $religionOptions = config('params.leave_type.religion_options', []);
         if (is_array($religionOptions)) {
-            foreach (array_keys($religionOptions) as $religionOption) {
-                if (strtolower($religionOption) === $normalizedReligion) {
+            foreach ($religionOptions as $religionOption) {
+                if (is_string($religionOption) && strtolower($religionOption) === $normalizedReligion) {
                     return $religionOption;
                 }
             }
@@ -73,22 +67,21 @@ class LeaveType extends Model
         $firstReligion = self::normalizeReligion($firstReligion);
         $secondReligion = self::normalizeReligion($secondReligion);
 
-        return $firstReligion === $secondReligion
+        $normalizedFirstReligion = strtolower($firstReligion ?? '');
+        $normalizedSecondReligion = strtolower($secondReligion ?? '');
+
+        return $normalizedFirstReligion === $normalizedSecondReligion
             || ($firstReligion !== null
                 && $secondReligion !== null
-                && (str_contains($firstReligion, $secondReligion)
-                    || str_contains($secondReligion, $firstReligion)));
+                && (str_contains($normalizedFirstReligion, $normalizedSecondReligion)
+                    || str_contains($normalizedSecondReligion, $normalizedFirstReligion)));
     }
 
     protected function casts(): array
     {
         return [
             'is_paid' => 'boolean',
-            'requires_attachment' => 'boolean',
             'requires_approval' => 'boolean',
-            'allow_once' => 'boolean',
-            'allow_balance' => 'boolean',
-            'requires_handover' => 'boolean',
             'status' => 'integer',
             'religion' => 'string',
         ];

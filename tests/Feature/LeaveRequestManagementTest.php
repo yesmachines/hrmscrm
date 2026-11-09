@@ -3,10 +3,12 @@
 use App\Models\EmployeeProfile;
 use App\Models\LeaveBalance;
 use App\Models\LeaveHistory;
+use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestApproval;
 use App\Models\LeaveRequestFile;
 use App\Models\LeaveType;
+use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Illuminate\Http\UploadedFile;
@@ -40,10 +42,7 @@ test('hr user can apply leave on behalf of employee with applied status', functi
         'leave_name' => 'Casual Leave',
         'code' => 'CL',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
-        'max_days' => 14,
-        'annual_limit' => 14,
         'status' => 1,
     ]);
 
@@ -145,10 +144,7 @@ test('hr user can apply and directly approve leave on behalf of employee with qu
         'leave_name' => 'Annual Leave',
         'code' => 'AL',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
-        'max_days' => 21,
-        'annual_limit' => 21,
         'status' => 1,
     ]);
 
@@ -213,14 +209,35 @@ test('hr user can attach supporting document when applying leave on behalf of em
         'leave_name' => 'Sick Leave',
         'code' => 'SL',
         'is_paid' => 1,
-        'requires_attachment' => 1,
         'requires_approval' => 1,
-        'max_days' => 15,
-        'annual_limit' => 15,
         'status' => 1,
     ]);
 
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'requires_attachment' => true,
+    ]);
+
     $file = UploadedFile::fake()->create('medical_slip.pdf', 200, 'application/pdf');
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-09-10',
+            'end_date' => '2026-09-11',
+            'total_days' => 2,
+            'status' => 'applied',
+            'remarks' => 'Doctor recommendation.',
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['certificate']);
 
     $response = $this->actingAs($hrUser)
         ->post(route('leave-requests.store'), [
@@ -272,7 +289,6 @@ test('apply leave page provides employees with gender and leave types with gende
         'leave_name' => 'Maternity Leave',
         'code' => 'MATERNITY',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
         'gender' => 'female',
@@ -314,9 +330,9 @@ test('hr user cannot apply maternity leave for male employee', function () {
         'leave_name' => 'Maternity Leave',
         'code' => 'MATERNITY',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
+        'gender' => 'female',
     ]);
 
     $response = $this->actingAs($hrUser)
@@ -357,9 +373,9 @@ test('hr user can apply maternity leave for female employee', function () {
         'leave_name' => 'Maternity Leave',
         'code' => 'MATERNITY',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
+        'gender' => 'female',
     ]);
 
     $response = $this->actingAs($hrUser)
@@ -409,10 +425,17 @@ test('hr user cannot apply leave when selected handover person is also on leave'
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL-HO',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
-        'requires_handover' => 1,
         'status' => 1,
+    ]);
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'requires_handover' => true,
     ]);
 
     // Colleague has existing active leave from Oct 10 to Oct 16
@@ -470,11 +493,31 @@ test('hr user can apply leave with valid handover person and it records handover
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL-VALID-HO',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
-        'requires_handover' => 1,
         'status' => 1,
     ]);
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'requires_handover' => true,
+    ]);
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $applicant->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-10-12',
+            'end_date' => '2026-10-18',
+            'total_days' => 7,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['handover_person_id']);
 
     $response = $this->actingAs($hrUser)
         ->post(route('leave-requests.store'), [
@@ -533,9 +576,9 @@ test('hr user cannot apply pilgrimage leave for non-muslim employee', function (
         'leave_name' => 'Pilgrimage Leave',
         'code' => 'PILGRIMAGE',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
+        'religion' => 'Islam',
     ]);
 
     $response = $this->actingAs($hrUser)
@@ -574,9 +617,9 @@ test('hr user can apply pilgrimage leave for muslim employee', function () {
         'leave_name' => 'Pilgrimage Leave',
         'code' => 'PILGRIMAGE',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
+        'religion' => 'Islam',
     ]);
 
     $response = $this->actingAs($hrUser)
@@ -616,7 +659,6 @@ test('hr user can view edit leave page', function () {
         'leave_name' => 'Casual Leave',
         'code' => 'CL-EDIT',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
     ]);
@@ -641,7 +683,63 @@ test('hr user can view edit leave page', function () {
             ->has('employees')
             ->has('leaveTypes')
             ->where('leaveRequest.request_type', 'full_day')
+            ->where('leaveRequest.leave_type.leave_name', 'Casual Leave')
         );
+});
+
+test('hr cannot change the leave type while editing a leave request', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $salesUser = SalesCrmUser::factory()->create();
+
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $originalLeaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL-LOCKED',
+        'is_paid' => true,
+        'status' => 1,
+    ]);
+
+    $replacementLeaveType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SICK-LOCKED',
+        'is_paid' => true,
+        'status' => 1,
+    ]);
+
+    $leaveRequest = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $originalLeaveType->id,
+        'start_date' => '2026-10-01',
+        'end_date' => '2026-10-02',
+        'total_days' => 2,
+        'status' => 'applied',
+        'created_by' => $hrUser->id,
+    ]);
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.edit', $leaveRequest))
+        ->put(route('leave-requests.update', $leaveRequest), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $replacementLeaveType->id,
+            'start_date' => '2026-10-01',
+            'end_date' => '2026-10-02',
+            'total_days' => 2,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.edit', $leaveRequest))
+        ->assertSessionHasErrors([
+            'leave_type_id' => 'Leave type cannot be changed after the request is created.',
+        ]);
+
+    expect($leaveRequest->fresh()->leave_type_id)->toBe($originalLeaveType->id);
 });
 
 test('hr user can cancel an approved leave request and balance is refunded', function () {
@@ -661,7 +759,6 @@ test('hr user can cancel an approved leave request and balance is refunded', fun
         'leave_name' => 'Paid Time Off',
         'code' => 'PTO-CANCEL',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
     ]);
@@ -725,7 +822,6 @@ test('hr user editing date range of approved leave adjusts leave balance for dur
         'leave_name' => 'Annual Leave',
         'code' => 'AL-DATES',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
     ]);
@@ -811,7 +907,6 @@ test('hr user editing status from applied to approved deducts leave balance', fu
         'leave_name' => 'Sick Leave',
         'code' => 'SL-APPROVE',
         'is_paid' => 1,
-        'requires_attachment' => 0,
         'requires_approval' => 1,
         'status' => 1,
     ]);

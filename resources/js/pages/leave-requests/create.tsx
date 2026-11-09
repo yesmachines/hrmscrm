@@ -1,4 +1,3 @@
-import { useState, useId, useMemo, useEffect } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 import {
     ArrowLeft,
@@ -11,13 +10,16 @@ import {
     Clock,
     FileUp,
     ShieldAlert,
+    ChevronDown,
 } from 'lucide-react';
+import { useState, useId, useMemo, useEffect, useRef } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -49,10 +51,13 @@ interface LeaveTypeOption {
     leave_name: string;
     code: string;
     is_paid: boolean;
-    requires_attachment: boolean;
-    requires_handover?: boolean;
+    policy?: {
+        requires_attachment: boolean;
+        requires_handover: boolean;
+    } | null;
     status?: number;
     gender?: string | null;
+    religion?: string | null;
 }
 
 interface LeaveBalanceItem {
@@ -86,6 +91,7 @@ export default function LeaveRequestsCreate({
     activeLeaves = [],
 }: Props) {
     const employeeSelectId = useId();
+    const employeeListboxId = useId();
     const leaveTypeSelectId = useId();
     const requestTypeSelectId = useId();
     const startDateId = useId();
@@ -98,8 +104,12 @@ export default function LeaveRequestsCreate({
     const handoverDescId = useId();
 
     const [employeeSearch, setEmployeeSearch] = useState('');
+    const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
+    const [activeEmployeeIndex, setActiveEmployeeIndex] = useState(0);
+    const [employeeSelectionError, setEmployeeSelectionError] = useState('');
+    const employeeInputRef = useRef<HTMLInputElement>(null);
 
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, clearErrors } = useForm({
         employee_id: '',
         leave_type_id: '',
         request_type: 'full_day',
@@ -117,7 +127,7 @@ export default function LeaveRequestsCreate({
         if (!employeeSearch.trim()) {
             return employees;
         }
-        const term = employeeSearch.toLowerCase();
+        const term = employeeSearch.trim().toLowerCase();
         return employees.filter((emp) => {
             const name = emp.user?.name?.toLowerCase() ?? '';
             const code = emp.employee_code?.toLowerCase() ?? '';
@@ -156,50 +166,25 @@ export default function LeaveRequestsCreate({
         return employees.find((e) => String(e.id) === String(data.employee_id)) ?? null;
     }, [data.employee_id, employees]);
 
+    const selectEmployee = (employee: EmployeeOption) => {
+        setData('employee_id', String(employee.id));
+        setEmployeeSearch('');
+        setEmployeeDropdownOpen(false);
+        setActiveEmployeeIndex(0);
+        setEmployeeSelectionError('');
+        clearErrors('employee_id');
+    };
+
     const availableLeaveTypes = useMemo(() => {
         if (!selectedEmployee) {
             return leaveTypes;
         }
 
-        const rawGender = selectedEmployee.gender || selectedEmployee.profile?.gender;
-        const normalizedGender = rawGender ? rawGender.toLowerCase().trim() : null;
-        const isMale = normalizedGender === 'm' || normalizedGender === 'male';
-        const isFemale = normalizedGender === 'f' || normalizedGender === 'female';
-
-        const rawReligion = (selectedEmployee.religion || selectedEmployee.profile?.religion || '').toLowerCase().trim();
-        const isMuslim =
-            ['muslim', 'islam', 'islamic'].includes(rawReligion) ||
-            rawReligion.includes('muslim') ||
-            rawReligion.includes('islam');
-
-        return leaveTypes.filter((type) => {
-            const isMaternity = type.code === 'MATERNITY' || type.leave_name.toLowerCase().includes('maternity');
-            const isPaternity = type.code === 'PATERNITY' || type.leave_name.toLowerCase().includes('paternity');
-            const isPilgrimage =
-                type.code === 'PILGRIMAGE' ||
-                type.leave_name.toLowerCase().includes('pilgrim') ||
-                type.leave_name.toLowerCase().includes('hajj');
-
-            if (isPilgrimage && !isMuslim) {
-                return false;
-            }
-
-            const typeGender = type.gender ? type.gender.toLowerCase().trim() : null;
-
-            if (isMale) {
-                if (isMaternity || typeGender === 'female' || typeGender === 'f') {
-                    return false;
-                }
-            }
-
-            if (isFemale) {
-                if (isPaternity || typeGender === 'male' || typeGender === 'm') {
-                    return false;
-                }
-            }
-
-            return true;
-        });
+        return filterEligibleLeaveTypes(
+            leaveTypes,
+            selectedEmployee.gender || selectedEmployee.profile?.gender,
+            selectedEmployee.religion || selectedEmployee.profile?.religion,
+        );
     }, [selectedEmployee, leaveTypes]);
 
     useEffect(() => {
@@ -246,6 +231,12 @@ export default function LeaveRequestsCreate({
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!data.employee_id) {
+            setEmployeeSelectionError('Please select an employee.');
+            setEmployeeDropdownOpen(true);
+            employeeInputRef.current?.focus();
+            return;
+        }
         post('/leave-requests');
     };
 
@@ -277,41 +268,120 @@ export default function LeaveRequestsCreate({
                                         <UserIcon className="size-4 text-primary" />
                                         Select Employee <span className="text-destructive">*</span>
                                     </Label>
-                                    {employees.length > 8 && (
-                                        <span className="text-xs text-muted-foreground">
-                                            {filteredEmployees.length} of {employees.length} available
-                                        </span>
-                                    )}
+                                    <span className="text-xs text-muted-foreground">
+                                        {filteredEmployees.length} of {employees.length} available
+                                    </span>
                                 </div>
 
-                                {employees.length > 8 && (
+                                <div className="relative">
                                     <Input
+                                        ref={employeeInputRef}
+                                        id={employeeSelectId}
                                         type="text"
-                                        placeholder="Type to filter employees by name, code, designation..."
-                                        value={employeeSearch}
-                                        onChange={(e) => setEmployeeSearch(e.target.value)}
-                                        className="mb-2 h-9 text-xs"
-                                    />
-                                )}
+                                        role="combobox"
+                                        aria-autocomplete="list"
+                                        aria-expanded={employeeDropdownOpen}
+                                        aria-controls={employeeListboxId}
+                                        aria-activedescendant={
+                                            employeeDropdownOpen && filteredEmployees[activeEmployeeIndex]
+                                                ? `${employeeListboxId}-option-${filteredEmployees[activeEmployeeIndex].id}`
+                                                : undefined
+                                        }
+                                        aria-required="true"
+                                        aria-invalid={Boolean(errors.employee_id || employeeSelectionError)}
+                                        placeholder="Search and select an employee..."
+                                        value={
+                                            employeeDropdownOpen
+                                                ? employeeSearch
+                                                : selectedEmployee
+                                                  ? `${selectedEmployee.user?.name ?? 'Unknown'} (${selectedEmployee.employee_code || selectedEmployee.emp_num})`
+                                                  : ''
+                                        }
+                                        onFocus={() => {
+                                            setEmployeeSearch('');
+                                            setActiveEmployeeIndex(0);
+                                            setEmployeeDropdownOpen(true);
+                                        }}
+                                        onBlur={() => setEmployeeDropdownOpen(false)}
+                                        onChange={(e) => {
+                                            setEmployeeSearch(e.target.value);
+                                            setData('employee_id', '');
+                                            setActiveEmployeeIndex(0);
+                                            setEmployeeSelectionError('');
+                                            clearErrors('employee_id');
+                                            setEmployeeDropdownOpen(true);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                setEmployeeDropdownOpen(true);
+                                                setActiveEmployeeIndex((index) =>
+                                                    Math.min(index + 1, Math.max(filteredEmployees.length - 1, 0)),
+                                                );
+                                            } else if (e.key === 'ArrowUp') {
+                                                e.preventDefault();
+                                                setActiveEmployeeIndex((index) => Math.max(index - 1, 0));
+                                            } else if (e.key === 'Enter' && employeeDropdownOpen) {
+                                                e.preventDefault();
+                                                const employee = filteredEmployees[activeEmployeeIndex];
 
-                                <select
-                                    id={employeeSelectId}
-                                    value={data.employee_id}
-                                    onChange={(e) => setData('employee_id', e.target.value)}
-                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    required
-                                >
-                                    <option value="">-- Choose Employee --</option>
-                                    {filteredEmployees.map((emp) => (
-                                        <option key={emp.id} value={emp.id}>
-                                            {emp.user?.name ?? 'Unknown'} ({emp.employee_code || emp.emp_num})
-                                            {emp.designation ? ` - ${emp.designation}` : ''}
-                                            {emp.department?.name ? ` [${emp.department.name}]` : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.employee_id && (
-                                    <p className="text-sm text-destructive">{errors.employee_id}</p>
+                                                if (employee) {
+                                                    selectEmployee(employee);
+                                                }
+                                            } else if (e.key === 'Escape') {
+                                                setEmployeeDropdownOpen(false);
+                                                setEmployeeSearch('');
+                                            }
+                                        }}
+                                        className="pr-10"
+                                    />
+                                    <ChevronDown
+                                        aria-hidden="true"
+                                        className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                                    />
+
+                                    {employeeDropdownOpen && (
+                                        <div
+                                            id={employeeListboxId}
+                                            role="listbox"
+                                            aria-label="Employees"
+                                            className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-input bg-popover p-1 text-popover-foreground shadow-md"
+                                        >
+                                            {filteredEmployees.length > 0 ? (
+                                                filteredEmployees.map((emp, index) => (
+                                                    <button
+                                                        key={emp.id}
+                                                        id={`${employeeListboxId}-option-${emp.id}`}
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={String(emp.id) === data.employee_id}
+                                                        tabIndex={-1}
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onMouseEnter={() => setActiveEmployeeIndex(index)}
+                                                        onClick={() => selectEmployee(emp)}
+                                                        className={`w-full rounded-sm px-3 py-2 text-left text-sm ${
+                                                            index === activeEmployeeIndex
+                                                                ? 'bg-accent text-accent-foreground'
+                                                                : 'hover:bg-accent hover:text-accent-foreground'
+                                                        }`}
+                                                    >
+                                                        {emp.user?.name ?? 'Unknown'} ({emp.employee_code || emp.emp_num})
+                                                        {emp.designation ? ` - ${emp.designation}` : ''}
+                                                        {emp.department?.name ? ` [${emp.department.name}]` : ''}
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <p className="px-3 py-2 text-sm text-muted-foreground">
+                                                    No employees found.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                {(errors.employee_id || employeeSelectionError) && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.employee_id || employeeSelectionError}
+                                    </p>
                                 )}
                             </div>
 
@@ -333,7 +403,7 @@ export default function LeaveRequestsCreate({
                                         <option key={type.id} value={type.id}>
                                             {type.leave_name} ({type.code}) - {type.is_paid ? 'Paid' : 'Unpaid'}
                                             {type.status === 0 ? ' [Inactive]' : ''}
-                                            {type.requires_attachment ? ' [Attachment Required]' : ''}
+                                            {type.policy?.requires_attachment ? ' [Attachment Required]' : ''}
                                         </option>
                                     ))}
                                 </select>
@@ -457,19 +527,19 @@ export default function LeaveRequestsCreate({
                             </div>
 
                             {/* Work Handover Section */}
-                            {(Boolean(selectedLeaveType?.requires_handover) || Boolean(data.handover_person_id)) && (
+                            {(Boolean(selectedLeaveType?.policy?.requires_handover) || Boolean(data.handover_person_id)) && (
                                 <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-5">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <UserCheck className="size-5 text-primary" />
                                             <h4 className="text-sm font-semibold text-foreground">
                                                 Work Handover Details
-                                                {selectedLeaveType?.requires_handover && (
+                                                {selectedLeaveType?.policy?.requires_handover && (
                                                     <span className="ml-1 text-destructive">*</span>
                                                 )}
                                             </h4>
                                         </div>
-                                        {selectedLeaveType?.requires_handover && (
+                                        {selectedLeaveType?.policy?.requires_handover && (
                                             <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
                                                 Required by policy
                                             </span>
@@ -480,7 +550,7 @@ export default function LeaveRequestsCreate({
                                     <div className="space-y-2">
                                         <Label htmlFor={handoverPersonSelectId} className="flex items-center gap-1">
                                             Handover Colleague
-                                            {selectedLeaveType?.requires_handover && (
+                                            {selectedLeaveType?.policy?.requires_handover && (
                                                 <span className="text-destructive">*</span>
                                             )}
                                         </Label>
@@ -489,7 +559,7 @@ export default function LeaveRequestsCreate({
                                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                             value={data.handover_person_id}
                                             onChange={(e) => setData('handover_person_id', e.target.value)}
-                                            required={Boolean(selectedLeaveType?.requires_handover)}
+                                            required={Boolean(selectedLeaveType?.policy?.requires_handover)}
                                         >
                                             <option value="">Select colleague to handover work to...</option>
                                             {candidateHandoverEmployees.map((emp) => {
@@ -520,7 +590,7 @@ export default function LeaveRequestsCreate({
                                     <div className="space-y-2">
                                         <Label htmlFor={handoverDescId} className="flex items-center gap-1">
                                             Handover Tasks & Responsibilities
-                                            {selectedLeaveType?.requires_handover && (
+                                            {selectedLeaveType?.policy?.requires_handover && (
                                                 <span className="text-destructive">*</span>
                                             )}
                                         </Label>
@@ -530,7 +600,7 @@ export default function LeaveRequestsCreate({
                                             placeholder="Detail active tasks, pending approvals, and primary contact coverage during your leave..."
                                             value={data.handover_description}
                                             onChange={(e) => setData('handover_description', e.target.value)}
-                                            required={Boolean(selectedLeaveType?.requires_handover)}
+                                            required={Boolean(selectedLeaveType?.policy?.requires_handover)}
                                         />
                                         {errors.handover_description && (
                                             <p className="text-sm text-destructive">{errors.handover_description}</p>
@@ -543,12 +613,16 @@ export default function LeaveRequestsCreate({
                             <div className="space-y-2">
                                 <Label htmlFor={certificateId} className="flex items-center gap-1.5">
                                     <FileUp className="size-4 text-muted-foreground" />
-                                    Attachment / Certificate (Optional)
+                                    Attachment / Certificate
+                                    {selectedLeaveType?.policy?.requires_attachment && (
+                                        <span className="text-destructive">*</span>
+                                    )}
                                 </Label>
                                 <Input
                                     id={certificateId}
                                     type="file"
                                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                    required={Boolean(selectedLeaveType?.policy?.requires_attachment)}
                                     onChange={(e) => {
                                         const file = e.target.files?.[0] || null;
                                         setData('certificate', file);
@@ -671,7 +745,7 @@ export default function LeaveRequestsCreate({
                                             {selectedLeaveType.is_paid ? 'Paid Leave' : 'Unpaid Leave'}
                                         </span>
                                     </div>
-                                    {selectedLeaveType.requires_attachment && (
+                                    {selectedLeaveType.policy?.requires_attachment && (
                                         <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 p-2 rounded mt-2">
                                             <ShieldAlert className="size-3.5 shrink-0" />
                                             <span>Policy requires an attachment/certificate for this leave type.</span>

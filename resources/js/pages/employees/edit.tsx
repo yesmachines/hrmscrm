@@ -42,6 +42,11 @@ type RoleOption = {
     name: string;
 };
 
+type EligibilityOption = {
+    value: string;
+    label: string;
+};
+
 type Employee = {
     id: number;
     name: string | null;
@@ -75,6 +80,8 @@ export default function EmployeesEdit({
     officeLocations,
     roles,
     countries,
+    genderOptions,
+    religionOptions,
 }: {
     employee: Employee;
     departments: DepartmentOption[];
@@ -84,6 +91,8 @@ export default function EmployeesEdit({
     officeLocations: OfficeLocationOption[];
     roles: RoleOption[];
     countries: { id: number; name: string }[];
+    genderOptions: EligibilityOption[];
+    religionOptions: EligibilityOption[];
 }) {
     setLayoutProps({
         breadcrumbs: [
@@ -145,6 +154,8 @@ export default function EmployeesEdit({
                                 officeLocations={officeLocations}
                                 roles={roles}
                                 countries={countries}
+                                genderOptions={genderOptions}
+                                religionOptions={religionOptions}
                                 defaults={employee}
                                 isEdit
                             />

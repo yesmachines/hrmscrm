@@ -18,18 +18,14 @@ class UpdateLeaveTypeRequest extends FormRequest
     {
         foreach ([
             'is_paid',
-            'requires_attachment',
             'requires_approval',
-            'allow_once',
-            'allow_balance',
-            'requires_handover',
         ] as $field) {
             if ($this->has($field)) {
                 $this->merge([$field => $this->boolean($field)]);
             }
         }
 
-        foreach (['max_days', 'annual_limit', 'gender', 'religion'] as $field) {
+        foreach (['gender', 'religion'] as $field) {
             if ($this->input($field) === '') {
                 $this->merge([$field => null]);
             }
@@ -68,27 +64,10 @@ class UpdateLeaveTypeRequest extends FormRequest
                 Rule::unique('leave_types', 'code')->ignore($leaveType->id),
             ],
             'is_paid' => ['nullable', 'boolean'],
-            'requires_attachment' => ['nullable', 'boolean'],
             'requires_approval' => ['nullable', 'boolean'],
-            'max_days' => ['nullable', 'integer', 'min:0'],
-            'annual_limit' => ['required', 'integer', 'min:0'],
             'gender' => ['nullable', 'string', Rule::in(array_keys(config('params.leave_type.gender_options', [])))],
             'religion' => ['nullable', 'string', 'max:100', Rule::in(config('params.leave_type.religion_options', []))],
-            'allow_once' => ['nullable', 'boolean'],
-            'allow_balance' => ['nullable', 'boolean'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
-            'requires_handover' => ['nullable', 'boolean'],
-        ];
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public function attributes(): array
-    {
-        return [
-            'annual_limit' => 'annual limit',
-            'max_days' => 'max days',
         ];
     }
 
@@ -103,16 +82,10 @@ class UpdateLeaveTypeRequest extends FormRequest
             'leave_name' => $validated['leave_name'],
             'code' => $validated['code'],
             'is_paid' => (bool) ($validated['is_paid'] ?? true),
-            'requires_attachment' => (bool) ($validated['requires_attachment'] ?? false),
             'requires_approval' => (bool) ($validated['requires_approval'] ?? true),
-            'max_days' => isset($validated['max_days']) && $validated['max_days'] !== null ? (int) $validated['max_days'] : null,
-            'annual_limit' => (int) $validated['annual_limit'],
             'gender' => LeaveType::normalizeGender($validated['gender'] ?? null),
             'religion' => LeaveType::normalizeReligion($validated['religion'] ?? null),
-            'allow_once' => (bool) ($validated['allow_once'] ?? false),
-            'allow_balance' => (bool) ($validated['allow_balance'] ?? true),
             'status' => (int) ($validated['status'] ?? 1),
-            'requires_handover' => (bool) ($validated['requires_handover'] ?? false),
         ];
     }
 }
