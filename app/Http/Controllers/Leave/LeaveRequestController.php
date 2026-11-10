@@ -55,7 +55,7 @@ class LeaveRequestController extends Controller
 
         $leaveTypes = LeaveType::query()
             ->with('policy:id,leave_type_id,requires_attachment,requires_handover')
-            ->select('id', 'leave_name', 'code', 'is_paid', 'status', 'gender', 'religion')
+            ->select('id', 'leave_name', 'code', 'is_paid', 'requires_approval', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
             ->get();
@@ -101,6 +101,8 @@ class LeaveRequestController extends Controller
             ->with('policy')
             ->findOrFail($validated['leave_type_id']);
         $policy = $leaveType->policy;
+        $requiresApproval = (bool) $leaveType->requires_approval;
+        $status = $requiresApproval ? $validated['status'] : 'approved';
 
         $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
@@ -170,18 +172,20 @@ class LeaveRequestController extends Controller
             'end_date' => $validated['end_date'],
             'total_days' => $totalDays,
             'remarks' => $validated['remarks'] ?? null,
-            'status' => $validated['status'],
+            'status' => $status,
             'created_by' => $request->user()?->id,
         ]);
 
         $hrName = $request->user()?->name ?? 'HR';
-        $historyRemarks = "Applied by HR ({$hrName}) on behalf of employee.";
+        $historyRemarks = $requiresApproval
+            ? "Applied by HR ({$hrName}) on behalf of employee."
+            : "Automatically approved because this leave type does not require approval. Applied by HR ({$hrName}) on behalf of employee.";
         if (! empty($validated['remarks'])) {
             $historyRemarks .= ' Reason: '.$validated['remarks'];
         }
 
         $leaveRequest->histories()->create([
-            'action_type' => $validated['status'],
+            'action_type' => $status,
             'remarks' => $historyRemarks,
             'done_by' => $request->user()?->id,
             'action_on' => now(),
@@ -213,13 +217,15 @@ class LeaveRequestController extends Controller
             ]);
         }
 
-        if ($validated['status'] === 'approved') {
-            $leaveRequest->approvals()->create([
-                'approval_level' => 'HR Direct Approval',
-                'approver_id' => $request->user()?->id,
-                'remarks' => 'Approved directly by HR upon submission.',
-                'approved_date' => now(),
-            ]);
+        if ($status === 'approved') {
+            if ($requiresApproval) {
+                $leaveRequest->approvals()->create([
+                    'approval_level' => 'HR Direct Approval',
+                    'approver_id' => $request->user()?->id,
+                    'remarks' => 'Approved directly by HR upon submission.',
+                    'approved_date' => now(),
+                ]);
+            }
 
             $currentYear = (int) Carbon::parse($validated['start_date'])->format('Y');
             $balance = LeaveBalance::where('employee_id', $validated['employee_id'])
@@ -540,7 +546,7 @@ class LeaveRequestController extends Controller
                 'action_on' => now(),
             ]);
 
-            if (in_array($validated['status'], ['approved', 'rejected'])) {
+            if ($leaveType->requires_approval && in_array($validated['status'], ['approved', 'rejected'])) {
                 $leave_request->approvals()->create([
                     'approval_level' => 'HR Update Approval',
                     'approver_id' => $request->user()?->id,
@@ -588,7 +594,8 @@ class LeaveRequestController extends Controller
             'action_on' => now(),
         ]);
 
-        if (in_array($validated['status'], ['approved', 'rejected'])) {
+        $leave_request->loadMissing('leaveType');
+        if ($leave_request->leaveType?->requires_approval && in_array($validated['status'], ['approved', 'rejected'])) {
             $leave_request->approvals()->create([
                 'approval_level' => 'Final',
                 'approver_id' => $request->user()?->id,

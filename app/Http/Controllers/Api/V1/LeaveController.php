@@ -264,6 +264,8 @@ class LeaveController extends Controller
         $totalDays = $validation['total_days'];
         $remarks = $validation['remarks'];
         $payBreakdown = $validation['pay_breakdown'];
+        $requiresApproval = (bool) $leaveType->requires_approval;
+        $initialStatus = $requiresApproval ? 'applied' : 'approved';
 
         $leaveRequest = LeaveRequest::create([
             'employee_id' => $employee->id,
@@ -273,13 +275,15 @@ class LeaveController extends Controller
             'end_date' => $endDate->toDateTimeString(),
             'total_days' => $totalDays,
             'remarks' => $remarks,
-            'status' => 'applied',
+            'status' => $initialStatus,
             'created_by' => $user->id,
         ]);
 
         $leaveRequest->histories()->create([
-            'action_type' => 'applied',
-            'remarks' => 'Leave application submitted via API.',
+            'action_type' => $initialStatus,
+            'remarks' => $requiresApproval
+                ? 'Leave application submitted via API.'
+                : 'Automatically approved because this leave type does not require approval.',
             'done_by' => $user->id,
             'action_on' => now(),
         ]);
@@ -388,7 +392,13 @@ class LeaveController extends Controller
                 ->first();
 
             if ($balance) {
-                $balance->pending = (float) $balance->pending + $totalDays;
+                if ($initialStatus === 'approved') {
+                    $balance->used = (float) $balance->used + $totalDays;
+                    $balance->balance = max(0.0, (float) $balance->balance - $totalDays);
+                } else {
+                    $balance->pending = (float) $balance->pending + $totalDays;
+                }
+
                 $balance->save();
             }
         }

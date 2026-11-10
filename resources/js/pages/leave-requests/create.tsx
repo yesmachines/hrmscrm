@@ -51,6 +51,7 @@ interface LeaveTypeOption {
     leave_name: string;
     code: string;
     is_paid: boolean;
+    requires_approval: boolean;
     policy?: {
         requires_attachment: boolean;
         requires_handover: boolean;
@@ -197,6 +198,12 @@ export default function LeaveRequestsCreate({
         if (!data.leave_type_id) return null;
         return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? null;
     }, [data.leave_type_id, availableLeaveTypes]);
+
+    useEffect(() => {
+        if (selectedLeaveType) {
+            setData('status', selectedLeaveType.requires_approval ? 'applied' : 'approved');
+        }
+    }, [selectedLeaveType, setData]);
 
     const candidateHandoverEmployees = useMemo(() => {
         if (!data.employee_id) return employees;
@@ -489,23 +496,37 @@ export default function LeaveRequestsCreate({
 
                             {/* Status Option for HR */}
                             <div className="space-y-2">
-                                <Label htmlFor={statusSelectId} className="flex items-center gap-1.5 font-medium">
-                                    Application Status <span className="text-destructive">*</span>
-                                </Label>
-                                <select
-                                    id={statusSelectId}
-                                    value={data.status}
-                                    onChange={(e) => setData('status', e.target.value)}
-                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                <Label
+                                    htmlFor={selectedLeaveType?.requires_approval === false ? undefined : statusSelectId}
+                                    className="flex items-center gap-1.5 font-medium"
                                 >
-                                    <option value="applied">Applied (Standard workflow - pending further action)</option>
-                                    <option value="approved">Approved (Directly approve leave on submission)</option>
-                                </select>
-                                <p className="text-xs text-muted-foreground">
-                                    {data.status === 'approved'
-                                        ? 'Selecting "Approved" will immediately approve the request and deduct the employee\'s leave balance quota.'
-                                        : 'Selecting "Applied" submits the request as pending for regular review.'}
-                                </p>
+                                    Application Status
+                                    {selectedLeaveType?.requires_approval !== false && (
+                                        <span className="text-destructive">*</span>
+                                    )}
+                                </Label>
+                                {selectedLeaveType?.requires_approval === false ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        This leave type does not require approval. The request will be approved automatically.
+                                    </p>
+                                ) : (
+                                    <>
+                                        <select
+                                            id={statusSelectId}
+                                            value={data.status}
+                                            onChange={(e) => setData('status', e.target.value)}
+                                            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <option value="applied">Applied (Standard workflow - pending further action)</option>
+                                            <option value="approved">Approved (Directly approve leave on submission)</option>
+                                        </select>
+                                        <p className="text-xs text-muted-foreground">
+                                            {data.status === 'approved'
+                                                ? 'Selecting "Approved" will immediately approve the request and deduct the employee\'s leave balance quota.'
+                                                : 'Selecting "Applied" submits the request as pending for regular review.'}
+                                        </p>
+                                    </>
+                                )}
                                 {errors.status && (
                                     <p className="text-sm text-destructive">{errors.status}</p>
                                 )}

@@ -104,11 +104,80 @@ test('leave submission stores half-day request type and duration', function () {
 
     $response->assertCreated()
         ->assertJsonPath('data.request_type', 'secondhalf')
-        ->assertJsonPath('data.total_days', 0.5);
+        ->assertJsonPath('data.total_days', 0.5)
+        ->assertJsonPath('data.status', 'applied');
 
     $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
     expect($leaveRequest->request_type)->toBe('secondhalf')
         ->and((float) $leaveRequest->total_days)->toBe(0.5);
+
+    expect(LeaveRequestApproval::query()->where('leave_request_id', $leaveRequest->id)->exists())->toBeFalse();
+});
+
+test('employee leave type without approval is auto-approved and deducts balance without an approval row', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Auto Approved User',
+        'email' => 'leave.auto-approved@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-AUTO-01',
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL-AUTO',
+        'is_paid' => true,
+        'requires_approval' => false,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => true,
+    ]);
+    $balance = LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 10,
+        'carried_forward' => 0,
+        'used' => 1,
+        'balance' => 9,
+        'pending' => 0,
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $response = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-12-10',
+        'end_date' => '2026-12-11',
+        'request_type' => 'full_day',
+        'total_days' => 2,
+    ]);
+
+    $response->assertCreated()
+        ->assertJsonPath('data.status', 'approved');
+
+    $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
+    $history = DB::table('leave_histories')
+        ->where('leave_request_id', $leaveRequest->id)
+        ->first();
+
+    expect($leaveRequest->status)->toBe('approved')
+        ->and($history?->action_type)->toBe('approved')
+        ->and($history?->remarks)->toContain('does not require approval')
+        ->and(LeaveRequestApproval::query()->where('leave_request_id', $leaveRequest->id)->exists())->toBeFalse();
+
+    $balance->refresh();
+    expect((float) $balance->used)->toBe(3.0)
+        ->and((float) $balance->balance)->toBe(7.0)
+        ->and((float) $balance->pending)->toBe(0.0);
 });
 
 test('employee can update their own applied leave request without changing its leave type', function () {

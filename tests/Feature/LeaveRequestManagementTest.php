@@ -76,7 +76,69 @@ test('hr user can apply leave on behalf of employee with applied status', functi
     expect($history)->not->toBeNull()
         ->and($history->action_type)->toBe('applied')
         ->and($history->done_by)->toBe($hrUser->id)
-        ->and($history->remarks)->toContain('Applied by HR');
+        ->and($history->remarks)->toContain('Applied by HR')
+        ->and(LeaveRequestApproval::query()->where('leave_request_id', $leaveRequest->id)->exists())->toBeFalse();
+});
+
+test('hr automatically approves leave types that do not require approval without creating an approval row', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $salesUser = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Software Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL-NO-APPROVAL',
+        'is_paid' => 1,
+        'requires_approval' => 0,
+        'status' => 1,
+    ]);
+    $balance = LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 10,
+        'carried_forward' => 0,
+        'used' => 1,
+        'balance' => 9,
+        'pending' => 0,
+    ]);
+
+    $response = $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-09-15',
+            'end_date' => '2026-09-16',
+            'total_days' => 2,
+            'status' => 'applied',
+            'remarks' => 'Personal matter.',
+        ]);
+
+    $response->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->firstOrFail();
+    $history = LeaveHistory::query()
+        ->where('leave_request_id', $leaveRequest->id)
+        ->firstOrFail();
+
+    expect($leaveRequest->status)->toBe('approved')
+        ->and($history->action_type)->toBe('approved')
+        ->and($history->remarks)->toContain('does not require approval')
+        ->and(LeaveRequestApproval::query()->where('leave_request_id', $leaveRequest->id)->exists())->toBeFalse();
+
+    $balance->refresh();
+    expect((float) $balance->used)->toBe(3.0)
+        ->and((float) $balance->balance)->toBe(7.0)
+        ->and((float) $balance->pending)->toBe(0.0);
 });
 
 test('hr user can create a half-day leave request and half-day requests must use one date', function () {
