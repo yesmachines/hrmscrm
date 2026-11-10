@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import InputError from '@/components/input-error';
+import PasswordInput from '@/components/password-input';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -197,30 +198,48 @@ export default function EmployeeProfileFormFields({
     };
 
     const [joiningDate, setJoiningDate] = useState(defaults.joining_date ?? '');
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState(
+        String(defaults.department_id ?? ''),
+    );
+    const [photoError, setPhotoError] = useState('');
+    const today = new Date();
+    const maxBirthDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const filteredDesignations = designations.filter(
+        (designation) =>
+            String(designation.department_id) === selectedDepartmentId,
+    );
 
     const matchedDesignationValue = (() => {
         if (!defaults.designation) {
             return '';
         }
-        const match = designations.find(
+
+        const match = filteredDesignations.find(
             (d) =>
                 d.title.toLowerCase() === defaults.designation?.toLowerCase() ||
                 d.shortcode.toLowerCase() === defaults.designation?.toLowerCase() ||
                 String(d.id) === String(defaults.designation_id),
         );
-        return match ? match.title : defaults.designation;
+
+        return match?.title ?? '';
     })();
+    const [selectedDesignation, setSelectedDesignation] = useState(
+        matchedDesignationValue,
+    );
 
     const matchedDivisionValue = (() => {
         if (!defaults.division) {
             return '';
         }
+
         const match = divisions.find(
             (d) =>
                 d.value.toLowerCase() === defaults.division?.toLowerCase() ||
                 d.code.toLowerCase() === defaults.division?.toLowerCase() ||
                 d.name.toLowerCase() === defaults.division?.toLowerCase(),
         );
+
         return match ? match.value : defaults.division;
     })();
 
@@ -243,6 +262,8 @@ export default function EmployeeProfileFormFields({
                         id="name"
                         name="name"
                         placeholder="e.g. John Doe"
+                        pattern={String.raw`[\p{L}\p{M}]+(?: [\p{L}\p{M}]+)*`}
+                        title="Use letters and spaces only."
                         required
                         defaultValue={defaults.name ?? ''}
                     />
@@ -263,9 +284,8 @@ export default function EmployeeProfileFormFields({
                     error={errors.password}
                     required={!isEdit}
                 >
-                    <Input
+                    <PasswordInput
                         id="password"
-                        type="password"
                         name="password"
                         placeholder={isEdit ? '••••••••' : 'Enter secure password'}
                         required={!isEdit}
@@ -332,7 +352,11 @@ export default function EmployeeProfileFormFields({
                         id="department_id"
                         name="department_id"
                         required
-                        defaultValue={defaults.department_id ?? ''}
+                        value={selectedDepartmentId}
+                        onChange={(event) => {
+                            setSelectedDepartmentId(event.target.value);
+                            setSelectedDesignation('');
+                        }}
                         className={fieldClass}
                     >
                         <option value="">Select department</option>
@@ -353,27 +377,18 @@ export default function EmployeeProfileFormFields({
                         id="designation"
                         name="designation"
                         required
-                        defaultValue={matchedDesignationValue}
+                        value={selectedDesignation}
+                        onChange={(event) =>
+                            setSelectedDesignation(event.target.value)
+                        }
                         className={fieldClass}
                     >
                         <option value="">Select designation</option>
-                        {designations.map((designation) => (
+                        {filteredDesignations.map((designation) => (
                             <option key={designation.id} value={designation.title}>
                                 {designation.title} ({designation.shortcode})
                             </option>
                         ))}
-                        {defaults.designation &&
-                            !designations.some(
-                                (d) =>
-                                    d.title.toLowerCase() ===
-                                        defaults.designation?.toLowerCase() ||
-                                    d.shortcode.toLowerCase() ===
-                                        defaults.designation?.toLowerCase(),
-                            ) && (
-                                <option value={defaults.designation}>
-                                    {defaults.designation}
-                                </option>
-                            )}
                     </select>
                 </Field>
                 <Field label="Division" name="division" error={errors.division}>
@@ -409,6 +424,7 @@ export default function EmployeeProfileFormFields({
                         type="tel"
                         placeholder="e.g. +97141234567"
                         pattern="[+]?[0-9]+"
+                        minLength={7}
                         maxLength={20}
                         defaultValue={defaults.phone ?? ''}
                     />
@@ -535,9 +551,20 @@ export default function EmployeeProfileFormFields({
                             name="image_url"
                             type="file"
                             accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
+                            onChange={(event) => {
+                                const file = event.currentTarget.files?.[0];
+                                const error =
+                                    file && file.size > 5 * 1024 * 1024
+                                        ? 'The profile photo must not exceed 5 MB.'
+                                        : '';
+
+                                event.currentTarget.setCustomValidity(error);
+                                setPhotoError(error);
+                            }}
                             className="h-10 cursor-pointer file:mr-2 file:h-7 file:rounded-md file:border-0 file:bg-muted file:px-2.5 file:text-xs file:font-medium"
                         />
                     </div>
+                    <InputError message={errors.image_url ?? photoError} />
                     <p className="text-[11px] text-muted-foreground">
                         JPG, PNG, GIF, or WebP. Max 5MB.
                     </p>
@@ -578,6 +605,7 @@ export default function EmployeeProfileFormFields({
                         id="dob_personal"
                         name="dob_personal"
                         defaultValue={profileDefaults.dob_personal ?? ''}
+                        max={maxBirthDate}
                     />
                 </Field>
                 <Field
@@ -682,6 +710,7 @@ export default function EmployeeProfileFormFields({
                         type="tel"
                         placeholder="e.g. +971501234567"
                         pattern="[+]?[0-9]+"
+                        minLength={7}
                         maxLength={20}
                         defaultValue={profileDefaults.personal_mobile ?? ''}
                     />
@@ -736,6 +765,7 @@ export default function EmployeeProfileFormFields({
                         type="tel"
                         placeholder="e.g. +971559876543"
                         pattern="[+]?[0-9]+"
+                        minLength={7}
                         maxLength={20}
                         defaultValue={profileDefaults.emergency_mobile ?? ''}
                     />
@@ -776,6 +806,7 @@ export default function EmployeeProfileFormFields({
                         type="tel"
                         placeholder="e.g. +919876543210"
                         pattern="[+]?[0-9]+"
+                        minLength={7}
                         maxLength={20}
                         defaultValue={profileDefaults.home_mobile ?? ''}
                     />
@@ -832,6 +863,7 @@ export default function EmployeeProfileFormFields({
                         type="tel"
                         placeholder="e.g. +919876543210"
                         pattern="[+]?[0-9]+"
+                        minLength={7}
                         maxLength={20}
                         defaultValue={
                             profileDefaults.home_emergency_mobile ?? ''
@@ -888,6 +920,7 @@ export default function EmployeeProfileFormFields({
                         id="dob_passport"
                         name="dob_passport"
                         defaultValue={profileDefaults.dob_passport ?? ''}
+                        max={maxBirthDate}
                     />
                 </Field>
                 <Field

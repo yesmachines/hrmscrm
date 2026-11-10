@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\EmployeeProfile;
+use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use App\Support\SalesCrmRoles;
@@ -72,6 +73,7 @@ afterEach(function () {
     }
 
     $sales->table('departments')->where('code', 'EMP-TEST-DEPT')->delete();
+    Organisation::query()->where('org_name', 'Employee Upload Test Org')->delete();
 });
 
 test('guests cannot access employees', function () {
@@ -122,6 +124,7 @@ test('authenticated users can create an employee across salescrm and hrms', func
             'gender' => 'M',
             'religion' => 'Islam',
         ])
+        ->assertSessionDoesntHaveErrors()
         ->assertRedirect();
 
     $crmUser = SalesCrmUser::query()->where('email', 'test.employee@example.com')->first();
@@ -165,6 +168,90 @@ test('authenticated users can create an employee across salescrm and hrms', func
             ->where('role_id', $roleId)
             ->exists()
     )->toBeTrue();
+});
+
+test('employee full names reject numbers and special characters', function () {
+    $admin = createHrmsLoginUser('admin');
+    $payload = [
+        'email' => 'invalid.name@example.com',
+        'password' => 'Password123!',
+        'roles' => 'salesmanager',
+        'emp_num' => 'T-9012',
+        'designation' => 'Engineer',
+        'department_id' => $this->departmentId,
+    ];
+
+    foreach ([
+        'Employee 123',
+        'Employee@Name',
+        "O'Connor",
+        'Smith-Jones',
+        'Dr. Smith',
+    ] as $name) {
+        $this->actingAs($admin)
+            ->post(route('employees.store'), [...$payload, 'name' => $name])
+            ->assertSessionHasErrors(['name']);
+    }
+});
+
+test('employee phone fields require between 7 and 20 characters', function () {
+    $admin = createHrmsLoginUser('admin');
+    $payload = [
+        'name' => 'Phone Test Employee',
+        'email' => 'phone.test@example.com',
+        'password' => 'Password123!',
+        'roles' => 'salesmanager',
+        'emp_num' => 'T-9013',
+        'designation' => 'Engineer',
+        'department_id' => $this->departmentId,
+    ];
+
+    foreach (['phone', 'personal_mobile', 'emergency_mobile', 'home_mobile', 'home_emergency_mobile'] as $field) {
+        foreach (['123456', str_repeat('1', 21)] as $value) {
+            $this->actingAs($admin)
+                ->post(route('employees.store'), [...$payload, $field => $value])
+                ->assertSessionHasErrors([$field]);
+        }
+    }
+});
+
+test('employee date of birth fields reject future dates', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $this->actingAs($admin)
+        ->post(route('employees.store'), [
+            'name' => 'Future Date Employee',
+            'email' => 'future.date@example.com',
+            'password' => 'Password123!',
+            'roles' => 'salesmanager',
+            'emp_num' => 'T-9014',
+            'designation' => 'Engineer',
+            'department_id' => $this->departmentId,
+            'dob_personal' => now()->addDay()->toDateString(),
+            'dob_passport' => now()->addDay()->toDateString(),
+        ])
+        ->assertSessionHasErrors(['dob_personal', 'dob_passport']);
+});
+
+test('employee profile photo larger than 5 MB returns a validation error', function () {
+    Storage::fake('public');
+
+    $admin = createHrmsLoginUser('admin');
+
+    $this->actingAs($admin)
+        ->post(route('employees.store'), [
+            'name' => 'Large Photo Employee',
+            'email' => 'large.photo@example.com',
+            'password' => 'Password123!',
+            'roles' => 'salesmanager',
+            'emp_num' => 'T-9015',
+            'designation' => 'Engineer',
+            'department_id' => $this->departmentId,
+            'image_url' => UploadedFile::fake()->image('large.jpg')->size(5121),
+        ])
+        ->assertSessionHasErrors(['image_url']);
+
+    expect(SalesCrmUser::query()->where('email', 'large.photo@example.com')->exists())->toBeFalse();
 });
 
 test('employee division is optional on create and edit', function () {
@@ -333,6 +420,11 @@ test('authenticated users can create an employee with image upload, highest educ
     Storage::fake('public');
 
     $admin = createHrmsLoginUser('admin');
+    $organisation = Organisation::query()->create([
+        'org_name' => 'Employee Upload Test Org',
+        'short_name' => 'EUTO',
+        'status' => 1,
+    ]);
 
     $fakeImage = UploadedFile::fake()->image('avatar.jpg', 200, 200);
 
@@ -350,8 +442,9 @@ test('authenticated users can create an employee with image upload, highest educ
             'status' => 1,
             'image_url' => $fakeImage,
             'highest_education' => 'Bachelors Degree',
-            'visa_from' => 'Yes Machinery',
+            'visa_from' => $organisation->org_name,
         ])
+        ->assertSessionDoesntHaveErrors()
         ->assertRedirect();
 
     $employee = Employee::query()->where('emp_num', 'T-9999')->first();
@@ -363,5 +456,5 @@ test('authenticated users can create an employee with image upload, highest educ
     $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
     expect($profile)->not->toBeNull()
         ->and($profile->highest_education)->toBe('Bachelors Degree')
-        ->and($profile->visa_from)->toBe('Yes Machinery');
+        ->and($profile->visa_from)->toBe($organisation->org_name);
 });

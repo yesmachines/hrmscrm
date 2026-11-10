@@ -24,6 +24,13 @@ test('api login returns a sanctum token for valid credentials', function () {
         'password' => Hash::make('Password123!'),
         'email_verified_at' => now(),
     ]);
+    Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-LOGIN',
+        'designation' => 'Analyst',
+        'division' => 'Engineering',
+        'status' => 1,
+    ]);
 
     $response = $this->postJson('/api/v1/login', [
         'email' => 'mobile.user@example.com',
@@ -60,6 +67,48 @@ test('api login rejects invalid credentials', function () {
         'password' => 'wrong-password',
     ])->assertUnprocessable()
         ->assertJsonValidationErrors(['email']);
+});
+
+test('api login rejects users without an employee record as invalid credentials', function () {
+    SalesCrmUser::query()->create([
+        'name' => 'Unlinked Mobile User',
+        'email' => 'unlinked.mobile.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    $this->postJson('/api/v1/login', [
+        'email' => 'unlinked.mobile.user@example.com',
+        'password' => 'Password123!',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors(['email'])
+        ->assertJsonPath('errors.email.0', 'These credentials do not match our records.');
+});
+
+test('inactive employees cannot log in to the api', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Inactive Mobile User',
+        'email' => 'inactive.mobile.user@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+
+    Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-INACTIVE',
+        'designation' => 'Analyst',
+        'division' => 'Engineering',
+        'status' => 0,
+    ]);
+
+    $this->postJson('/api/v1/login', [
+        'email' => 'inactive.mobile.user@example.com',
+        'password' => 'Password123!',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors(['email'])
+        ->assertJsonPath('errors.email.0', 'Your employee account is inactive.');
+
+    expect(PersonalAccessToken::query()->where('tokenable_id', $user->id)->count())->toBe(0);
 });
 
 test('authenticated api user can fetch their profile', function () {

@@ -70,12 +70,24 @@ class AuthController extends Controller
             ]);
         }
 
+        $user->load('employee');
+
+        if ($user->employee === null) {
+            throw ValidationException::withMessages([
+                'email' => [__('These credentials do not match our records.')],
+            ]);
+        }
+
+        if ($user->employee->status !== 1) {
+            throw ValidationException::withMessages([
+                'email' => [__('Your employee account is inactive.')],
+            ]);
+        }
+
         $deviceName = $request->string('device_name')->toString();
         $deviceName = $deviceName !== '' ? $deviceName : 'mobile';
 
         $token = $user->createToken($deviceName)->plainTextToken;
-
-        $user->load('employee');
 
         $data = clone $user;
         $data->access_token = $token;
