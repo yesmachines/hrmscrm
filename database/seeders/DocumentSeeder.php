@@ -878,22 +878,21 @@ class DocumentSeeder extends Seeder
                         'templates' => [
                             [
                                 'template_name' => 'Standard Pay Slip Template',
-                                'template_code' => '<div style="font-family: Arial, sans-serif; font-size: 13px; line-height: 1.5; color: #333; max-width: 800px; margin: auto; padding: 25px;">
+                                'template_code' => '<div style="box-sizing: border-box; width: 100%; max-width: 190mm; margin: 0 auto; padding: 5mm; font-family: Arial, sans-serif; font-size: 9px; line-height: 1.2; color: #333;">
     <!-- Header Section -->
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
         <div style="width: 30%;">
-            <img src="{{company_logo_url}}" alt="YES Machinery" style="width: 75px; height: auto; display: block;" />
+            <img src="{{company_logo_url}}" alt="YES Machinery" style="width: 55px; height: auto; display: block;" />
         </div>
         <div style="width: 70%; text-align: right;">
-            <h3 style="margin: 0; font-size: 16px; font-weight: normal;">York Engineering Solutions FZC</h3>
-            <p style="margin: 4px 0; font-size: 12px;">P O Box: 42167 | WAREHOUSE NO.: LV-27-D |<br>HAMRIYAH FREE ZONE PHASE 2 | SHARJAH | UAE</p>
-            <br>
-            <h4 style="margin: 0; text-align: center; font-weight: normal;">Payslip for the Month of {{payroll_month}}</h4>
+            <h3 style="margin: 0; font-size: 12px; font-weight: normal;">York Engineering Solutions FZC</h3>
+            <p style="margin: 3px 0; font-size: 9px;">P O Box: 42167 | WAREHOUSE NO.: LV-27-D |<br>HAMRIYAH FREE ZONE PHASE 2 | SHARJAH | UAE</p>
+            <h4 style="margin: 5px 0 0; text-align: center; font-size: 10px; font-weight: normal;">Payslip for the Month of {{payroll_month}}</h4>
         </div>
     </div>
     
     <!-- Employee Details -->
-    <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 13px;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 9px;">
         <table style="width: 48%; border: none;">
             <tr><td style="padding: 2px 0; width: 40%;">Employee Name</td><td style="padding: 2px 0;">{{employee_name}}</td></tr>
             <tr><td style="padding: 2px 0;">Pay Days</td><td style="padding: 2px 0;">{{pay_days}}</td></tr>
@@ -910,78 +909,65 @@ class DocumentSeeder extends Seeder
     </div>
     
     <!-- Salary Table -->
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; text-align: left; font-size: 13px;">
+    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0 auto 8px; text-align: left; font-size: 8px; word-wrap: break-word; page-break-inside: avoid;">
         <thead>
             <tr>
-                <th style="padding: 5px; border: 1px solid #000;" colspan="2">Fixed Earnings</th>
-                <th style="padding: 5px; border: 1px solid #000;" colspan="2">Monthly/Variable Earnings</th>
-                <th style="padding: 5px; border: 1px solid #000;" colspan="2">Monthly Deductions</th>
-                <th style="padding: 5px; border: 1px solid #000;" colspan="2">Statutory Deduction</th>
+                <th style="padding: 3px 2px; border: 1px solid #000;" colspan="2">Fixed Earnings</th>
+                <th style="padding: 3px 2px; border: 1px solid #000;" colspan="2">Monthly/Variable Earnings</th>
+                <th style="padding: 3px 2px; border: 1px solid #000;" colspan="2">Monthly Deductions</th>
+                <th style="padding: 3px 2px; border: 1px solid #000;" colspan="2">Statutory Deduction</th>
             </tr>
             <tr>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;"></th>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;">Amount</th>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;"></th>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;">Amount</th>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;"></th>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;">Amount</th>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;"></th>
-                <th style="padding: 5px; border: 1px solid #000; font-weight: normal;">Amount</th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;"></th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;">Amount</th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;"></th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;">Amount</th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;"></th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;">Amount</th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;"></th>
+                <th style="padding: 3px 2px; border: 1px solid #000; font-weight: normal;">Amount</th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td style="padding: 5px; border: 1px solid #000;">Basic Salary</td><td style="padding: 5px; border: 1px solid #000;">{{basic_salary}}</td>
-                <td style="padding: 5px; border: 1px solid #000;">Basic Salary</td><td style="padding: 5px; border: 1px solid #000;">{{variable_basic_salary}}</td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
+                <td style="padding: 3px 2px; border: 1px solid #000;">Basic Salary</td><td style="padding: 3px 2px; border: 1px solid #000;">{{basic_salary}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;">Basic Salary</td><td style="padding: 3px 2px; border: 1px solid #000;">{{variable_basic_salary}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;"></td><td style="padding: 3px 2px; border: 1px solid #000;"></td>
+                <td style="padding: 3px 2px; border: 1px solid #000;"></td><td style="padding: 3px 2px; border: 1px solid #000;"></td>
             </tr>
             <tr>
-                <td style="padding: 5px; border: 1px solid #000;">Other Allowance</td><td style="padding: 5px; border: 1px solid #000;">{{other_allowance}}</td>
-                <td style="padding: 5px; border: 1px solid #000;">Other Allowance</td><td style="padding: 5px; border: 1px solid #000;">{{variable_other_allowance}}</td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-            </tr>
-            <!-- Empty rows to match design -->
-            <tr>
-                <td style="padding: 5px; border: 1px solid #000;">&nbsp;</td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-            </tr>
-            <tr>
-                <td style="padding: 5px; border: 1px solid #000;">&nbsp;</td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;"></td>
+                <td style="padding: 3px 2px; border: 1px solid #000;">Other Allowance</td><td style="padding: 3px 2px; border: 1px solid #000;">{{other_allowance}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;">Other Allowance</td><td style="padding: 3px 2px; border: 1px solid #000;">{{variable_other_allowance}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;"></td><td style="padding: 3px 2px; border: 1px solid #000;"></td>
+                <td style="padding: 3px 2px; border: 1px solid #000;"></td><td style="padding: 3px 2px; border: 1px solid #000;"></td>
             </tr>
             
             <tr>
-                <td style="padding: 5px; border: 1px solid #000;">Total</td><td style="padding: 5px; border: 1px solid #000;">{{total_fixed_earnings}}</td>
-                <td style="padding: 5px; border: 1px solid #000;"></td><td style="padding: 5px; border: 1px solid #000;">{{total_variable_earnings}}</td>
-                <td style="padding: 5px; border: 1px solid #000;">Total</td><td style="padding: 5px; border: 1px solid #000;">{{total_monthly_deductions}}</td>
-                <td style="padding: 5px; border: 1px solid #000;">Total</td><td style="padding: 5px; border: 1px solid #000;">{{total_statutory_deductions}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;">Total</td><td style="padding: 3px 2px; border: 1px solid #000;">{{total_fixed_earnings}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;"></td><td style="padding: 3px 2px; border: 1px solid #000;">{{total_variable_earnings}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;">Total</td><td style="padding: 3px 2px; border: 1px solid #000;">{{total_monthly_deductions}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000;">Total</td><td style="padding: 3px 2px; border: 1px solid #000;">{{total_statutory_deductions}}</td>
             </tr>
             <tr>
-                <td style="padding: 5px; border: 1px solid #000; text-align: center;" colspan="2">Gross Salary</td>
-                <td style="padding: 5px; border: 1px solid #000; text-align: center;" colspan="2">{{gross_salary}}</td>
-                <td style="padding: 5px; border: 1px solid #000; text-align: center;" colspan="2">Net Pay</td>
-                <td style="padding: 5px; border: 1px solid #000; text-align: center;" colspan="2">{{net_salary}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000; text-align: center;" colspan="2">Gross Salary</td>
+                <td style="padding: 3px 2px; border: 1px solid #000; text-align: center;" colspan="2">{{gross_salary}}</td>
+                <td style="padding: 3px 2px; border: 1px solid #000; text-align: center;" colspan="2">Net Pay</td>
+                <td style="padding: 3px 2px; border: 1px solid #000; text-align: center;" colspan="2">{{net_salary}}</td>
             </tr>
             <tr>
-                <td colspan="8" style="padding: 5px; border: 1px solid #000; text-align: center;">{{amount_in_words}}</td>
+                <td colspan="8" style="padding: 3px 2px; border: 1px solid #000; text-align: center;">{{amount_in_words}}</td>
             </tr>
         </tbody>
     </table>
     
     <!-- Footer Section -->
-    <div style="margin-top: 50px;">
+    <div style="margin-top: 10px; page-break-inside: avoid;">
         <p style="margin: 0;">For: York Engineering Solutions FZC</p>
-        <br><br><br>
+        <br>
         <p style="margin: 0;">Shahid Chettianthodika<br>Chief Financial Officer</p>
     </div>
     
-    <div style="margin-top: 50px; font-size: 13px;">
+    <div style="margin-top: 10px; font-size: 8px; page-break-inside: avoid;">
         <p style="margin: 0;">For Verification Purpose Please Feel free to contact: swathika@yesmachinery.ae</p>
     </div>
 </div>',

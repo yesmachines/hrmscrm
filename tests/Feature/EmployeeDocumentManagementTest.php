@@ -119,6 +119,41 @@ test('all documents excludes HR and letter request categories and direct upload 
         ->and($letterRequest->exists)->toBeTrue();
 });
 
+test('admin document listing paginates documents and preserves search filters across pages', function () {
+    $admin = createHrmsLoginUser('admin');
+    $passportType = DocumentType::query()->where('document_code', 'passport')->firstOrFail();
+
+    foreach (range(1, 16) as $number) {
+        EmployeeDocument::query()->create([
+            'employee_id' => 1001,
+            'document_type_id' => $passportType->id,
+            'document_title' => "Passport {$number}",
+            'status' => 'approved',
+        ]);
+    }
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employee-documents.index', ['search' => 'Passport']))
+        ->assertInertia(fn ($page) => $page
+            ->component('employee-documents/index')
+            ->where('documents.total', 16)
+            ->where('documents.per_page', 15)
+            ->where('documents.current_page', 1)
+            ->where('documents.data', fn ($documents) => count($documents) === 15)
+            ->where('documents.links', fn ($links) => collect($links)
+                ->filter(fn ($link) => $link['url'] !== null)
+                ->every(fn ($link) => str_contains($link['url'], 'search=Passport'))));
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('employee-documents.index', ['search' => 'Passport', 'page' => 2]))
+        ->assertInertia(fn ($page) => $page
+            ->where('documents.current_page', 2)
+            ->where('documents.data', fn ($documents) => count($documents) === 1)
+            ->where('documents.data.0.document_title', 'Passport 1'));
+});
+
 test('admin document edit page is available only to the matching creator role when enabled before approval', function () {
     $admin = createHrmsLoginUser('admin');
     $hr = createHrmsLoginUser('hr');

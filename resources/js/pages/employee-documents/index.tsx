@@ -62,6 +62,8 @@ type DocumentItem = {
 type PaginatedDocuments = {
     data: DocumentItem[];
     links: { url: string | null; label: string; active: boolean }[];
+    from: number | null;
+    to: number | null;
     total: number;
 };
 
@@ -345,6 +347,41 @@ export default function EmployeeDocumentsIndex({
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
+                        {documents.total === 0
+                            ? 'No documents to display'
+                            : `Showing ${documents.from} to ${documents.to} of ${documents.total} documents`}
+                    </p>
+                    {documents.links.length > 3 && (
+                        <nav aria-label="Document list pagination" className="flex flex-wrap gap-2">
+                            {documents.links.map((link, index) =>
+                                link.url ? (
+                                    <Link
+                                        key={index}
+                                        href={link.url}
+                                        preserveScroll
+                                        aria-current={link.active ? 'page' : undefined}
+                                        className={`rounded-md border px-3 py-1.5 text-sm ${
+                                            link.active
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-border bg-white text-foreground hover:bg-muted'
+                                        }`}
+                                        dangerouslySetInnerHTML={{ __html: link.label }}
+                                    />
+                                ) : (
+                                    <span
+                                        key={index}
+                                        aria-disabled="true"
+                                        className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground opacity-50"
+                                        dangerouslySetInnerHTML={{ __html: link.label }}
+                                    />
+                                ),
+                            )}
+                        </nav>
+                    )}
                 </div>
             </div>
         </>

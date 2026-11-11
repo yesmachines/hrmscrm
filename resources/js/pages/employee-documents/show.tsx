@@ -88,6 +88,7 @@ type Props = {
 
 export default function EmployeeDocumentShow({ document, employee }: Props) {
     const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+    const isPayslip = document.document_code === 'pay_slip';
     const [approveDialogOpen, setApproveDialogOpen] = useState(false);
     const [rejectRemarks, setRejectRemarks] = useState('');
     const [approveRemarks, setApproveRemarks] = useState('Approved by HR');
@@ -296,10 +297,15 @@ export default function EmployeeDocumentShow({ document, employee }: Props) {
                                                 const printWindow = window.open('', '_blank');
 
                                                 if (printWindow) {
+                                                    const printStyles = isPayslip
+                                                        ? '<style>@page { size: A4 portrait; margin: 10mm; } html, body { margin: 0; padding: 0; }</style>'
+                                                        : '';
+                                                    const bodyStyle = isPayslip ? 'margin: 0;' : 'margin: 40px;';
+
                                                     printWindow.document.write(`
                                                         <html>
-                                                            <head><title>${document.document_title || document.document_name}</title></head>
-                                                            <body style="margin: 40px;">${document.rendered_html}</body>
+                                                            <head><title>${document.document_title || document.document_name}</title>${printStyles}</head>
+                                                            <body style="${bodyStyle}">${document.rendered_html}</body>
                                                         </html>
                                                     `);
                                                     printWindow.document.close();
