@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import InputError from '@/components/input-error';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -11,19 +14,28 @@ type Option = {
     disabled?: boolean;
 };
 
+type PolicyTierValue = {
+    id?: number;
+    from_day: number | string;
+    to_day: number | string;
+    pay_percentage: number | string;
+};
+
+type TierFormValue = {
+    from_day: string;
+    to_day: string;
+    pay_percentage: string;
+};
+
 type LeavePolicyFormValues = {
     leave_type_id?: number | string | null;
     organisation_id?: number | string | null;
     annual_limit?: number | string | null;
     allow_once?: number | string | null;
     allow_balance?: number | string | null;
-    full_pay_days?: number | string | null;
-    half_pay_days?: number | string | null;
-    no_pay_days?: number | string | null;
     requires_document_after_days?: number | string | null;
     requires_weekend_document?: number | string | null;
     requires_handover?: number | string | null;
-    carry_forward?: number | string | null;
     carry_forward_weeks?: number | string | null;
     encashment?: number | string | null;
     remarks?: string | null;
@@ -31,6 +43,7 @@ type LeavePolicyFormValues = {
     probation_applicable?: number | string | null;
     minimum_service_months?: number | string | null;
     exclude_rules?: unknown[] | Record<string, unknown> | null;
+    tiers?: PolicyTierValue[] | null;
 };
 
 type Props = {
@@ -97,6 +110,26 @@ export default function LeavePolicyFormFields({
     leaveTypes = [],
     organisations = [],
 }: Props) {
+    const [tiers, setTiers] = useState<TierFormValue[]>(() =>
+        (defaults.tiers ?? []).map((tier) => ({
+            from_day: String(tier.from_day),
+            to_day: String(tier.to_day),
+            pay_percentage: String(tier.pay_percentage),
+        })),
+    );
+
+    function updateTier(
+        index: number,
+        field: keyof TierFormValue,
+        value: string,
+    ) {
+        setTiers((currentTiers) =>
+            currentTiers.map((tier, tierIndex) =>
+                tierIndex === index ? { ...tier, [field]: value } : tier,
+            ),
+        );
+    }
+
     return (
         <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
             <div>
@@ -196,48 +229,6 @@ export default function LeavePolicyFormFields({
                 </Field>
 
                 <Field
-                    label="Full pay days"
-                    name="full_pay_days"
-                    error={errors.full_pay_days}
-                >
-                    <Input
-                        id="full_pay_days"
-                        name="full_pay_days"
-                        type="number"
-                        min={0}
-                        defaultValue={defaults.full_pay_days ?? ''}
-                    />
-                </Field>
-
-                <Field
-                    label="Half pay days"
-                    name="half_pay_days"
-                    error={errors.half_pay_days}
-                >
-                    <Input
-                        id="half_pay_days"
-                        name="half_pay_days"
-                        type="number"
-                        min={0}
-                        defaultValue={defaults.half_pay_days ?? ''}
-                    />
-                </Field>
-
-                <Field
-                    label="No pay days"
-                    name="no_pay_days"
-                    error={errors.no_pay_days}
-                >
-                    <Input
-                        id="no_pay_days"
-                        name="no_pay_days"
-                        type="number"
-                        min={0}
-                        defaultValue={defaults.no_pay_days ?? ''}
-                    />
-                </Field>
-
-                <Field
                     label="Requires document after days"
                     name="requires_document_after_days"
                     error={errors.requires_document_after_days}
@@ -275,17 +266,6 @@ export default function LeavePolicyFormFields({
                     <YesNoSelect
                         name="requires_weekend_document"
                         defaultValue={defaults.requires_weekend_document}
-                    />
-                </Field>
-
-                <Field
-                    label="Carry forward"
-                    name="carry_forward"
-                    error={errors.carry_forward}
-                >
-                    <YesNoSelect
-                        name="carry_forward"
-                        defaultValue={defaults.carry_forward}
                     />
                 </Field>
 
@@ -378,6 +358,153 @@ export default function LeavePolicyFormFields({
                             Leave empty if there are no exclusion rules.
                         </p>
                     </Field>
+                </div>
+
+                <div className="space-y-4 rounded-xl border border-border p-4 sm:col-span-2">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h4 className="text-sm font-semibold text-foreground">
+                                Pay tiers (optional)
+                            </h4>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                Add day ranges and pay percentages for this
+                                policy, or leave empty.
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() =>
+                                setTiers((currentTiers) => [
+                                    ...currentTiers,
+                                    {
+                                        from_day: '',
+                                        to_day: '',
+                                        pay_percentage: '',
+                                    },
+                                ])
+                            }
+                        >
+                            <Plus className="size-4" />
+                            Add tier
+                        </Button>
+                    </div>
+
+                    <input
+                        type="hidden"
+                        name="tiers"
+                        value={JSON.stringify(tiers)}
+                        readOnly
+                    />
+                    <InputError message={errors.tiers} />
+
+                    {tiers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            No pay tiers configured.
+                        </p>
+                    ) : (
+                        <div className="space-y-3">
+                            {tiers.map((tier, index) => (
+                                <div
+                                    key={index}
+                                    className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
+                                >
+                                    <Field
+                                        label="From day"
+                                        name={`tiers.${index}.from_day`}
+                                        error={
+                                            errors[
+                                                `tiers.${index}.from_day`
+                                            ]
+                                        }
+                                    >
+                                        <Input
+                                            id={`tiers.${index}.from_day`}
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            value={tier.from_day}
+                                            onChange={(event) =>
+                                                updateTier(
+                                                    index,
+                                                    'from_day',
+                                                    event.target.value,
+                                                )
+                                            }
+                                        />
+                                    </Field>
+
+                                    <Field
+                                        label="To day"
+                                        name={`tiers.${index}.to_day`}
+                                        error={
+                                            errors[`tiers.${index}.to_day`]
+                                        }
+                                    >
+                                        <Input
+                                            id={`tiers.${index}.to_day`}
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            value={tier.to_day}
+                                            onChange={(event) =>
+                                                updateTier(
+                                                    index,
+                                                    'to_day',
+                                                    event.target.value,
+                                                )
+                                            }
+                                        />
+                                    </Field>
+
+                                    <Field
+                                        label="Pay percentage"
+                                        name={`tiers.${index}.pay_percentage`}
+                                        error={
+                                            errors[
+                                                `tiers.${index}.pay_percentage`
+                                            ]
+                                        }
+                                    >
+                                        <Input
+                                            id={`tiers.${index}.pay_percentage`}
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            step={0.01}
+                                            value={tier.pay_percentage}
+                                            onChange={(event) =>
+                                                updateTier(
+                                                    index,
+                                                    'pay_percentage',
+                                                    event.target.value,
+                                                )
+                                            }
+                                        />
+                                    </Field>
+
+                                    <div className="flex items-end">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            aria-label={`Remove tier ${index + 1}`}
+                                            onClick={() =>
+                                                setTiers((currentTiers) =>
+                                                    currentTiers.filter(
+                                                        (_, tierIndex) =>
+                                                            tierIndex !== index,
+                                                    ),
+                                                )
+                                            }
+                                        >
+                                            <Trash2 className="size-4" />
+                                            Remove
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="sm:col-span-2">

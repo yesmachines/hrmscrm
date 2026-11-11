@@ -53,13 +53,19 @@ class LeaveController extends Controller
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
         $rawEmployeeReligion = $profile?->religion;
         $leaveTypes = $eligibilityService->filterEligible(
-            LeaveType::with('policy')->where('status', 1)->get(),
+            LeaveType::query()
+                ->with([
+                    'policies' => fn ($query) => $query
+                        ->where('organisation_id', $employee->organisation_id),
+                ])
+                ->where('status', 1)
+                ->get(),
             $rawEmployeeGender,
             $rawEmployeeReligion,
         );
 
         $typesData = $leaveTypes->map(function ($type) use ($employee) {
-            $policy = $type->policy;
+            $policy = $type->policyForOrganisation($employee->organisation_id);
 
             // Get current year balance
             $balance = LeaveBalance::where('leave_type_id', $type->id)
@@ -86,14 +92,10 @@ class LeaveController extends Controller
                 ],
                 'policy' => $policy ? [
                     'id' => $policy->id,
-                    'full_pay_days' => $policy->full_pay_days,
-                    'half_pay_days' => $policy->half_pay_days,
-                    'no_pay_days' => $policy->no_pay_days,
                     'requires_document_after_days' => $policy->requires_document_after_days,
                     'requires_weekend_document' => (bool) $policy->requires_weekend_document,
                     'requires_attachment' => (bool) $policy->requires_attachment,
                     'requires_handover' => (bool) $policy->requires_handover,
-                    'carry_forward' => (bool) $policy->carry_forward,
                     'encashment' => (bool) $policy->encashment,
                     'probation_applicable' => (bool) $policy->probation_applicable,
                     'minimum_service_months' => $policy->minimum_service_months,
@@ -141,14 +143,14 @@ class LeaveController extends Controller
             ->where('status', '!=', 'rejected');
 
         if ($month && $year) {
-            $startOfMonth = Carbon::create($year, $month, 1)->startOfMonth()->toDateTimeString();
-            $endOfMonth = Carbon::create($year, $month, 1)->endOfMonth()->toDateTimeString();
+            $startOfMonth = Carbon::create($year, $month, 1)->startOfMonth()->toDateString();
+            $endOfMonth = Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
 
             $leavesQuery->where(function ($q) use ($startOfMonth, $endOfMonth) {
                 $q->where(function ($sub) use ($startOfMonth, $endOfMonth) {
-                    $sub->where('start_date', '<=', $endOfMonth)
+                    $sub->whereDate('start_date', '<=', $endOfMonth)
                         ->where(function ($inner) use ($startOfMonth) {
-                            $inner->where('end_date', '>=', $startOfMonth)
+                            $inner->whereDate('end_date', '>=', $startOfMonth)
                                 ->orWhereNull('end_date');
                         });
                 });
@@ -212,7 +214,7 @@ class LeaveController extends Controller
                         new OA\Property(property: 'leave_type_id', type: 'integer'),
                         new OA\Property(property: 'start_date', type: 'string', format: 'date'),
                         new OA\Property(property: 'end_date', type: 'string', format: 'date'),
-                        new OA\Property(property: 'request_type', type: 'string', enum: ['full_day', 'firsthalf', 'secondhalf']),
+                        new OA\Property(property: 'request_type', type: 'string', enum: ['fullday', 'firsthalf', 'secondhalf']),
                         new OA\Property(property: 'reason', type: 'string'),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),
@@ -263,7 +265,6 @@ class LeaveController extends Controller
         $requestType = $validation['request_type'];
         $totalDays = $validation['total_days'];
         $remarks = $validation['remarks'];
-        $payBreakdown = $validation['pay_breakdown'];
         $requiresApproval = (bool) $leaveType->requires_approval;
         $initialStatus = $requiresApproval ? 'applied' : 'approved';
 
@@ -271,8 +272,8 @@ class LeaveController extends Controller
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
             'request_type' => $requestType,
-            'start_date' => $startDate->toDateTimeString(),
-            'end_date' => $endDate->toDateTimeString(),
+            'start_date' => $startDate->toDateString(),
+            'end_date' => $endDate->toDateString(),
             'total_days' => $totalDays,
             'remarks' => $remarks,
             'status' => $initialStatus,
@@ -335,7 +336,7 @@ class LeaveController extends Controller
         }
 
         // Store handover details if required
-        if ($policy?->requires_handover) {
+        if ($policy?->requiresHandoverForDuration($totalDays)) {
             $details = [
                 ['field_name' => 'Handover Person ID', 'field_key' => 'handover_person_id', 'field_value' => (string) $request->input('handover_person_id')],
                 ['field_name' => 'Handover Description', 'field_key' => 'handover_description', 'field_value' => (string) $request->input('handover_description')],
@@ -374,14 +375,6 @@ class LeaveController extends Controller
                 'field_value' => (string) $request->input('child_birth_date'),
             ]);
         }
-
-        // Store Pay Tier Breakdown calculated from Policy
-        $payBreakdownText = "Full Pay: {$payBreakdown['full_pay']} days, Half Pay: {$payBreakdown['half_pay']} days, No Pay: {$payBreakdown['no_pay']} days";
-        $leaveRequest->details()->create([
-            'field_name' => 'Pay Tier Breakdown',
-            'field_key' => 'pay_tier_breakdown',
-            'field_value' => $payBreakdownText,
-        ]);
 
         // Update pending balance if balance tracking enabled
         if ($policy?->allow_balance ?? true) {
@@ -460,7 +453,7 @@ class LeaveController extends Controller
             'leave_type_id' => ['sometimes', 'integer', 'exists:leave_types,id'],
             'start_date' => ['sometimes', 'date'],
             'end_date' => ['sometimes', 'date'],
-            'request_type' => ['sometimes', 'in:full_day,firsthalf,secondhalf'],
+            'request_type' => ['sometimes', 'in:fullday,firsthalf,secondhalf'],
             'total_days' => ['sometimes', 'nullable', 'numeric', 'min:0.5'],
             'status' => ['sometimes', 'in:applied'],
             'remarks' => ['sometimes', 'nullable', 'string'],
@@ -497,7 +490,7 @@ class LeaveController extends Controller
             'leave_type_id' => $leaveRequest->leave_type_id,
             'start_date' => $leaveRequest->start_date->toDateString(),
             'end_date' => $leaveRequest->end_date?->toDateString(),
-            'request_type' => $leaveRequest->request_type ?? 'full_day',
+            'request_type' => $leaveRequest->request_type ?? 'fullday',
             'total_days' => $datesChanged ? null : $leaveRequest->total_days,
             'remarks' => $leaveRequest->remarks,
             'handover_person_id' => $detailValue('handover_person_id'),
@@ -543,8 +536,8 @@ class LeaveController extends Controller
             $oldTotalDays,
         ): void {
             $leaveRequest->update([
-                'start_date' => $validation['start_date']->toDateTimeString(),
-                'end_date' => $validation['end_date']->toDateTimeString(),
+                'start_date' => $validation['start_date']->toDateString(),
+                'end_date' => $validation['end_date']->toDateString(),
                 'request_type' => $validation['request_type'],
                 'total_days' => $validation['total_days'],
                 'remarks' => $validation['remarks'],
@@ -573,7 +566,7 @@ class LeaveController extends Controller
                 }
             }
 
-            if ($validation['policy']?->requires_handover) {
+            if ($validation['policy']?->requiresHandoverForDuration($validation['total_days'])) {
                 $this->updateLeaveRequestDetail(
                     $leaveRequest,
                     'handover_person_id',
@@ -627,14 +620,6 @@ class LeaveController extends Controller
                     $this->updateLeaveRequestDetail($leaveRequest, 'declaration_signed', 'Declaration Signed', 'Yes');
                 }
             }
-
-            $payBreakdown = $validation['pay_breakdown'];
-            $this->updateLeaveRequestDetail(
-                $leaveRequest,
-                'pay_tier_breakdown',
-                'Pay Tier Breakdown',
-                "Full Pay: {$payBreakdown['full_pay']} days, Half Pay: {$payBreakdown['half_pay']} days, No Pay: {$payBreakdown['no_pay']} days",
-            );
 
             if ($request->hasFile('certificate')) {
                 $path = $request->file('certificate')->store('leave-certificates', 'public');
@@ -864,7 +849,7 @@ class LeaveController extends Controller
             'employee_id' => $leaveRequest->employee_id,
             'leave_type_id' => $leaveRequest->leave_type_id,
             'leave_type' => $leaveRequest->leaveType,
-            'request_type' => $leaveRequest->request_type ?? 'full_day',
+            'request_type' => $leaveRequest->request_type ?? 'fullday',
             'start_date' => $leaveRequest->start_date?->format('Y-m-d'),
             'end_date' => $leaveRequest->end_date?->format('Y-m-d'),
             'total_days' => $leaveRequest->total_days,

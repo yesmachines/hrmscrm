@@ -18,6 +18,75 @@ class LeaveValidationService
         private readonly LeaveTypeEligibilityService $leaveTypeEligibilityService,
     ) {}
 
+    public function validatePolicyEligibility(
+        Employee $employee,
+        LeaveType $leaveType,
+        ?LeavePolicy $policy,
+        Carbon $startDate,
+        float $totalDays,
+        ?int $ignoreLeaveRequestId = null,
+    ): void {
+        if ($policy?->allow_once) {
+            $alreadyUsedQuery = LeaveRequest::query()
+                ->where('employee_id', $employee->id)
+                ->where('leave_type_id', $leaveType->id)
+                ->whereIn('status', ['applied', 'approved']);
+
+            if ($ignoreLeaveRequestId !== null) {
+                $alreadyUsedQuery->where('id', '!=', $ignoreLeaveRequestId);
+            }
+
+            if ($alreadyUsedQuery->exists()) {
+                throw ValidationException::withMessages([
+                    'leave_type_id' => ["You have already availed {$leaveType->leave_name}. This leave can only be taken once during your service tenure."],
+                ]);
+            }
+        }
+
+        $annualLimit = $policy?->annual_limit;
+        if ($annualLimit !== null) {
+            $usedDaysQuery = LeaveRequest::query()
+                ->where('employee_id', $employee->id)
+                ->where('leave_type_id', $leaveType->id)
+                ->whereIn('status', ['applied', 'approved'])
+                ->whereYear('start_date', $startDate->year);
+
+            if ($ignoreLeaveRequestId !== null) {
+                $usedDaysQuery->where('id', '!=', $ignoreLeaveRequestId);
+            }
+
+            $usedDaysThisYear = (float) $usedDaysQuery->sum('total_days');
+
+            if (($usedDaysThisYear + $totalDays) > $annualLimit) {
+                $remaining = max(0, $annualLimit - $usedDaysThisYear);
+                throw ValidationException::withMessages([
+                    'total_days' => ["This request exceeds your annual limit of {$annualLimit} days for {$leaveType->leave_name}. You have {$remaining} days remaining this year."],
+                ]);
+            }
+        }
+
+        if ($policy?->minimum_service_months !== null && $policy->minimum_service_months > 0) {
+            $joiningDate = $employee->joining_date ?? $employee->created_at;
+            if ($joiningDate) {
+                $serviceMonths = Carbon::parse($joiningDate)->diffInMonths($startDate);
+                if ($serviceMonths < $policy->minimum_service_months) {
+                    throw ValidationException::withMessages([
+                        'leave_type_id' => ["A minimum of {$policy->minimum_service_months} months of service is required to apply for {$leaveType->leave_name}. Your current tenure is {$serviceMonths} months."],
+                    ]);
+                }
+            }
+        }
+
+        if ($policy && ! $policy->probation_applicable) {
+            $employmentStatus = strtolower($employee->employment_status ?? '');
+            if (str_contains($employmentStatus, 'probation')) {
+                throw ValidationException::withMessages([
+                    'leave_type_id' => ["{$leaveType->leave_name} is not available during probation period as per company leave policy."],
+                ]);
+            }
+        }
+    }
+
     /**
      * Validate all leave type and policy constraints for a leave application.
      *
@@ -29,7 +98,6 @@ class LeaveValidationService
      *     end_date: Carbon,
      *     request_type: string,
      *     total_days: float,
-     *     pay_breakdown: array{full_pay: float, half_pay: float, no_pay: float},
      *     attachment_required: bool,
      *     remarks: string|null
      * }
@@ -51,7 +119,7 @@ class LeaveValidationService
         }
 
         /** @var LeaveType|null $leaveType */
-        $leaveType = LeaveType::with('policy')->find($leaveTypeId);
+        $leaveType = LeaveType::find($leaveTypeId);
         if (! $leaveType) {
             throw ValidationException::withMessages([
                 'leave_type_id' => ['The selected leave type does not exist.'],
@@ -64,9 +132,7 @@ class LeaveValidationService
             ]);
         }
 
-        // 2. Fetch the SINGLE policy for this leave type
-        /** @var LeavePolicy|null $policy */
-        $policy = $leaveType->policy ?? LeavePolicy::where('leave_type_id', $leaveType->id)->first();
+        $policy = $leaveType->policyForOrganisation($employee->organisation_id);
 
         // 3. Date & Duration calculation
         if (empty($data['start_date']) || empty($data['end_date'])) {
@@ -84,20 +150,20 @@ class LeaveValidationService
             ]);
         }
 
-        $requestType = $data['request_type'] ?? 'full_day';
-        if (! in_array($requestType, ['full_day', 'firsthalf', 'secondhalf'], true)) {
+        $requestType = $data['request_type'] ?? 'fullday';
+        if (! in_array($requestType, ['fullday', 'firsthalf', 'secondhalf'], true)) {
             throw ValidationException::withMessages([
                 'request_type' => ['The selected leave request type is invalid.'],
             ]);
         }
 
-        if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+        if ($requestType !== 'fullday' && ! $startDate->isSameDay($endDate)) {
             throw ValidationException::withMessages([
                 'request_type' => ['Half-day leave must start and end on the same date.'],
             ]);
         }
 
-        $totalDays = $requestType === 'full_day'
+        $totalDays = $requestType === 'fullday'
             ? (! empty($data['total_days'])
                 ? (float) $data['total_days']
                 : (float) ($startDate->diffInDays($endDate->copy()->startOfDay()) + 1))
@@ -110,14 +176,17 @@ class LeaveValidationService
         }
 
         // 4. Overlapping Active Requests Check
+        $startDateValue = $startDate->toDateString();
+        $endDateValue = $endDate->toDateString();
+
         $overlappingQuery = LeaveRequest::where('employee_id', $employee->id)
             ->whereIn('status', ['applied', 'approved'])
-            ->where(function ($query) use ($startDate, $endDate) {
-                $query->whereBetween('start_date', [$startDate, $endDate])
-                    ->orWhereBetween('end_date', [$startDate, $endDate])
-                    ->orWhere(function ($q) use ($startDate, $endDate) {
-                        $q->where('start_date', '<=', $startDate)
-                            ->where('end_date', '>=', $endDate);
+            ->where(function ($query) use ($startDateValue, $endDateValue) {
+                $query->whereBetween('start_date', [$startDateValue, $endDateValue])
+                    ->orWhereBetween('end_date', [$startDateValue, $endDateValue])
+                    ->orWhere(function ($q) use ($startDateValue, $endDateValue) {
+                        $q->whereDate('start_date', '<=', $startDateValue)
+                            ->whereDate('end_date', '>=', $endDateValue);
                     });
             });
 
@@ -137,47 +206,14 @@ class LeaveValidationService
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
         $this->leaveTypeEligibilityService->assertEligible($leaveType, $rawEmployeeGender, $profile?->religion);
 
-        // 6. Allow Once in Service Check (from Leave Policy)
-        if ($policy?->allow_once) {
-            $alreadyUsedQuery = LeaveRequest::where('employee_id', $employee->id)
-                ->where('leave_type_id', $leaveType->id)
-                ->whereIn('status', ['applied', 'approved']);
-
-            if ($ignoreLeaveRequestId !== null) {
-                $alreadyUsedQuery->where('id', '!=', $ignoreLeaveRequestId);
-            }
-
-            $alreadyUsed = $alreadyUsedQuery->exists();
-
-            if ($alreadyUsed) {
-                throw ValidationException::withMessages([
-                    'leave_type_id' => ["You have already availed {$leaveType->leave_name}. This leave can only be taken once during your service tenure."],
-                ]);
-            }
-        }
-
-        // 7. Annual Limit Check (from Leave Policy)
-        $annualLimit = $policy?->annual_limit;
-        if ($annualLimit !== null) {
-            $currentYear = $startDate->year;
-            $usedDaysQuery = LeaveRequest::where('employee_id', $employee->id)
-                ->where('leave_type_id', $leaveType->id)
-                ->whereIn('status', ['applied', 'approved'])
-                ->whereYear('start_date', $currentYear);
-
-            if ($ignoreLeaveRequestId !== null) {
-                $usedDaysQuery->where('id', '!=', $ignoreLeaveRequestId);
-            }
-
-            $usedDaysThisYear = (float) $usedDaysQuery->sum('total_days');
-
-            if (($usedDaysThisYear + $totalDays) > $annualLimit) {
-                $remaining = max(0, $annualLimit - $usedDaysThisYear);
-                throw ValidationException::withMessages([
-                    'total_days' => ["This request exceeds your annual limit of {$annualLimit} days for {$leaveType->leave_name}. You have {$remaining} days remaining this year."],
-                ]);
-            }
-        }
+        $this->validatePolicyEligibility(
+            $employee,
+            $leaveType,
+            $policy,
+            $startDate,
+            $totalDays,
+            $ignoreLeaveRequestId,
+        );
 
         // 8. Leave Balance Check (from Leave Policy)
         if ($policy?->allow_balance ?? true) {
@@ -198,7 +234,9 @@ class LeaveValidationService
         // 9. Handover Requirement Check (from Leave Policy)
         $handoverId = $data['handover_person_id'] ?? null;
 
-        if ($policy?->requires_handover && empty($handoverId)) {
+        $requiresHandover = $policy?->requiresHandoverForDuration($totalDays) ?? false;
+
+        if ($requiresHandover && empty($handoverId)) {
             throw ValidationException::withMessages([
                 'handover_person_id' => ['A handover person is required for this leave type.'],
             ]);
@@ -221,8 +259,8 @@ class LeaveValidationService
             // Check if the selected handover employee is also on leave during the requested dates
             $handoverOnLeave = LeaveRequest::where('employee_id', $handoverId)
                 ->whereIn('status', ['applied', 'approved'])
-                ->where('start_date', '<=', $endDate)
-                ->where('end_date', '>=', $startDate)
+                ->whereDate('start_date', '<=', $endDateValue)
+                ->whereDate('end_date', '>=', $startDateValue)
                 ->exists();
 
             if ($handoverOnLeave) {
@@ -231,7 +269,7 @@ class LeaveValidationService
                 ]);
             }
 
-            if ($policy?->requires_handover && empty($data['handover_description'])) {
+            if ($requiresHandover && empty($data['handover_description'])) {
                 throw ValidationException::withMessages([
                     'handover_description' => ['Handover description / responsibilities are required.'],
                 ]);
@@ -254,123 +292,27 @@ class LeaveValidationService
             }
         }
 
-        // 10. Minimum Service Months Check (from Policy)
-        if ($policy && $policy->minimum_service_months !== null && $policy->minimum_service_months > 0) {
-            $joiningDate = $employee->joining_date ?? $employee->created_at;
-            if ($joiningDate) {
-                $serviceMonths = Carbon::parse($joiningDate)->diffInMonths($startDate);
-                if ($serviceMonths < $policy->minimum_service_months) {
-                    throw ValidationException::withMessages([
-                        'leave_type_id' => ["A minimum of {$policy->minimum_service_months} months of service is required to apply for {$leaveType->leave_name}. Your current tenure is {$serviceMonths} months."],
-                    ]);
-                }
-            }
-        }
+        $attachmentRequired = $policy?->requiresAttachmentForDuration($totalDays) ?? false;
+        $attachmentMessage = $attachmentRequired
+            ? ($policy?->requires_document_after_days !== null
+                ? "A supporting document is required for leaves exceeding {$policy->requires_document_after_days} days."
+                : "Company policy requires a supporting document for {$leaveType->leave_name}.")
+            : null;
 
-        // 11. Probation Period Check (from Policy)
-        if ($policy && ! $policy->probation_applicable) {
-            $employmentStatus = strtolower($employee->employment_status ?? '');
-            if (str_contains($employmentStatus, 'probation')) {
-                throw ValidationException::withMessages([
-                    'leave_type_id' => ["{$leaveType->leave_name} is not available during probation period as per company leave policy."],
-                ]);
-            }
-        }
-
-        // 12. Attachment / Document Requirement (from Policy)
-        $attachmentRequired = false;
-        $attachmentMessage = null;
-
-        $isSickLeave = $leaveType->code === 'SICK' || stripos($leaveType->leave_name, 'Sick') !== false;
-
-        if ($isSickLeave) {
-            // Sick Leave specific rules:
-            // 1. 2 or more consecutive days applied (in this application or adjacent to existing sick leave)
-            $isConsecutiveTwoDays = $totalDays >= 2;
-
-            if (! $isConsecutiveTwoDays) {
-                $previousDay = $startDate->copy()->subDay();
-                if ($startDate->dayOfWeek === Carbon::MONDAY) {
-                    $previousDay = $startDate->copy()->subDays(3); // Friday before weekend
-                }
-                $nextDay = $endDate->copy()->addDay();
-                if ($endDate->dayOfWeek === Carbon::FRIDAY) {
-                    $nextDay = $endDate->copy()->addDays(3); // Monday after weekend
-                }
-
-                $hasAdjacentSickLeave = LeaveRequest::query()
-                    ->where('employee_id', $employee->id)
-                    ->where('leave_type_id', $leaveType->id)
-                    ->whereIn('status', ['applied', 'approved'])
-                    ->where(function ($q) use ($previousDay, $nextDay) {
-                        $q->whereDate('end_date', $previousDay->toDateString())
-                            ->orWhereDate('start_date', $nextDay->toDateString());
-                    })
-                    ->when(
-                        $ignoreLeaveRequestId !== null,
-                        fn ($query) => $query->where('id', '!=', $ignoreLeaveRequestId),
-                    )
-                    ->exists();
-
-                if ($hasAdjacentSickLeave) {
-                    $isConsecutiveTwoDays = true;
-                }
-            }
-
-            // 2. Combined with the weekend (touches Friday, Saturday, Sunday, or Monday)
-            $isCombinedWithWeekend = false;
+        if ($policy?->requires_weekend_document) {
+            $hasWeekend = false;
             $cursor = $startDate->copy();
             while ($cursor->lte($endDate)) {
-                if (
-                    $cursor->isWeekend()
-                    || $cursor->dayOfWeek === Carbon::FRIDAY
-                    || $cursor->dayOfWeek === Carbon::MONDAY
-                ) {
-                    $isCombinedWithWeekend = true;
+                if ($cursor->isWeekend() || $cursor->dayOfWeek === Carbon::FRIDAY) {
+                    $hasWeekend = true;
                     break;
                 }
                 $cursor->addDay();
             }
 
-            if ($policy && $policy->requires_attachment) {
+            if ($hasWeekend) {
                 $attachmentRequired = true;
-                $attachmentMessage = 'Company policy requires a supporting medical certificate for Sick Leave.';
-            } elseif ($isConsecutiveTwoDays) {
-                $attachmentRequired = true;
-                $attachmentMessage = 'A medical certificate is mandatory when applying for 2 or more consecutive days of Sick Leave.';
-            } elseif ($isCombinedWithWeekend) {
-                $attachmentRequired = true;
-                $attachmentMessage = 'A medical certificate is mandatory for Sick Leave combined with or adjacent to a weekend.';
-            } elseif ($policy && $policy->requires_document_after_days !== null && $totalDays > $policy->requires_document_after_days) {
-                $attachmentRequired = true;
-                $attachmentMessage = "Supporting medical certificate is mandatory for leaves exceeding {$policy->requires_document_after_days} days.";
-            }
-        } else {
-            if ($policy && $policy->requires_attachment) {
-                $attachmentRequired = true;
-                $attachmentMessage = $attachmentMessage ?? "Company policy requires a supporting document for {$leaveType->leave_name}.";
-            }
-
-            if ($policy && $policy->requires_document_after_days !== null && $totalDays > $policy->requires_document_after_days) {
-                $attachmentRequired = true;
-                $attachmentMessage = "Supporting medical certificate is mandatory for leaves exceeding {$policy->requires_document_after_days} days.";
-            }
-
-            if ($policy && $policy->requires_weekend_document) {
-                $hasWeekend = false;
-                $cursor = $startDate->copy();
-                while ($cursor->lte($endDate)) {
-                    if ($cursor->isWeekend() || $cursor->dayOfWeek === Carbon::FRIDAY) {
-                        $hasWeekend = true;
-                        break;
-                    }
-                    $cursor->addDay();
-                }
-
-                if ($hasWeekend) {
-                    $attachmentRequired = true;
-                    $attachmentMessage = $attachmentMessage ?? 'A medical certificate is required for leaves spanning across weekends.';
-                }
+                $attachmentMessage ??= 'A supporting document is required for leaves spanning across weekends.';
             }
         }
 
@@ -435,26 +377,6 @@ class LeaveValidationService
             }
         }
 
-        // 14. Calculate Pay Breakdown from Policy
-        $fullPayDays = 0.0;
-        $halfPayDays = 0.0;
-        $noPayDays = 0.0;
-
-        if ($policy) {
-            $policyFull = (float) ($policy->full_pay_days ?? $totalDays);
-            $policyHalf = (float) ($policy->half_pay_days ?? 0);
-
-            $fullPayDays = min($totalDays, $policyFull);
-            $halfPayDays = min(max(0.0, $totalDays - $fullPayDays), $policyHalf);
-            $noPayDays = max(0.0, $totalDays - $fullPayDays - $halfPayDays);
-        } else {
-            if ($leaveType->is_paid) {
-                $fullPayDays = $totalDays;
-            } else {
-                $noPayDays = $totalDays;
-            }
-        }
-
         return [
             'leave_type' => $leaveType,
             'policy' => $policy,
@@ -462,11 +384,6 @@ class LeaveValidationService
             'end_date' => $endDate,
             'request_type' => $requestType,
             'total_days' => $totalDays,
-            'pay_breakdown' => [
-                'full_pay' => $fullPayDays,
-                'half_pay' => $halfPayDays,
-                'no_pay' => $noPayDays,
-            ],
             'attachment_required' => $attachmentRequired,
             'remarks' => $remarks,
         ];

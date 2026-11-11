@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
+import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -51,13 +52,19 @@ interface LeaveTypeOption {
     leave_name: string;
     code: string;
     is_paid: boolean;
-    policy?: {
-        requires_attachment: boolean;
-        requires_handover: boolean;
-    } | null;
+    policy?: LeavePolicyOption | null;
+    policies?: LeavePolicyOption[];
     status?: number;
     gender?: string | null;
     religion?: string | null;
+}
+
+interface LeavePolicyOption {
+    organisation_id: number;
+    annual_limit: number | null;
+    requires_document_after_days: number | null;
+    requires_attachment: boolean;
+    requires_handover: boolean;
 }
 
 interface LeaveBalanceItem {
@@ -128,7 +135,7 @@ export default function LeaveRequestsEdit({
         _method: 'PUT',
         employee_id: String(leaveRequest.employee_id),
         leave_type_id: String(leaveRequest.leave_type_id),
-        request_type: leaveRequest.request_type ?? 'full_day',
+        request_type: leaveRequest.request_type ?? 'fullday',
         start_date: leaveRequest.start_date,
         end_date: leaveRequest.end_date,
         total_days: String(leaveRequest.total_days),
@@ -147,7 +154,7 @@ export default function LeaveRequestsEdit({
             if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                setData('total_days', data.request_type === 'full_day' ? String(diffDays) : '0.5');
+                setData('total_days', data.request_type === 'fullday' ? String(diffDays) : '0.5');
             }
         }
     }, [data.start_date, data.end_date, data.request_type, setData]);
@@ -183,6 +190,19 @@ export default function LeaveRequestsEdit({
         if (!data.leave_type_id) return null;
         return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? leaveRequest.leave_type ?? null;
     }, [data.leave_type_id, availableLeaveTypes, leaveRequest.leave_type]);
+
+    const selectedPolicy = useMemo(() => {
+        if (!selectedLeaveType) return null;
+
+        return selectedLeaveType.policies?.find(
+            (policy) => Number(policy.organisation_id) === Number(selectedEmployee?.organisation_id),
+        ) ?? selectedLeaveType.policy ?? null;
+    }, [selectedEmployee, selectedLeaveType]);
+
+    const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
+        selectedPolicy,
+        Number(data.total_days || 0),
+    );
 
     const candidateHandoverEmployees = useMemo(() => {
         if (!data.employee_id) return employees;
@@ -390,11 +410,11 @@ export default function LeaveRequestsEdit({
                                             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                             required
                                         >
-                                            <option value="full_day">Full day</option>
+                                            <option value="fullday">Full day</option>
                                             <option value="firsthalf">First half</option>
                                             <option value="secondhalf">Second half</option>
                                         </select>
-                                        {data.request_type !== 'full_day' && (
+                                        {data.request_type !== 'fullday' && (
                                             <p className="mt-1 text-xs text-muted-foreground">
                                                 Half-day leave must cover one date only.
                                             </p>
@@ -425,7 +445,7 @@ export default function LeaveRequestsEdit({
                                                 id={endDateId}
                                                 value={data.end_date}
                                                 min={data.start_date}
-                                                max={data.request_type === 'full_day' ? undefined : data.start_date}
+                                                max={data.request_type === 'fullday' ? undefined : data.start_date}
                                                 onChange={(value) => setData('end_date', value)}
                                                 className="mt-1.5"
                                                 required
@@ -443,7 +463,7 @@ export default function LeaveRequestsEdit({
                                                 step="0.5"
                                                 min="0.5"
                                                 value={data.total_days}
-                                                disabled={data.request_type !== 'full_day'}
+                                                disabled={data.request_type !== 'fullday'}
                                                 onChange={(e) => setData('total_days', e.target.value)}
                                                 className="mt-1.5 font-semibold text-primary"
                                                 required
@@ -484,7 +504,7 @@ export default function LeaveRequestsEdit({
                                     <div>
                                         <Label htmlFor={handoverPersonSelectId}>
                                             Handover Person
-                                            {selectedLeaveType?.policy?.requires_handover && (
+                                            {requiresHandover && (
                                                 <span className="ml-1 text-destructive">*</span>
                                             )}
                                         </Label>
@@ -492,7 +512,7 @@ export default function LeaveRequestsEdit({
                                             id={handoverPersonSelectId}
                                             value={data.handover_person_id}
                                             onChange={(e) => setData('handover_person_id', e.target.value)}
-                                            required={Boolean(selectedLeaveType?.policy?.requires_handover)}
+                                            required={requiresHandover}
                                             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                         >
                                             <option value="">-- No handover person required / assigned --</option>
@@ -524,7 +544,7 @@ export default function LeaveRequestsEdit({
                                         <div>
                                             <Label htmlFor={handoverDescId}>
                                                 Handover Tasks & Instructions
-                                                {selectedLeaveType?.policy?.requires_handover && (
+                                                {requiresHandover && (
                                                     <span className="ml-1 text-destructive">*</span>
                                                 )}
                                             </Label>
@@ -532,7 +552,7 @@ export default function LeaveRequestsEdit({
                                                 id={handoverDescId}
                                                 value={data.handover_description}
                                                 onChange={(e) => setData('handover_description', e.target.value)}
-                                                required={Boolean(selectedLeaveType?.policy?.requires_handover)}
+                                                required={requiresHandover}
                                                 placeholder="Key duties, urgent contacts, pending tickets..."
                                                 className="mt-1.5 min-h-[80px]"
                                             />
@@ -574,6 +594,12 @@ export default function LeaveRequestsEdit({
                                         No balance record found for this employee and leave type.
                                     </p>
                                 )}
+                                {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined && (
+                                    <div className="mt-3 flex justify-between border-t border-border pt-3 text-xs">
+                                        <span className="text-muted-foreground">Policy annual limit</span>
+                                        <span className="font-medium text-foreground">{selectedPolicy.annual_limit} days</span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Attachments / Certificate */}
@@ -604,7 +630,7 @@ export default function LeaveRequestsEdit({
                                 <div>
                                     <Label htmlFor={certificateId} className="text-xs text-muted-foreground">
                                         Upload Replacement or New Document
-                                        {selectedLeaveType?.policy?.requires_attachment && !hasExistingAttachment && (
+                                        {requiresAttachment && !hasExistingAttachment && (
                                             <span className="ml-1 text-destructive">*</span>
                                         )}
                                     </Label>
@@ -612,7 +638,7 @@ export default function LeaveRequestsEdit({
                                         id={certificateId}
                                         type="file"
                                         accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                        required={Boolean(selectedLeaveType?.policy?.requires_attachment) && !hasExistingAttachment}
+                                        required={requiresAttachment && !hasExistingAttachment}
                                         onChange={(e) => setData('certificate', e.target.files?.[0] ?? null)}
                                         className="mt-1.5 text-xs"
                                     />

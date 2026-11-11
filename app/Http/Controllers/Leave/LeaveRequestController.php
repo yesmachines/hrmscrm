@@ -9,6 +9,7 @@ use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Services\LeaveTypeEligibilityService;
+use App\Services\LeaveValidationService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,7 +55,7 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->with('policy:id,leave_type_id,requires_attachment,requires_handover')
+            ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover')
             ->select('id', 'leave_name', 'code', 'is_paid', 'requires_approval', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
@@ -68,7 +69,7 @@ class LeaveRequestController extends Controller
 
         $activeLeaves = LeaveRequest::query()
             ->whereIn('status', ['applied', 'approved'])
-            ->where('end_date', '>=', now()->startOfYear())
+            ->whereDate('end_date', '>=', now()->startOfYear()->toDateString())
             ->select('id', 'employee_id', 'start_date', 'end_date', 'status')
             ->get();
 
@@ -80,14 +81,17 @@ class LeaveRequestController extends Controller
         ]);
     }
 
-    public function store(Request $request, LeaveTypeEligibilityService $eligibilityService): RedirectResponse
-    {
+    public function store(
+        Request $request,
+        LeaveTypeEligibilityService $eligibilityService,
+        LeaveValidationService $leaveValidationService,
+    ): RedirectResponse {
         $validated = $request->validate([
             'employee_id' => 'required|exists:salescrm.employees,id',
             'leave_type_id' => 'required|exists:leave_types,id',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'request_type' => 'nullable|in:full_day,firsthalf,secondhalf',
+            'request_type' => 'nullable|in:fullday,firsthalf,secondhalf',
             'total_days' => 'nullable|numeric|min:0.5',
             'status' => 'required|in:applied,approved',
             'remarks' => 'nullable|string',
@@ -97,10 +101,8 @@ class LeaveRequestController extends Controller
         ]);
 
         $employee = Employee::query()->findOrFail($validated['employee_id']);
-        $leaveType = LeaveType::query()
-            ->with('policy')
-            ->findOrFail($validated['leave_type_id']);
-        $policy = $leaveType->policy;
+        $leaveType = LeaveType::query()->findOrFail($validated['leave_type_id']);
+        $policy = $leaveType->policyForOrganisation($employee->organisation_id);
         $requiresApproval = (bool) $leaveType->requires_approval;
         $status = $requiresApproval ? $validated['status'] : 'approved';
 
@@ -110,17 +112,33 @@ class LeaveRequestController extends Controller
 
         $startDate = Carbon::parse($validated['start_date'])->startOfDay();
         $endDate = Carbon::parse($validated['end_date'])->endOfDay();
-        $requestType = $validated['request_type'] ?? 'full_day';
+        $requestType = $validated['request_type'] ?? 'fullday';
 
-        if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+        if ($requestType !== 'fullday' && ! $startDate->isSameDay($endDate)) {
             throw ValidationException::withMessages([
                 'request_type' => ['Half-day leave must start and end on the same date.'],
             ]);
         }
 
+        $totalDays = $requestType === 'fullday'
+            ? ($validated['total_days'] ?? (
+                Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
+            ))
+            : 0.5;
+
+        $leaveValidationService->validatePolicyEligibility(
+            $employee,
+            $leaveType,
+            $policy,
+            $startDate,
+            (float) $totalDays,
+        );
+
+        $requiresHandover = $policy?->requiresHandoverForDuration((float) $totalDays) ?? false;
+        $requiresAttachment = $policy?->requiresAttachmentForDuration((float) $totalDays) ?? false;
         $handoverPersonId = $validated['handover_person_id'] ?? null;
 
-        if ($policy?->requires_handover && empty($handoverPersonId)) {
+        if ($requiresHandover && empty($handoverPersonId)) {
             throw ValidationException::withMessages([
                 'handover_person_id' => ['A handover person is required by this leave policy.'],
             ]);
@@ -135,8 +153,8 @@ class LeaveRequestController extends Controller
 
             $handoverOnLeave = LeaveRequest::where('employee_id', $handoverPersonId)
                 ->whereIn('status', ['applied', 'approved'])
-                ->where('start_date', '<=', $endDate)
-                ->where('end_date', '>=', $startDate)
+                ->whereDate('start_date', '<=', $endDate->toDateString())
+                ->whereDate('end_date', '>=', $startDate->toDateString())
                 ->exists();
 
             if ($handoverOnLeave) {
@@ -145,24 +163,18 @@ class LeaveRequestController extends Controller
                 ]);
             }
 
-            if ($policy?->requires_handover && empty($validated['handover_description'])) {
+            if ($requiresHandover && empty($validated['handover_description'])) {
                 throw ValidationException::withMessages([
                     'handover_description' => ['Handover description is required.'],
                 ]);
             }
         }
 
-        if ($policy?->requires_attachment && ! $request->hasFile('certificate')) {
+        if ($requiresAttachment && ! $request->hasFile('certificate')) {
             throw ValidationException::withMessages([
                 'certificate' => ['A supporting document is required by this leave policy.'],
             ]);
         }
-
-        $totalDays = $requestType === 'full_day'
-            ? ($validated['total_days'] ?? (
-                Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-            ))
-            : 0.5;
 
         $leaveRequest = LeaveRequest::create([
             'employee_id' => $validated['employee_id'],
@@ -251,7 +263,6 @@ class LeaveRequestController extends Controller
             'employee.user:id,name,email',
             'employee.department:id,name',
             'leaveType:id,leave_name,is_paid',
-            'leaveType.policy:id,leave_type_id,requires_handover,requires_attachment',
             'files',
             'details',
             'histories' => function ($query) {
@@ -278,14 +289,20 @@ class LeaveRequestController extends Controller
     public function edit(LeaveRequest $leave_request): Response
     {
         $leave_request->load([
-            'employee:id,user_id,emp_num,employee_code,designation,department_id',
+            'employee:id,user_id,emp_num,employee_code,designation,department_id,organisation_id',
             'employee.user:id,name',
             'employee.department:id,name',
             'leaveType:id,leave_name,code',
-            'leaveType.policy:id,leave_type_id,requires_handover,requires_attachment',
             'details',
             'files',
         ]);
+
+        if ($leave_request->leaveType) {
+            $leave_request->leaveType->setRelation(
+                'policy',
+                $leave_request->leaveType->policyForOrganisation($leave_request->employee?->organisation_id),
+            );
+        }
 
         $employees = Employee::query()
             ->with([
@@ -306,7 +323,7 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->with('policy:id,leave_type_id,requires_attachment,requires_handover')
+            ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover')
             ->select('id', 'leave_name', 'code', 'is_paid', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
@@ -321,7 +338,7 @@ class LeaveRequestController extends Controller
         $activeLeaves = LeaveRequest::query()
             ->where('id', '!=', $leave_request->id)
             ->whereIn('status', ['applied', 'approved'])
-            ->where('end_date', '>=', now()->startOfYear())
+            ->whereDate('end_date', '>=', now()->startOfYear()->toDateString())
             ->select('id', 'employee_id', 'start_date', 'end_date', 'status')
             ->get();
 
@@ -335,7 +352,7 @@ class LeaveRequestController extends Controller
                 'leave_type_id' => $leave_request->leave_type_id,
                 'start_date' => Carbon::parse($leave_request->start_date)->format('Y-m-d'),
                 'end_date' => Carbon::parse($leave_request->end_date)->format('Y-m-d'),
-                'request_type' => $leave_request->request_type ?? 'full_day',
+                'request_type' => $leave_request->request_type ?? 'fullday',
                 'total_days' => $leave_request->total_days,
                 'status' => $leave_request->status,
                 'remarks' => $leave_request->remarks,
@@ -356,6 +373,7 @@ class LeaveRequestController extends Controller
         Request $request,
         LeaveRequest $leave_request,
         LeaveTypeEligibilityService $eligibilityService,
+        LeaveValidationService $leaveValidationService,
     ) {
         // If full edit form submission (has start_date)
         if ($request->has('start_date')) {
@@ -364,7 +382,7 @@ class LeaveRequestController extends Controller
                 'leave_type_id' => 'required|exists:leave_types,id',
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
-                'request_type' => 'nullable|in:full_day,firsthalf,secondhalf',
+                'request_type' => 'nullable|in:fullday,firsthalf,secondhalf',
                 'total_days' => 'nullable|numeric|min:0.5',
                 'status' => 'required|in:applied,approved,rejected,cancelled',
                 'remarks' => 'nullable|string',
@@ -381,10 +399,8 @@ class LeaveRequestController extends Controller
 
             $employeeId = $validated['employee_id'] ?? $leave_request->employee_id;
             $employee = Employee::query()->findOrFail($employeeId);
-            $leaveType = LeaveType::query()
-                ->with('policy')
-                ->findOrFail($leave_request->leave_type_id);
-            $policy = $leaveType->policy;
+            $leaveType = LeaveType::query()->findOrFail($leave_request->leave_type_id);
+            $policy = $leaveType->policyForOrganisation($employee->organisation_id);
 
             $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
             $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
@@ -392,21 +408,44 @@ class LeaveRequestController extends Controller
 
             $startDate = Carbon::parse($validated['start_date'])->startOfDay();
             $endDate = Carbon::parse($validated['end_date'])->endOfDay();
-            $requestType = $validated['request_type'] ?? 'full_day';
+            $requestType = $validated['request_type'] ?? 'fullday';
 
-            if ($requestType !== 'full_day' && ! $startDate->isSameDay($endDate)) {
+            if ($requestType !== 'fullday' && ! $startDate->isSameDay($endDate)) {
                 throw ValidationException::withMessages([
                     'request_type' => ['Half-day leave must start and end on the same date.'],
                 ]);
             }
+
+            $totalDays = $requestType === 'fullday'
+                ? ($validated['total_days'] ?? (
+                    Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
+                ))
+                : 0.5;
+            $isActiveRequest = in_array($validated['status'], ['applied', 'approved'], true);
+
+            if ($isActiveRequest) {
+                $leaveValidationService->validatePolicyEligibility(
+                    $employee,
+                    $leaveType,
+                    $policy,
+                    $startDate,
+                    (float) $totalDays,
+                    (int) $leave_request->id,
+                );
+            }
+
+            $requiresHandover = $isActiveRequest
+                && ($policy?->requiresHandoverForDuration((float) $totalDays) ?? false);
+            $requiresAttachment = $isActiveRequest
+                && ($policy?->requiresAttachmentForDuration((float) $totalDays) ?? false);
 
             // Check overlapping active/approved leave for the employee (excluding this leave request!)
             if (in_array($validated['status'], ['applied', 'approved'])) {
                 $overlapping = LeaveRequest::where('employee_id', $employee->id)
                     ->where('id', '!=', $leave_request->id)
                     ->whereIn('status', ['applied', 'approved'])
-                    ->where('start_date', '<=', $endDate)
-                    ->where('end_date', '>=', $startDate)
+                    ->whereDate('start_date', '<=', $endDate->toDateString())
+                    ->whereDate('end_date', '>=', $startDate->toDateString())
                     ->exists();
 
                 if ($overlapping) {
@@ -418,7 +457,7 @@ class LeaveRequestController extends Controller
 
             $handoverPersonId = $validated['handover_person_id'] ?? null;
 
-            if ($policy?->requires_handover && empty($handoverPersonId)) {
+            if ($requiresHandover && empty($handoverPersonId)) {
                 throw ValidationException::withMessages([
                     'handover_person_id' => ['A handover person is required by this leave policy.'],
                 ]);
@@ -434,8 +473,8 @@ class LeaveRequestController extends Controller
                 $handoverOnLeave = LeaveRequest::where('employee_id', $handoverPersonId)
                     ->where('id', '!=', $leave_request->id)
                     ->whereIn('status', ['applied', 'approved'])
-                    ->where('start_date', '<=', $endDate)
-                    ->where('end_date', '>=', $startDate)
+                    ->whereDate('start_date', '<=', $endDate->toDateString())
+                    ->whereDate('end_date', '>=', $startDate->toDateString())
                     ->exists();
 
                 if ($handoverOnLeave) {
@@ -444,7 +483,7 @@ class LeaveRequestController extends Controller
                     ]);
                 }
 
-                if ($policy?->requires_handover && empty($validated['handover_description'])) {
+                if ($requiresHandover && empty($validated['handover_description'])) {
                     throw ValidationException::withMessages([
                         'handover_description' => ['Handover description is required.'],
                     ]);
@@ -452,7 +491,7 @@ class LeaveRequestController extends Controller
             }
 
             if (
-                $policy?->requires_attachment
+                $requiresAttachment
                 && ! $request->hasFile('certificate')
                 && ! $leave_request->files()->exists()
             ) {
@@ -460,12 +499,6 @@ class LeaveRequestController extends Controller
                     'certificate' => ['A supporting document is required by this leave policy.'],
                 ]);
             }
-
-            $totalDays = $requestType === 'full_day'
-                ? ($validated['total_days'] ?? (
-                    Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-                ))
-                : 0.5;
 
             $oldState = [
                 'status' => $leave_request->status,

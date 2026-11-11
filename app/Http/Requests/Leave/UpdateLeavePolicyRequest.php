@@ -19,9 +19,6 @@ class UpdateLeavePolicyRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         foreach ([
-            'full_pay_days',
-            'half_pay_days',
-            'no_pay_days',
             'annual_limit',
             'carry_forward_weeks',
             'requires_document_after_days',
@@ -47,6 +44,15 @@ class UpdateLeavePolicyRequest extends FormRequest
                 }
             }
         }
+
+        $tiers = $this->input('tiers');
+        if (is_string($tiers)) {
+            $decodedTiers = json_decode($tiers, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedTiers)) {
+                $this->merge(['tiers' => $decodedTiers]);
+            }
+        }
     }
 
     /**
@@ -63,19 +69,18 @@ class UpdateLeavePolicyRequest extends FormRequest
                 'required',
                 'integer',
                 Rule::exists(LeaveType::class, 'id'),
-                Rule::unique(LeavePolicy::class, 'leave_type_id')->ignore($policyId),
+                Rule::unique(LeavePolicy::class, 'leave_type_id')
+                    ->where(fn ($query) => $query->where('organisation_id', $this->input('organisation_id')))
+                    ->ignore($policyId)
+                    ->withoutTrashed(),
             ],
             'organisation_id' => ['required', 'integer', Rule::exists(Organisation::class, 'id')],
             'annual_limit' => ['nullable', 'integer', 'min:0'],
             'allow_once' => ['nullable', 'boolean'],
             'allow_balance' => ['nullable', 'boolean'],
-            'full_pay_days' => ['nullable', 'integer', 'min:0'],
-            'half_pay_days' => ['nullable', 'integer', 'min:0'],
-            'no_pay_days' => ['nullable', 'integer', 'min:0'],
             'requires_document_after_days' => ['nullable', 'integer', 'min:0'],
             'requires_weekend_document' => ['nullable', 'boolean'],
             'requires_handover' => ['nullable', 'boolean'],
-            'carry_forward' => ['nullable', 'boolean'],
             'carry_forward_weeks' => ['nullable', 'integer', 'min:1'],
             'encashment' => ['nullable', 'boolean'],
             'remarks' => ['nullable', 'string'],
@@ -83,6 +88,11 @@ class UpdateLeavePolicyRequest extends FormRequest
             'probation_applicable' => ['nullable', 'boolean'],
             'minimum_service_months' => ['nullable', 'integer', 'min:0'],
             'exclude_rules' => ['nullable', 'array'],
+            'tiers' => ['sometimes', 'array'],
+            'tiers.*' => ['required', 'array:from_day,to_day,pay_percentage'],
+            'tiers.*.from_day' => ['required', 'integer', 'min:1'],
+            'tiers.*.to_day' => ['required', 'integer', 'min:1', 'gte:tiers.*.from_day'],
+            'tiers.*.pay_percentage' => ['required', 'numeric', 'between:0,100'],
         ];
     }
 
@@ -104,19 +114,15 @@ class UpdateLeavePolicyRequest extends FormRequest
     {
         $validated = $this->validated();
 
-        return [
+        $payload = [
             'leave_type_id' => $validated['leave_type_id'],
             'organisation_id' => $validated['organisation_id'],
             'annual_limit' => $validated['annual_limit'] ?? null,
             'allow_once' => (bool) ($validated['allow_once'] ?? false),
             'allow_balance' => (bool) ($validated['allow_balance'] ?? true),
-            'full_pay_days' => $validated['full_pay_days'] ?? null,
-            'half_pay_days' => $validated['half_pay_days'] ?? null,
-            'no_pay_days' => $validated['no_pay_days'] ?? null,
             'requires_document_after_days' => $validated['requires_document_after_days'] ?? null,
             'requires_weekend_document' => (bool) ($validated['requires_weekend_document'] ?? false),
             'requires_handover' => (bool) ($validated['requires_handover'] ?? false),
-            'carry_forward' => (bool) ($validated['carry_forward'] ?? false),
             'carry_forward_weeks' => $validated['carry_forward_weeks'] ?? null,
             'encashment' => (bool) ($validated['encashment'] ?? false),
             'remarks' => $validated['remarks'] ?? null,
@@ -125,5 +131,11 @@ class UpdateLeavePolicyRequest extends FormRequest
             'minimum_service_months' => $validated['minimum_service_months'] ?? null,
             'exclude_rules' => $validated['exclude_rules'] ?? null,
         ];
+
+        if (array_key_exists('tiers', $validated)) {
+            $payload['tiers'] = array_values($validated['tiers']);
+        }
+
+        return $payload;
     }
 }

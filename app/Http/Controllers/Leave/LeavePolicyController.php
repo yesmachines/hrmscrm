@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\StoreLeavePolicyRequest;
 use App\Http\Requests\Leave\UpdateLeavePolicyRequest;
 use App\Models\LeavePolicy;
+use App\Models\LeavePolicyTier;
 use App\Models\LeaveType;
 use App\Models\Organisation;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,6 +22,7 @@ class LeavePolicyController extends Controller
             ->with([
                 'leaveType:id,leave_name,code',
                 'organisation:id,org_name',
+                'tiers',
             ])
             ->orderByDesc('id')
             ->paginate(10)
@@ -41,7 +44,14 @@ class LeavePolicyController extends Controller
 
     public function store(StoreLeavePolicyRequest $request): RedirectResponse
     {
-        $policy = LeavePolicy::query()->create($request->payload());
+        $payload = $request->payload();
+        $tiers = $payload['tiers'] ?? [];
+        unset($payload['tiers']);
+
+        DB::transaction(function () use ($payload, $tiers): void {
+            $policy = LeavePolicy::query()->create($payload);
+            $policy->tiers()->createMany($tiers);
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -56,6 +66,7 @@ class LeavePolicyController extends Controller
         $leave_policy->load([
             'leaveType:id,leave_name,code',
             'organisation:id,org_name',
+            'tiers',
         ]);
 
         return Inertia::render('leave-policies/show', [
@@ -68,11 +79,12 @@ class LeavePolicyController extends Controller
         $leave_policy->load([
             'leaveType:id,leave_name,code',
             'organisation:id,org_name',
+            'tiers',
         ]);
 
         return Inertia::render('leave-policies/edit', [
             'leavePolicy' => $this->payload($leave_policy),
-            'leaveTypes' => $this->leaveTypes($leave_policy->leave_type_id),
+            'leaveTypes' => $this->leaveTypes(),
             'organisations' => $this->organisations(),
         ]);
     }
@@ -81,7 +93,18 @@ class LeavePolicyController extends Controller
         UpdateLeavePolicyRequest $request,
         LeavePolicy $leave_policy,
     ): RedirectResponse {
-        $leave_policy->update($request->payload());
+        $payload = $request->payload();
+        $tiers = $payload['tiers'] ?? null;
+        unset($payload['tiers']);
+
+        DB::transaction(function () use ($leave_policy, $payload, $tiers): void {
+            $leave_policy->update($payload);
+
+            if ($tiers !== null) {
+                $leave_policy->tiers()->delete();
+                $leave_policy->tiers()->createMany($tiers);
+            }
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -106,22 +129,17 @@ class LeavePolicyController extends Controller
     /**
      * @return list<array{id: int, name: string, disabled: bool}>
      */
-    private function leaveTypes(?int $currentLeaveTypeId = null): array
+    private function leaveTypes(): array
     {
         return LeaveType::query()
-            ->withExists('policy')
             ->where('status', 1)
             ->orderBy('leave_name')
             ->get(['id', 'leave_name', 'code'])
-            ->map(function (LeaveType $leaveType) use ($currentLeaveTypeId): array {
-                $hasOtherPolicy = (bool) $leaveType->policy_exists && ($currentLeaveTypeId === null || $leaveType->id !== $currentLeaveTypeId);
-
-                return [
-                    'id' => $leaveType->id,
-                    'name' => $leaveType->leave_name.' ('.$leaveType->code.')'.($hasOtherPolicy ? ' — (Already configured)' : ''),
-                    'disabled' => $hasOtherPolicy,
-                ];
-            })
+            ->map(fn (LeaveType $leaveType): array => [
+                'id' => $leaveType->id,
+                'name' => $leaveType->leave_name.' ('.$leaveType->code.')',
+                'disabled' => false,
+            ])
             ->all();
     }
 
@@ -155,13 +173,9 @@ class LeavePolicyController extends Controller
             'annual_limit' => $policy->annual_limit,
             'allow_once' => (int) $policy->allow_once,
             'allow_balance' => (int) $policy->allow_balance,
-            'full_pay_days' => $policy->full_pay_days,
-            'half_pay_days' => $policy->half_pay_days,
-            'no_pay_days' => $policy->no_pay_days,
             'requires_document_after_days' => $policy->requires_document_after_days,
             'requires_weekend_document' => (int) $policy->requires_weekend_document,
             'requires_handover' => (int) $policy->requires_handover,
-            'carry_forward' => (int) $policy->carry_forward,
             'carry_forward_weeks' => $policy->carry_forward_weeks,
             'encashment' => (int) $policy->encashment,
             'remarks' => $policy->remarks,
@@ -169,6 +183,16 @@ class LeavePolicyController extends Controller
             'probation_applicable' => (int) $policy->probation_applicable,
             'minimum_service_months' => $policy->minimum_service_months,
             'exclude_rules' => $policy->exclude_rules,
+            'tiers' => $policy->tiers
+                ->sortBy('from_day')
+                ->values()
+                ->map(fn (LeavePolicyTier $tier): array => [
+                    'id' => $tier->id,
+                    'from_day' => $tier->from_day,
+                    'to_day' => $tier->to_day,
+                    'pay_percentage' => $tier->pay_percentage,
+                ])
+                ->all(),
             'leave_type' => $policy->leaveType
                 ? [
                     'id' => $policy->leaveType->id,

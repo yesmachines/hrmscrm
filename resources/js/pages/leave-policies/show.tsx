@@ -10,18 +10,21 @@ type LeavePolicy = {
     id: number;
     leave_type_id: number;
     organisation_id: number;
-    full_pay_days: number | null;
-    half_pay_days: number | null;
-    no_pay_days: number | null;
     requires_document_after_days: number | null;
     requires_weekend_document: number;
     requires_handover: number;
-    carry_forward: number;
+    carry_forward_weeks: number | null;
     encashment: number;
     remarks: string | null;
     requires_attachment: number;
     probation_applicable: number;
     minimum_service_months: number | null;
+    tiers: {
+        id: number;
+        from_day: number;
+        to_day: number;
+        pay_percentage: string;
+    }[];
     leave_type: { id: number; name: string; code: string } | null;
     organisation: { id: number; name: string } | null;
 };
@@ -134,18 +137,6 @@ export default function LeavePoliciesShow({
                         value={leavePolicy.organisation?.name}
                     />
                     <Detail
-                        label="Full pay days"
-                        value={leavePolicy.full_pay_days}
-                    />
-                    <Detail
-                        label="Half pay days"
-                        value={leavePolicy.half_pay_days}
-                    />
-                    <Detail
-                        label="No pay days"
-                        value={leavePolicy.no_pay_days}
-                    />
-                    <Detail
                         label="Requires document after days"
                         value={leavePolicy.requires_document_after_days}
                     />
@@ -162,8 +153,8 @@ export default function LeavePoliciesShow({
                         value={yesNo(leavePolicy.requires_handover)}
                     />
                     <Detail
-                        label="Carry forward"
-                        value={yesNo(leavePolicy.carry_forward)}
+                        label="Carry-forward weeks"
+                        value={leavePolicy.carry_forward_weeks}
                     />
                     <Detail
                         label="Encashment"
@@ -179,6 +170,53 @@ export default function LeavePoliciesShow({
                     />
                     <Detail label="Remarks" value={leavePolicy.remarks} />
                 </Section>
+
+                <section className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold tracking-tight">
+                        Pay tiers
+                    </h3>
+                    {leavePolicy.tiers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            No pay tiers configured.
+                        </p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="border-b border-border bg-muted/40 text-muted-foreground">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">
+                                            From day
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            To day
+                                        </th>
+                                        <th className="px-4 py-3 font-medium">
+                                            Pay percentage
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {leavePolicy.tiers.map((tier) => (
+                                        <tr
+                                            key={tier.id}
+                                            className="border-b border-border last:border-0"
+                                        >
+                                            <td className="px-4 py-3">
+                                                {tier.from_day}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {tier.to_day}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {tier.pay_percentage}%
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </section>
             </div>
         </>
     );

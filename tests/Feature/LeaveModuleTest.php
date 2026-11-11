@@ -15,6 +15,10 @@ test('leave schema includes workbook policy and balance fields', function () {
         'carry_forward_weeks',
         'exclude_rules',
     ]))->toBeTrue()
+        ->and(Schema::hasColumn('leave_policies', 'full_pay_days'))->toBeFalse()
+        ->and(Schema::hasColumn('leave_policies', 'half_pay_days'))->toBeFalse()
+        ->and(Schema::hasColumn('leave_policies', 'no_pay_days'))->toBeFalse()
+        ->and(Schema::hasColumn('leave_policies', 'carry_forward'))->toBeFalse()
         ->and(Schema::hasColumn('leave_types', 'annual_limit'))->toBeFalse()
         ->and(Schema::hasColumn('leave_types', 'allow_once'))->toBeFalse()
         ->and(Schema::hasColumn('leave_types', 'allow_balance'))->toBeFalse()
@@ -22,9 +26,18 @@ test('leave schema includes workbook policy and balance fields', function () {
         ->and(Schema::hasColumn('leave_types', 'requires_attachment'))->toBeFalse()
         ->and(Schema::hasColumn('leave_types', 'requires_handover'))->toBeFalse()
         ->and(Schema::hasColumn('leave_requests', 'request_type'))->toBeTrue()
+        ->and(Schema::getColumnType('leave_requests', 'start_date'))->toBe('date')
+        ->and(Schema::getColumnType('leave_requests', 'end_date'))->toBe('date')
+        ->and(Schema::getColumnType('leave_requests', 'total_days'))->toBe('decimal')
+        ->and(Schema::getColumnType('leave_balances', 'allocated'))->toBe('decimal')
         ->and(Schema::hasColumn('leave_balances', 'leave_validity'))->toBeTrue()
         ->and(Schema::hasTable('employee_wfh_schedules'))->toBeTrue()
-        ->and(Schema::hasTable('leave_policy_tiers'))->toBeTrue()
+        ->and(Schema::hasColumns('leave_policy_tiers', [
+            'leave_policy_id',
+            'from_day',
+            'to_day',
+            'pay_percentage',
+        ]))->toBeTrue()
         ->and(Schema::hasTable('leave_balance_transactions'))->toBeTrue();
 });
 
@@ -73,13 +86,9 @@ test('authenticated users can manage leave types and leave policies', function (
             'annual_limit' => 24,
             'allow_once' => 1,
             'allow_balance' => 0,
-            'full_pay_days' => 15,
-            'half_pay_days' => 5,
-            'no_pay_days' => 1,
             'requires_document_after_days' => 3,
             'requires_weekend_document' => 0,
             'requires_handover' => 1,
-            'carry_forward' => 1,
             'carry_forward_weeks' => 8,
             'encashment' => 0,
             'remarks' => 'Standard annual leave policy',
@@ -94,16 +103,15 @@ test('authenticated users can manage leave types and leave policies', function (
         ->where('leave_type_id', $leaveType->id)
         ->where('organisation_id', $organisation->id)
         ->first();
-
     expect($policy)->not->toBeNull()
-        ->and($policy->carry_forward)->toBeTrue()
         ->and($policy->annual_limit)->toBe(24)
         ->and($policy->allow_once)->toBeTrue()
         ->and($policy->allow_balance)->toBeFalse()
         ->and($policy->requires_attachment)->toBeTrue()
         ->and($policy->requires_handover)->toBeTrue()
         ->and($policy->carry_forward_weeks)->toBe(8)
-        ->and($policy->exclude_rules)->toBe(['weekends' => true]);
+        ->and($policy->exclude_rules)->toBe(['weekends' => true])
+        ->and($policy->tiers()->count())->toBe(0);
 
     $this->actingAs($admin)
         ->withoutVite()
@@ -111,6 +119,7 @@ test('authenticated users can manage leave types and leave policies', function (
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('leave-policies/index')
+            ->where('leavePolicies.data.0.carry_forward_weeks', 8)
             ->where('leavePolicies.data.0.requires_attachment', 1)
             ->where('leavePolicies.data.0.requires_handover', 1)
         );
@@ -121,6 +130,7 @@ test('authenticated users can manage leave types and leave policies', function (
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('leave-policies/show')
+            ->where('leavePolicy.carry_forward_weeks', 8)
             ->where('leavePolicy.requires_attachment', 1)
             ->where('leavePolicy.requires_handover', 1)
         );
@@ -204,6 +214,9 @@ test('leave policy validates new policy settings and exclusion JSON', function (
             'requires_handover' => 'invalid',
             'carry_forward_weeks' => 0,
             'exclude_rules' => '{invalid json',
+            'tiers' => json_encode([
+                ['from_day' => 5, 'to_day' => 4, 'pay_percentage' => 101],
+            ]),
         ])
         ->assertRedirect(route('leave-policies.create'))
         ->assertSessionHasErrors([
@@ -214,7 +227,144 @@ test('leave policy validates new policy settings and exclusion JSON', function (
             'requires_handover',
             'carry_forward_weeks',
             'exclude_rules',
+            'tiers.0.to_day',
+            'tiers.0.pay_percentage',
         ]);
+});
+
+test('leave policy tiers are optional and support create, update and removal', function () {
+    $admin = createHrmsLoginUser('admin');
+    $organisation = Organisation::query()->create([
+        'org_name' => 'Tier Policy Org',
+        'short_name' => 'TIER-POLICY',
+        'status' => 1,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Tiered Leave',
+        'code' => 'TIERED',
+        'status' => 1,
+    ]);
+    $tiers = [
+        ['from_day' => 1, 'to_day' => 30, 'pay_percentage' => 100],
+        ['from_day' => 31, 'to_day' => 45, 'pay_percentage' => 50],
+    ];
+
+    $this->actingAs($admin)
+        ->post(route('leave-policies.store'), [
+            'leave_type_id' => $leaveType->id,
+            'organisation_id' => $organisation->id,
+            'tiers' => json_encode($tiers),
+        ])
+        ->assertRedirect(route('leave-policies.index'));
+
+    $policy = LeavePolicy::query()
+        ->where('leave_type_id', $leaveType->id)
+        ->where('organisation_id', $organisation->id)
+        ->firstOrFail();
+    $storedTiers = $policy->tiers()->orderBy('from_day')->get();
+
+    expect($storedTiers)->toHaveCount(2)
+        ->and($storedTiers[0]->from_day)->toBe(1)
+        ->and($storedTiers[0]->to_day)->toBe(30)
+        ->and((float) $storedTiers[0]->pay_percentage)->toBe(100.0)
+        ->and($storedTiers[1]->from_day)->toBe(31)
+        ->and($storedTiers[1]->to_day)->toBe(45)
+        ->and((float) $storedTiers[1]->pay_percentage)->toBe(50.0);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('leave-policies.edit', $policy))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-policies/edit')
+            ->where('leavePolicy.tiers.0.from_day', 1)
+            ->where('leavePolicy.tiers.1.from_day', 31)
+        );
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('leave-policies.show', $policy))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-policies/show')
+            ->where('leavePolicy.tiers.0.to_day', 30)
+            ->where('leavePolicy.tiers.1.pay_percentage', '50.00')
+        );
+
+    $updatedTiers = [
+        ['from_day' => 1, 'to_day' => 90, 'pay_percentage' => 75.5],
+    ];
+    $this->actingAs($admin)
+        ->put(route('leave-policies.update', $policy), [
+            'leave_type_id' => $leaveType->id,
+            'organisation_id' => $organisation->id,
+            'tiers' => json_encode($updatedTiers),
+        ])
+        ->assertRedirect(route('leave-policies.show', $policy));
+
+    $updatedTier = $policy->tiers()->firstOrFail();
+    expect($policy->tiers()->count())->toBe(1)
+        ->and($updatedTier->from_day)->toBe(1)
+        ->and($updatedTier->to_day)->toBe(90)
+        ->and((float) $updatedTier->pay_percentage)->toBe(75.5);
+
+    $this->actingAs($admin)
+        ->put(route('leave-policies.update', $policy), [
+            'leave_type_id' => $leaveType->id,
+            'organisation_id' => $organisation->id,
+        ])
+        ->assertRedirect(route('leave-policies.show', $policy));
+
+    expect($policy->tiers()->count())->toBe(1);
+
+    $this->actingAs($admin)
+        ->put(route('leave-policies.update', $policy), [
+            'leave_type_id' => $leaveType->id,
+            'organisation_id' => $organisation->id,
+            'tiers' => '[]',
+        ])
+        ->assertRedirect(route('leave-policies.show', $policy));
+
+    expect($policy->tiers()->count())->toBe(0);
+});
+
+test('leave policy allows one policy per leave type and organisation', function () {
+    $admin = createHrmsLoginUser('admin');
+    $firstOrganisation = Organisation::query()->create([
+        'org_name' => 'First Policy Org',
+        'short_name' => 'FIRST-POLICY',
+        'status' => 1,
+    ]);
+    $secondOrganisation = Organisation::query()->create([
+        'org_name' => 'Second Policy Org',
+        'short_name' => 'SECOND-POLICY',
+        'status' => 1,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Organisation Leave',
+        'code' => 'ORG-LEAVE',
+        'status' => 1,
+    ]);
+
+    foreach ([$firstOrganisation, $secondOrganisation] as $organisation) {
+        $this->actingAs($admin)
+            ->post(route('leave-policies.store'), [
+                'leave_type_id' => $leaveType->id,
+                'organisation_id' => $organisation->id,
+            ])
+            ->assertRedirect(route('leave-policies.index'));
+    }
+
+    $this->actingAs($admin)
+        ->from(route('leave-policies.create'))
+        ->post(route('leave-policies.store'), [
+            'leave_type_id' => $leaveType->id,
+            'organisation_id' => $firstOrganisation->id,
+        ])
+        ->assertRedirect(route('leave-policies.create'))
+        ->assertSessionHasErrors(['leave_type_id']);
+
+    expect(LeavePolicy::query()->where('leave_type_id', $leaveType->id)->count())->toBe(2);
 });
 
 test('leave type create and edit use configured gender and religion options', function () {
@@ -304,7 +454,7 @@ test('leave type gender and religion are validated against configured options an
         ->and($leaveType->fresh()->religion)->toBe('Hinduism');
 });
 
-test('leave policy create page marks leave types as disabled only if they already have a policy', function () {
+test('leave policy create page keeps leave types available across organisations', function () {
     $admin = createHrmsLoginUser('admin');
 
     $org = Organisation::query()->create([
@@ -336,7 +486,7 @@ test('leave policy create page marks leave types as disabled only if they alread
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('leave-policies/create')
-            ->where('leaveTypes', fn ($types) => collect($types)->firstWhere('id', $typeWithPolicy->id)['disabled'] === true
+            ->where('leaveTypes', fn ($types) => collect($types)->firstWhere('id', $typeWithPolicy->id)['disabled'] === false
                 && collect($types)->firstWhere('id', $typeWithoutPolicy->id)['disabled'] === false
             )
         );

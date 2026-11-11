@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
@@ -87,14 +86,26 @@ class LeaveType extends Model
         ];
     }
 
-    public function policy(): HasOne
-    {
-        return $this->hasOne(LeavePolicy::class);
-    }
-
     public function policies(): HasMany
     {
         return $this->hasMany(LeavePolicy::class);
+    }
+
+    public function policyForOrganisation(?int $organisationId): ?LeavePolicy
+    {
+        if ($organisationId === null) {
+            return null;
+        }
+
+        if ($this->relationLoaded('policies')) {
+            return $this->policies->first(
+                fn (LeavePolicy $policy): bool => (int) $policy->organisation_id === $organisationId,
+            );
+        }
+
+        return $this->policies()
+            ->where('organisation_id', $organisationId)
+            ->first();
     }
 
     public function requests(): HasMany

@@ -13,6 +13,7 @@ use App\Models\Organisation;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -77,6 +78,7 @@ test('leave submission stores half-day request type and duration', function () {
         'emp_num' => 'EMP-HALF-01',
         'designation' => 'Engineer',
         'division' => 'Technology',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -157,11 +159,12 @@ test('employee leave type without approval is auto-approved and deducts balance 
         'leave_type_id' => $leaveType->id,
         'start_date' => '2026-12-10',
         'end_date' => '2026-12-11',
-        'request_type' => 'full_day',
+        'request_type' => 'fullday',
         'total_days' => 2,
     ]);
 
     $response->assertCreated()
+        ->assertJsonPath('data.request_type', 'fullday')
         ->assertJsonPath('data.status', 'approved');
 
     $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
@@ -190,6 +193,7 @@ test('employee can update their own applied leave request without changing its l
     $employee = Employee::query()->create([
         'user_id' => $user->id,
         'emp_num' => 'EMP-UPDATE-01',
+        'organisation_id' => 1,
         'designation' => 'Engineer',
         'division' => 'Technology',
         'status' => 1,
@@ -210,7 +214,7 @@ test('employee can update their own applied leave request without changing its l
         'leave_type_id' => $leaveType->id,
         'start_date' => '2026-12-01',
         'end_date' => '2026-12-01',
-        'request_type' => 'full_day',
+        'request_type' => 'fullday',
         'total_days' => 1,
         'remarks' => 'Original reason',
         'status' => 'applied',
@@ -306,6 +310,7 @@ test('leave request update is not capped by a removed max-days field', function 
     $employee = Employee::query()->create([
         'user_id' => $user->id,
         'emp_num' => 'EMP-LIMIT-UPDATE',
+        'organisation_id' => 1,
         'designation' => 'Engineer',
         'division' => 'Technology',
         'status' => 1,
@@ -354,6 +359,7 @@ test('leave application enforces annual and one-time limits from leave policy', 
         'emp_num' => 'EMP-POLICY-LIMITS',
         'designation' => 'Engineer',
         'division' => 'Technology',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -584,6 +590,7 @@ test('leave meta returns policy-owned document and handover requirements', funct
         'emp_num' => 'EMP-META-01',
         'designation' => 'Tester',
         'division' => 'Tech',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -601,14 +608,10 @@ test('leave meta returns policy-owned document and handover requirements', funct
     LeavePolicy::query()->create([
         'leave_type_id' => $leaveType->id,
         'organisation_id' => $org->id,
-        'full_pay_days' => 15,
-        'half_pay_days' => 30,
-        'no_pay_days' => 45,
         'requires_document_after_days' => 2,
         'requires_weekend_document' => true,
         'requires_attachment' => true,
         'requires_handover' => true,
-        'carry_forward' => false,
         'encashment' => false,
         'probation_applicable' => true,
         'minimum_service_months' => 0,
@@ -623,10 +626,251 @@ test('leave meta returns policy-owned document and handover requirements', funct
         ->assertJsonPath('data.leave_types.0.policy.requires_attachment', true)
         ->assertJsonPath('data.leave_types.0.policy.requires_handover', true)
         ->assertJsonPath('data.leave_types.0.policy.requires_document_after_days', 2)
-        ->assertJsonPath('data.leave_types.0.policy.full_pay_days', 15)
+        ->assertJsonMissingPath('data.leave_types.0.policy.full_pay_days')
+        ->assertJsonMissingPath('data.leave_types.0.policy.carry_forward')
         ->assertJsonMissingPath('data.leave_types.0.requires_attachment')
         ->assertJsonMissingPath('data.leave_types.0.requires_handover')
         ->assertJsonMissingPath('data.leave_types.0.max_days');
+});
+
+test('leave metadata and validation use only the employee organisation policy', function () {
+    $firstOrganisation = Organisation::query()->create([
+        'org_name' => 'First Leave Policy Org',
+        'short_name' => 'FIRST-LEAVE',
+        'status' => 1,
+    ]);
+    $secondOrganisation = Organisation::query()->create([
+        'org_name' => 'Second Leave Policy Org',
+        'short_name' => 'SECOND-LEAVE',
+        'status' => 1,
+    ]);
+    $unconfiguredOrganisation = Organisation::query()->create([
+        'org_name' => 'Unconfigured Leave Org',
+        'short_name' => 'NO-POLICY',
+        'status' => 1,
+    ]);
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Sick Leave',
+        'code' => 'SICK-ORG-SCOPE',
+        'is_paid' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $firstOrganisation->id,
+        'annual_limit' => 5,
+        'allow_once' => true,
+        'allow_balance' => false,
+        'requires_attachment' => true,
+        'requires_handover' => true,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $secondOrganisation->id,
+        'annual_limit' => 8,
+        'allow_once' => false,
+        'allow_balance' => false,
+        'requires_attachment' => false,
+        'requires_handover' => false,
+    ]);
+
+    $createEmployee = function (string $email, string $employeeNumber, int $organisationId): array {
+        $user = SalesCrmUser::query()->create([
+            'name' => 'Policy Scope User',
+            'email' => $email,
+            'password' => Hash::make('Password123!'),
+            'email_verified_at' => now(),
+        ]);
+        $employee = Employee::query()->create([
+            'user_id' => $user->id,
+            'emp_num' => $employeeNumber,
+            'organisation_id' => $organisationId,
+            'designation' => 'Developer',
+            'division' => 'Technology',
+            'status' => 1,
+            'has_report' => false,
+        ]);
+
+        return [$user, $employee];
+    };
+
+    [$firstUser, $firstEmployee] = $createEmployee(
+        'first-policy-scope@example.com',
+        'EMP-POLICY-ORG-1',
+        $firstOrganisation->id,
+    );
+    [$secondUser, $secondEmployee] = $createEmployee(
+        'second-policy-scope@example.com',
+        'EMP-POLICY-ORG-2',
+        $secondOrganisation->id,
+    );
+    [$unconfiguredUser, $unconfiguredEmployee] = $createEmployee(
+        'unconfigured-policy-scope@example.com',
+        'EMP-POLICY-ORG-3',
+        $unconfiguredOrganisation->id,
+    );
+
+    expect($firstOrganisation->id)->not->toBe($secondOrganisation->id)
+        ->and($firstEmployee->organisation_id)->toBe($firstOrganisation->id)
+        ->and($secondEmployee->organisation_id)->toBe($secondOrganisation->id);
+
+    $this->withToken($firstUser->createToken('test')->plainTextToken)
+        ->getJson('/api/v1/leaves/meta')
+        ->assertOk()
+        ->assertJsonPath('data.employee.id', $firstEmployee->id)
+        ->assertJsonPath('data.leave_types.0.annual_limit', 5)
+        ->assertJsonPath('data.leave_types.0.allow_once', true)
+        ->assertJsonPath('data.leave_types.0.policy.requires_attachment', true);
+
+    Auth::forgetGuards();
+
+    $this->withToken($secondUser->createToken('test')->plainTextToken)
+        ->getJson('/api/v1/leaves/meta')
+        ->assertOk()
+        ->assertJsonPath('data.employee.id', $secondEmployee->id)
+        ->assertJsonPath('data.leave_types.0.annual_limit', 8)
+        ->assertJsonPath('data.leave_types.0.allow_once', false)
+        ->assertJsonPath('data.leave_types.0.policy.requires_attachment', false);
+
+    Auth::forgetGuards();
+
+    $this->withToken($unconfiguredUser->createToken('test')->plainTextToken)
+        ->getJson('/api/v1/leaves/meta')
+        ->assertOk()
+        ->assertJsonPath('data.employee.id', $unconfiguredEmployee->id)
+        ->assertJsonPath('data.leave_types.0.id', $leaveType->id)
+        ->assertJsonPath('data.leave_types.0.annual_limit', null)
+        ->assertJsonPath('data.leave_types.0.allow_once', false)
+        ->assertJsonPath('data.leave_types.0.allow_balance', true)
+        ->assertJsonPath('data.leave_types.0.policy', null);
+
+    LeaveBalance::query()->create([
+        'employee_id' => $unconfiguredEmployee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => 2026,
+        'allocated' => 5,
+        'carried_forward' => 0,
+        'used' => 0,
+        'balance' => 5,
+        'pending' => 0,
+    ]);
+
+    $this->withToken($unconfiguredUser->createToken('test')->plainTextToken)
+        ->postJson('/api/v1/leaves', [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-07',
+            'end_date' => '2026-11-07',
+            'total_days' => 1,
+        ])
+        ->assertCreated();
+});
+
+test('handover requirement applies only when duration exceeds its configured threshold', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Threshold Handover User',
+        'email' => 'threshold.handover@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-HANDOVER-THRESHOLD',
+        'organisation_id' => 1,
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $handoverEmployee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => 'EMP-HANDOVER-COLLEAGUE',
+        'organisation_id' => 1,
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Threshold Handover Leave',
+        'code' => 'HANDOVER-THRESHOLD',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+        'requires_document_after_days' => 2,
+        'requires_handover' => true,
+        'probation_applicable' => true,
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-02',
+        'end_date' => '2026-11-03',
+        'total_days' => 2,
+    ])->assertCreated();
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-05',
+        'end_date' => '2026-11-07',
+        'total_days' => 3,
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['handover_person_id']);
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-05',
+        'end_date' => '2026-11-07',
+        'total_days' => 3,
+        'handover_person_id' => $handoverEmployee->id,
+        'handover_description' => 'Cover development work',
+    ])
+        ->assertCreated();
+});
+
+test('document threshold does not require an attachment when the attachment flag is false', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Optional Document User',
+        'email' => 'optional.document@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-OPTIONAL-DOCUMENT',
+        'organisation_id' => 1,
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Optional Document Leave',
+        'code' => 'OPTIONAL-DOCUMENT',
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+        'requires_document_after_days' => 2,
+        'requires_attachment' => false,
+        'probation_applicable' => true,
+    ]);
+
+    $this->withToken($user->createToken('test')->plainTextToken)
+        ->postJson('/api/v1/leaves', [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-02',
+            'end_date' => '2026-11-04',
+            'total_days' => 3,
+        ])
+        ->assertCreated();
 });
 
 test('leave application requires an attachment when its policy requires one', function () {
@@ -642,6 +886,7 @@ test('leave application requires an attachment when its policy requires one', fu
         'emp_num' => 'EMP-ATTACHMENT-POLICY',
         'designation' => 'Developer',
         'division' => 'Technology',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -684,13 +929,14 @@ test('apply leave fails when policy requires document after days and attachment 
         'emp_num' => 'EMP-DOC-01',
         'designation' => 'Dev',
         'division' => 'Tech',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
 
     $leaveType = LeaveType::query()->create([
-        'leave_name' => 'Sick Leave',
-        'code' => 'SICK',
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL-DOCUMENT-THRESHOLD',
         'is_paid' => true,
         'status' => 1,
     ]);
@@ -709,21 +955,25 @@ test('apply leave fails when policy requires document after days and attachment 
     LeavePolicy::query()->create([
         'leave_type_id' => $leaveType->id,
         'organisation_id' => $org->id,
-        'full_pay_days' => 15,
-        'half_pay_days' => 30,
-        'no_pay_days' => 45,
         'requires_document_after_days' => 2,
-        'requires_attachment' => false,
+        'requires_attachment' => true,
         'probation_applicable' => true,
     ]);
 
     $token = $user->createToken('test')->plainTextToken;
 
-    // 3 days (> 2 days threshold) without certificate
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-02',
+        'end_date' => '2026-11-03',
+        'total_days' => 2,
+    ])
+        ->assertCreated();
+
     $response = $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $leaveType->id,
-        'start_date' => '2026-11-02', // Monday
-        'end_date' => '2026-11-04',   // Wednesday (3 days)
+        'start_date' => '2026-11-05',
+        'end_date' => '2026-11-07',
         'total_days' => 3,
         'remarks' => 'Fever',
     ]);
@@ -743,6 +993,7 @@ test('apply leave is not capped by a max days field on the leave type', function
     $employee = Employee::query()->create([
         'user_id' => $user->id,
         'emp_num' => 'EMP-MAX-01',
+        'organisation_id' => 1,
         'designation' => 'Dev',
         'division' => 'Tech',
         'status' => 1,
@@ -823,7 +1074,7 @@ test('sick leave for single mid-week day does not require certificate', function
         ->assertJsonPath('message', 'Leave request submitted successfully.');
 });
 
-test('sick leave for 2 consecutive days requires certificate', function () {
+test('sick leave without a matching policy has no hard-coded certificate requirement', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Sick Consecutive User',
         'email' => 'sick.consec@example.com',
@@ -858,7 +1109,7 @@ test('sick leave for 2 consecutive days requires certificate', function () {
 
     $token = $user->createToken('test')->plainTextToken;
 
-    // 2 consecutive days: Tuesday to Wednesday (2026-11-03 to 2026-11-04) without certificate
+    // 2 consecutive days: Tuesday to Wednesday (2026-11-03 to 2026-11-04)
     $response = $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $sickType->id,
         'start_date' => '2026-11-03',
@@ -867,25 +1118,11 @@ test('sick leave for 2 consecutive days requires certificate', function () {
         'remarks' => 'High fever',
     ]);
 
-    $response->assertStatus(422)
-        ->assertJsonValidationErrors(['certificate']);
-
-    // Now submit WITH certificate
-    $file = UploadedFile::fake()->create('medical_cert.pdf', 200, 'application/pdf');
-    $responseWithFile = $this->withToken($token)->postJson('/api/v1/leaves', [
-        'leave_type_id' => $sickType->id,
-        'start_date' => '2026-11-03',
-        'end_date' => '2026-11-04',
-        'total_days' => 2,
-        'remarks' => 'High fever',
-        'certificate' => $file,
-    ]);
-
-    $responseWithFile->assertCreated()
+    $response->assertCreated()
         ->assertJsonPath('statusCode', 201);
 });
 
-test('sick leave combined with weekend requires certificate', function () {
+test('sick leave near a weekend has no hard-coded certificate requirement', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Sick Weekend User',
         'email' => 'sick.wknd@example.com',
@@ -920,7 +1157,7 @@ test('sick leave combined with weekend requires certificate', function () {
 
     $token = $user->createToken('test')->plainTextToken;
 
-    // 1 day on Friday (2026-11-06 is Friday) without certificate -> should fail
+    // 1 day on Friday (2026-11-06 is Friday)
     $responseFriday = $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $sickType->id,
         'start_date' => '2026-11-06',
@@ -929,10 +1166,10 @@ test('sick leave combined with weekend requires certificate', function () {
         'remarks' => 'Migraine',
     ]);
 
-    $responseFriday->assertStatus(422)
-        ->assertJsonValidationErrors(['certificate']);
+    $responseFriday->assertCreated()
+        ->assertJsonPath('statusCode', 201);
 
-    // 1 day on Monday (2026-11-09 is Monday) without certificate -> should fail
+    // 1 day on Monday (2026-11-09 is Monday)
     $responseMonday = $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $sickType->id,
         'start_date' => '2026-11-09',
@@ -941,8 +1178,8 @@ test('sick leave combined with weekend requires certificate', function () {
         'remarks' => 'Stomach flu',
     ]);
 
-    $responseMonday->assertStatus(422)
-        ->assertJsonValidationErrors(['certificate']);
+    $responseMonday->assertCreated()
+        ->assertJsonPath('statusCode', 201);
 });
 
 test('it stores signature image into leave_request_details and exposes signature_url', function () {
@@ -1156,6 +1393,7 @@ test('applying maternity leave succeeds for female employee', function () {
     $femaleEmployee = Employee::query()->create([
         'user_id' => $femaleUser->id,
         'emp_num' => 'EMP-FEMALE-02',
+        'organisation_id' => 1,
         'designation' => 'Developer',
         'division' => 'Tech',
         'status' => 1,
@@ -1211,6 +1449,7 @@ test('applying leave fails if selected handover person is also on leave during r
         'emp_num' => 'EMP-APP-01',
         'designation' => 'Developer',
         'division' => 'Tech',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -1287,6 +1526,7 @@ test('applying leave succeeds when selected handover person is not on leave', fu
         'emp_num' => 'EMP-APP-02',
         'designation' => 'Developer',
         'division' => 'Tech',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -1443,6 +1683,7 @@ test('applying pilgrimage leave fails for non-muslim employee with validation er
         'emp_num' => 'EMP-NONM-02',
         'designation' => 'Developer',
         'division' => 'Tech',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -1494,6 +1735,7 @@ test('applying pilgrimage leave succeeds for muslim employee', function () {
         'emp_num' => 'EMP-MUS-02',
         'designation' => 'Developer',
         'division' => 'Tech',
+        'organisation_id' => 1,
         'status' => 1,
         'has_report' => false,
     ]);

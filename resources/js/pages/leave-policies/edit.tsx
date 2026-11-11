@@ -12,6 +12,13 @@ type Option = {
     disabled?: boolean;
 };
 
+type PolicyTier = {
+    id: number;
+    from_day: number;
+    to_day: number;
+    pay_percentage: string;
+};
+
 type LeavePolicy = {
     id: number;
     leave_type_id: number;
@@ -19,13 +26,9 @@ type LeavePolicy = {
     annual_limit: number | null;
     allow_once: number;
     allow_balance: number;
-    full_pay_days: number | null;
-    half_pay_days: number | null;
-    no_pay_days: number | null;
     requires_document_after_days: number | null;
     requires_weekend_document: number;
     requires_handover: number;
-    carry_forward: number;
     carry_forward_weeks: number | null;
     encashment: number;
     remarks: string | null;
@@ -33,6 +36,7 @@ type LeavePolicy = {
     probation_applicable: number;
     minimum_service_months: number | null;
     exclude_rules: unknown[] | Record<string, unknown> | null;
+    tiers: PolicyTier[];
     leave_type: { id: number; name: string; code: string } | null;
     organisation: { id: number; name: string } | null;
 };

@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
+import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -52,13 +53,19 @@ interface LeaveTypeOption {
     code: string;
     is_paid: boolean;
     requires_approval: boolean;
-    policy?: {
-        requires_attachment: boolean;
-        requires_handover: boolean;
-    } | null;
+    policy?: LeavePolicyOption | null;
+    policies?: LeavePolicyOption[];
     status?: number;
     gender?: string | null;
     religion?: string | null;
+}
+
+interface LeavePolicyOption {
+    organisation_id: number;
+    annual_limit: number | null;
+    requires_document_after_days: number | null;
+    requires_attachment: boolean;
+    requires_handover: boolean;
 }
 
 interface LeaveBalanceItem {
@@ -113,7 +120,7 @@ export default function LeaveRequestsCreate({
     const { data, setData, post, processing, errors, clearErrors } = useForm({
         employee_id: '',
         leave_type_id: '',
-        request_type: 'full_day',
+        request_type: 'fullday',
         start_date: '',
         end_date: '',
         total_days: '',
@@ -147,7 +154,7 @@ export default function LeaveRequestsCreate({
             if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                setData('total_days', data.request_type === 'full_day' ? String(diffDays) : '0.5');
+                setData('total_days', data.request_type === 'fullday' ? String(diffDays) : '0.5');
             }
         }
     }, [data.start_date, data.end_date, data.request_type, setData]);
@@ -198,6 +205,19 @@ export default function LeaveRequestsCreate({
         if (!data.leave_type_id) return null;
         return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? null;
     }, [data.leave_type_id, availableLeaveTypes]);
+
+    const selectedPolicy = useMemo(() => {
+        if (!selectedLeaveType) return null;
+
+        return selectedLeaveType.policies?.find(
+            (policy) => Number(policy.organisation_id) === Number(selectedEmployee?.organisation_id),
+        ) ?? selectedLeaveType.policy ?? null;
+    }, [selectedEmployee, selectedLeaveType]);
+
+    const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
+        selectedPolicy,
+        Number(data.total_days || 0),
+    );
 
     useEffect(() => {
         if (selectedLeaveType) {
@@ -406,13 +426,23 @@ export default function LeaveRequestsCreate({
                                     required
                                 >
                                     <option value="">-- Choose Leave Type --</option>
-                                    {availableLeaveTypes.map((type) => (
-                                        <option key={type.id} value={type.id}>
-                                            {type.leave_name} ({type.code}) - {type.is_paid ? 'Paid' : 'Unpaid'}
-                                            {type.status === 0 ? ' [Inactive]' : ''}
-                                            {type.policy?.requires_attachment ? ' [Attachment Required]' : ''}
-                                        </option>
-                                    ))}
+                                    {availableLeaveTypes.map((type) => {
+                                        const policy = type.policies?.find(
+                                            (item) => Number(item.organisation_id) === Number(selectedEmployee?.organisation_id),
+                                        ) ?? null;
+                                        const { requiresAttachment: attachmentRequired } = getLeavePolicyRequirements(
+                                            policy,
+                                            Number(data.total_days || 0),
+                                        );
+
+                                        return (
+                                            <option key={type.id} value={type.id}>
+                                                {type.leave_name} ({type.code}) - {type.is_paid ? 'Paid' : 'Unpaid'}
+                                                {type.status === 0 ? ' [Inactive]' : ''}
+                                                {attachmentRequired ? ' [Attachment Required]' : ''}
+                                            </option>
+                                        );
+                                    })}
                                 </select>
                                 {errors.leave_type_id && (
                                     <p className="text-sm text-destructive">{errors.leave_type_id}</p>
@@ -428,11 +458,11 @@ export default function LeaveRequestsCreate({
                                     className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                                     required
                                 >
-                                    <option value="full_day">Full day</option>
+                                    <option value="fullday">Full day</option>
                                     <option value="firsthalf">First half</option>
                                     <option value="secondhalf">Second half</option>
                                 </select>
-                                {data.request_type !== 'full_day' && (
+                                {data.request_type !== 'fullday' && (
                                     <p className="text-xs text-muted-foreground">
                                         Half-day leave must cover one date only.
                                     </p>
@@ -466,7 +496,7 @@ export default function LeaveRequestsCreate({
                                     <FormattedDatePicker
                                         id={endDateId}
                                         min={data.start_date}
-                                        max={data.request_type === 'full_day' ? undefined : data.start_date}
+                                        max={data.request_type === 'fullday' ? undefined : data.start_date}
                                         value={data.end_date}
                                         onChange={(value) => setData('end_date', value)}
                                         required
@@ -485,7 +515,7 @@ export default function LeaveRequestsCreate({
                                         min="0.5"
                                         placeholder="e.g. 1 or 0.5"
                                         value={data.total_days}
-                                        disabled={data.request_type !== 'full_day'}
+                                        disabled={data.request_type !== 'fullday'}
                                         onChange={(e) => setData('total_days', e.target.value)}
                                     />
                                     {errors.total_days && (
@@ -548,19 +578,19 @@ export default function LeaveRequestsCreate({
                             </div>
 
                             {/* Work Handover Section */}
-                            {(Boolean(selectedLeaveType?.policy?.requires_handover) || Boolean(data.handover_person_id)) && (
+                            {(requiresHandover || Boolean(data.handover_person_id)) && (
                                 <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-5">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <UserCheck className="size-5 text-primary" />
                                             <h4 className="text-sm font-semibold text-foreground">
                                                 Work Handover Details
-                                                {selectedLeaveType?.policy?.requires_handover && (
+                                                {requiresHandover && (
                                                     <span className="ml-1 text-destructive">*</span>
                                                 )}
                                             </h4>
                                         </div>
-                                        {selectedLeaveType?.policy?.requires_handover && (
+                                        {requiresHandover && (
                                             <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
                                                 Required by policy
                                             </span>
@@ -571,7 +601,7 @@ export default function LeaveRequestsCreate({
                                     <div className="space-y-2">
                                         <Label htmlFor={handoverPersonSelectId} className="flex items-center gap-1">
                                             Handover Colleague
-                                            {selectedLeaveType?.policy?.requires_handover && (
+                                            {requiresHandover && (
                                                 <span className="text-destructive">*</span>
                                             )}
                                         </Label>
@@ -580,7 +610,7 @@ export default function LeaveRequestsCreate({
                                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                             value={data.handover_person_id}
                                             onChange={(e) => setData('handover_person_id', e.target.value)}
-                                            required={Boolean(selectedLeaveType?.policy?.requires_handover)}
+                                            required={requiresHandover}
                                         >
                                             <option value="">Select colleague to handover work to...</option>
                                             {candidateHandoverEmployees.map((emp) => {
@@ -611,7 +641,7 @@ export default function LeaveRequestsCreate({
                                     <div className="space-y-2">
                                         <Label htmlFor={handoverDescId} className="flex items-center gap-1">
                                             Handover Tasks & Responsibilities
-                                            {selectedLeaveType?.policy?.requires_handover && (
+                                            {requiresHandover && (
                                                 <span className="text-destructive">*</span>
                                             )}
                                         </Label>
@@ -621,7 +651,7 @@ export default function LeaveRequestsCreate({
                                             placeholder="Detail active tasks, pending approvals, and primary contact coverage during your leave..."
                                             value={data.handover_description}
                                             onChange={(e) => setData('handover_description', e.target.value)}
-                                            required={Boolean(selectedLeaveType?.policy?.requires_handover)}
+                                            required={requiresHandover}
                                         />
                                         {errors.handover_description && (
                                             <p className="text-sm text-destructive">{errors.handover_description}</p>
@@ -635,7 +665,7 @@ export default function LeaveRequestsCreate({
                                 <Label htmlFor={certificateId} className="flex items-center gap-1.5">
                                     <FileUp className="size-4 text-muted-foreground" />
                                     Attachment / Certificate
-                                    {selectedLeaveType?.policy?.requires_attachment && (
+                                    {requiresAttachment && (
                                         <span className="text-destructive">*</span>
                                     )}
                                 </Label>
@@ -643,7 +673,7 @@ export default function LeaveRequestsCreate({
                                     id={certificateId}
                                     type="file"
                                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                    required={Boolean(selectedLeaveType?.policy?.requires_attachment)}
+                                    required={requiresAttachment}
                                     onChange={(e) => {
                                         const file = e.target.files?.[0] || null;
                                         setData('certificate', file);
@@ -766,7 +796,13 @@ export default function LeaveRequestsCreate({
                                             {selectedLeaveType.is_paid ? 'Paid Leave' : 'Unpaid Leave'}
                                         </span>
                                     </div>
-                                    {selectedLeaveType.policy?.requires_attachment && (
+                                    {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined && (
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground">Policy annual limit:</span>
+                                            <span className="font-medium text-foreground">{selectedPolicy.annual_limit} days</span>
+                                        </div>
+                                    )}
+                                    {requiresAttachment && (
                                         <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 p-2 rounded mt-2">
                                             <ShieldAlert className="size-3.5 shrink-0" />
                                             <span>Policy requires an attachment/certificate for this leave type.</span>

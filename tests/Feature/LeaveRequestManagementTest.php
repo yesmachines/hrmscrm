@@ -141,6 +141,249 @@ test('hr automatically approves leave types that do not require approval without
         ->and((float) $balance->pending)->toBe(0.0);
 });
 
+test('hr leave requests enforce one-time, annual, and minimum-service policy rules', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    $salesUser = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $salesUser->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'organisation_id' => $organisation->id,
+        'joining_date' => '2026-08-01',
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+
+    $onceLeaveType = LeaveType::query()->create([
+        'leave_name' => 'One Time Leave',
+        'code' => 'HR-ONCE',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $onceLeaveType->id,
+        'organisation_id' => $organisation->id,
+        'allow_once' => true,
+        'allow_balance' => false,
+        'probation_applicable' => true,
+    ]);
+    foreach (['cancelled', 'rejected'] as $status) {
+        LeaveRequest::query()->create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $onceLeaveType->id,
+            'start_date' => '2025-01-01',
+            'end_date' => '2025-01-01',
+            'request_type' => 'fullday',
+            'total_days' => 1,
+            'status' => $status,
+        ]);
+    }
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $onceLeaveType->id,
+            'start_date' => '2026-10-10',
+            'end_date' => '2026-10-10',
+            'total_days' => 1,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $onceLeaveType->id,
+            'start_date' => '2026-10-20',
+            'end_date' => '2026-10-20',
+            'total_days' => 1,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['leave_type_id']);
+
+    $annualLeaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Limit Leave',
+        'code' => 'HR-ANNUAL-LIMIT',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $annualLeaveType->id,
+        'organisation_id' => $organisation->id,
+        'annual_limit' => 1,
+        'allow_balance' => false,
+        'probation_applicable' => true,
+    ]);
+    LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $annualLeaveType->id,
+        'start_date' => '2026-01-02',
+        'end_date' => '2026-01-02',
+        'request_type' => 'fullday',
+        'total_days' => 1,
+        'status' => 'applied',
+    ]);
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $annualLeaveType->id,
+            'start_date' => '2026-12-02',
+            'end_date' => '2026-12-02',
+            'total_days' => 1,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['total_days']);
+
+    $serviceLeaveType = LeaveType::query()->create([
+        'leave_name' => 'Service Leave',
+        'code' => 'HR-SERVICE',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $serviceLeaveType->id,
+        'organisation_id' => $organisation->id,
+        'minimum_service_months' => 6,
+        'allow_balance' => false,
+        'probation_applicable' => true,
+    ]);
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $serviceLeaveType->id,
+            'start_date' => '2026-09-15',
+            'end_date' => '2026-09-15',
+            'total_days' => 1,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['leave_type_id']);
+});
+
+test('hr leave request documents and handover follow the policy duration threshold', function () {
+    Storage::fake('public');
+    $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'organisation_id' => $organisation->id,
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $handoverEmployee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'organisation_id' => $organisation->id,
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Threshold Leave',
+        'code' => 'HR-THRESHOLD',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'annual_limit' => 12,
+        'allow_balance' => false,
+        'requires_document_after_days' => 2,
+        'requires_attachment' => true,
+        'requires_handover' => true,
+        'probation_applicable' => true,
+    ]);
+
+    $this->actingAs($hrUser)
+        ->withoutVite()
+        ->get(route('leave-requests.create'))
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-requests/create')
+            ->where('employees', fn ($employees) => collect($employees)->contains(
+                fn ($employeeData) => $employeeData['id'] === $employee->id
+                    && $employeeData['organisation_id'] === $organisation->id,
+            ))
+            ->where('leaveTypes', fn ($leaveTypes) => collect($leaveTypes)->contains(
+                fn ($leaveTypeData) => $leaveTypeData['id'] === $leaveType->id
+                    && $leaveTypeData['policies'][0]['annual_limit'] === 12
+                    && $leaveTypeData['policies'][0]['requires_document_after_days'] === 2,
+            ))
+        );
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-02',
+            'end_date' => '2026-11-03',
+            'total_days' => 2,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-05',
+            'end_date' => '2026-11-07',
+            'total_days' => 3,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['handover_person_id']);
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-05',
+            'end_date' => '2026-11-07',
+            'total_days' => 3,
+            'status' => 'applied',
+            'handover_person_id' => $handoverEmployee->id,
+            'handover_description' => 'Cover project work.',
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['certificate']);
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-05',
+            'end_date' => '2026-11-07',
+            'total_days' => 3,
+            'status' => 'applied',
+            'handover_person_id' => $handoverEmployee->id,
+            'handover_description' => 'Cover project work.',
+            'certificate' => UploadedFile::fake()->create('supporting-document.pdf', 200, 'application/pdf'),
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+});
+
 test('hr user can create a half-day leave request and half-day requests must use one date', function () {
     $hrUser = createHrmsLoginUser('hr');
     $salesUser = SalesCrmUser::factory()->create();
@@ -255,6 +498,10 @@ test('hr user can apply and directly approve leave on behalf of employee with qu
 test('hr user can attach supporting document when applying leave on behalf of employee', function () {
     Storage::fake('public');
     $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
 
     $salesUser = SalesCrmUser::factory()->create();
 
@@ -263,6 +510,7 @@ test('hr user can attach supporting document when applying leave on behalf of em
         'emp_num' => fake()->unique()->bothify('EMP-#####'),
         'designation' => 'UI Designer',
         'division' => 'Creative',
+        'organisation_id' => $organisation->id,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -275,10 +523,6 @@ test('hr user can attach supporting document when applying leave on behalf of em
         'status' => 1,
     ]);
 
-    $organisation = Organisation::query()->firstOrCreate(
-        ['id' => 1],
-        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
-    );
     LeavePolicy::query()->create([
         'leave_type_id' => $leaveType->id,
         'organisation_id' => $organisation->id,
@@ -462,6 +706,10 @@ test('hr user can apply maternity leave for female employee', function () {
 
 test('hr user cannot apply leave when selected handover person is also on leave', function () {
     $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
     $salesUser = SalesCrmUser::factory()->create();
 
     $applicant = Employee::query()->create([
@@ -469,6 +717,7 @@ test('hr user cannot apply leave when selected handover person is also on leave'
         'emp_num' => fake()->unique()->bothify('EMP-#####'),
         'designation' => 'QA Engineer',
         'division' => 'Engineering',
+        'organisation_id' => $organisation->id,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -479,6 +728,7 @@ test('hr user cannot apply leave when selected handover person is also on leave'
         'emp_num' => fake()->unique()->bothify('EMP-#####'),
         'designation' => 'QA Lead',
         'division' => 'Engineering',
+        'organisation_id' => $organisation->id,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -490,10 +740,6 @@ test('hr user cannot apply leave when selected handover person is also on leave'
         'requires_approval' => 1,
         'status' => 1,
     ]);
-    $organisation = Organisation::query()->firstOrCreate(
-        ['id' => 1],
-        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
-    );
     LeavePolicy::query()->create([
         'leave_type_id' => $leaveType->id,
         'organisation_id' => $organisation->id,
@@ -530,6 +776,10 @@ test('hr user cannot apply leave when selected handover person is also on leave'
 
 test('hr user can apply leave with valid handover person and it records handover details', function () {
     $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
     $salesUser = SalesCrmUser::factory()->create();
 
     $applicant = Employee::query()->create([
@@ -537,6 +787,7 @@ test('hr user can apply leave with valid handover person and it records handover
         'emp_num' => fake()->unique()->bothify('EMP-#####'),
         'designation' => 'DevOps Engineer',
         'division' => 'Infrastructure',
+        'organisation_id' => $organisation->id,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -547,6 +798,7 @@ test('hr user can apply leave with valid handover person and it records handover
         'emp_num' => fake()->unique()->bothify('EMP-#####'),
         'designation' => 'Cloud Architect',
         'division' => 'Infrastructure',
+        'organisation_id' => $organisation->id,
         'status' => 1,
         'has_report' => false,
     ]);
@@ -558,10 +810,6 @@ test('hr user can apply leave with valid handover person and it records handover
         'requires_approval' => 1,
         'status' => 1,
     ]);
-    $organisation = Organisation::query()->firstOrCreate(
-        ['id' => 1],
-        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
-    );
     LeavePolicy::query()->create([
         'leave_type_id' => $leaveType->id,
         'organisation_id' => $organisation->id,
@@ -744,7 +992,7 @@ test('hr user can view edit leave page', function () {
             ->has('leaveRequest')
             ->has('employees')
             ->has('leaveTypes')
-            ->where('leaveRequest.request_type', 'full_day')
+            ->where('leaveRequest.request_type', 'fullday')
             ->where('leaveRequest.leave_type.leave_name', 'Casual Leave')
         );
 });
