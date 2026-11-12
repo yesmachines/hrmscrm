@@ -1,4 +1,3 @@
-import { useState, useId, useMemo, useEffect } from 'react';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import {
     ArrowLeft,
@@ -6,21 +5,21 @@ import {
     Save,
     User as UserIcon,
     AlertCircle,
-    CheckCircle2,
     Clock,
     FileUp,
-    ShieldAlert,
     Ban,
     FileText,
 } from 'lucide-react';
+import { useState, useId, useMemo, useEffect } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
+import { countLeaveWeekdays } from '@/lib/leave-duration';
 import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
+import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -65,6 +64,7 @@ interface LeavePolicyOption {
     requires_document_after_days: number | null;
     requires_attachment: boolean;
     requires_handover: boolean;
+    requires_weekend_document?: boolean;
 }
 
 interface LeaveBalanceItem {
@@ -131,7 +131,7 @@ export default function LeaveRequestsEdit({
 
     const [isCancelling, setIsCancelling] = useState(false);
 
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, clearErrors, setError } = useForm({
         _method: 'PUT',
         employee_id: String(leaveRequest.employee_id),
         leave_type_id: String(leaveRequest.leave_type_id),
@@ -151,16 +151,20 @@ export default function LeaveRequestsEdit({
         if (data.start_date && data.end_date) {
             const start = new Date(data.start_date);
             const end = new Date(data.end_date);
+
             if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
-                const diffTime = Math.abs(end.getTime() - start.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                setData('total_days', data.request_type === 'fullday' ? String(diffDays) : '0.5');
+                const weekdays = countLeaveWeekdays(data.start_date, data.end_date);
+                setData('total_days', data.request_type === 'fullday' ? String(weekdays) : '0.5');
             }
         }
+
     }, [data.start_date, data.end_date, data.request_type, setData]);
 
     const selectedEmployee = useMemo(() => {
-        if (!data.employee_id) return null;
+        if (!data.employee_id) {
+            return null;
+        }
+
         return employees.find((e) => String(e.id) === String(data.employee_id)) ?? leaveRequest.employee ?? null;
     }, [data.employee_id, employees, leaveRequest.employee]);
 
@@ -169,8 +173,10 @@ export default function LeaveRequestsEdit({
         if (!data.employee_id || !data.leave_type_id) {
             return null;
         }
+
         const empId = Number(data.employee_id);
         const typeId = Number(data.leave_type_id);
+
         return leaveBalances.find((b) => b.employee_id === empId && b.leave_type_id === typeId) ?? null;
     }, [data.employee_id, data.leave_type_id, leaveBalances]);
 
@@ -187,26 +193,47 @@ export default function LeaveRequestsEdit({
     }, [selectedEmployee, leaveTypes]);
 
     const selectedLeaveType = useMemo(() => {
-        if (!data.leave_type_id) return null;
+        if (!data.leave_type_id) {
+            return null;
+        }
+
         return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? leaveRequest.leave_type ?? null;
     }, [data.leave_type_id, availableLeaveTypes, leaveRequest.leave_type]);
 
     const selectedPolicy = useMemo(() => {
-        if (!selectedLeaveType) return null;
+        if (!selectedLeaveType || selectedEmployee?.organisation_id == null) {
+            return null;
+        }
 
-        return selectedLeaveType.policies?.find(
+        const organisationPolicy = selectedLeaveType.policies?.find(
             (policy) => Number(policy.organisation_id) === Number(selectedEmployee?.organisation_id),
-        ) ?? selectedLeaveType.policy ?? null;
-    }, [selectedEmployee, selectedLeaveType]);
+        );
+
+        if (organisationPolicy) {
+            return organisationPolicy;
+        }
+
+        const isOriginalEmployee = selectedEmployee.id === leaveRequest.employee_id;
+
+        return isOriginalEmployee && selectedLeaveType.id === leaveRequest.leave_type_id
+            ? selectedLeaveType.policy ?? null
+            : null;
+    }, [leaveRequest.employee_id, leaveRequest.leave_type_id, selectedEmployee, selectedLeaveType]);
 
     const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
         selectedPolicy,
         Number(data.total_days || 0),
+        data.start_date,
+        data.end_date,
     );
 
     const candidateHandoverEmployees = useMemo(() => {
-        if (!data.employee_id) return employees;
+        if (!data.employee_id) {
+            return employees;
+        }
+
         const currentEmpId = Number(data.employee_id);
+
         return employees.filter((emp) => emp.id !== currentEmpId);
     }, [data.employee_id, employees]);
 
@@ -221,11 +248,16 @@ export default function LeaveRequestsEdit({
 
         for (const candidate of candidateHandoverEmployees) {
             const hasConflict = activeLeaves.some((leave) => {
-                if (leave.employee_id !== candidate.id) return false;
+                if (leave.employee_id !== candidate.id) {
+                    return false;
+                }
+
                 const lStart = new Date(leave.start_date);
                 const lEnd = new Date(leave.end_date);
+
                 return reqStart <= lEnd && reqEnd >= lStart;
             });
+
             map.set(candidate.id, hasConflict);
         }
 
@@ -233,12 +265,66 @@ export default function LeaveRequestsEdit({
     }, [data.start_date, data.end_date, candidateHandoverEmployees, activeLeaves]);
 
     const isHandoverPersonConflicted = useMemo(() => {
-        if (!data.handover_person_id) return false;
+        if (!data.handover_person_id) {
+            return false;
+        }
+
         return handoverAvailabilityMap.get(Number(data.handover_person_id)) === true;
     }, [data.handover_person_id, handoverAvailabilityMap]);
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
+
+        clearErrors();
+
+        if (data.request_type !== 'fullday' && data.start_date !== data.end_date) {
+            setError('request_type', 'Half-day leave must start and end on the same date.');
+
+            return;
+        }
+
+        if (data.request_type !== 'fullday' && countLeaveWeekdays(data.start_date, data.start_date) === 0) {
+            setError('request_type', 'Half-day leave must be on a weekday.');
+
+            return;
+        }
+
+        if (data.request_type === 'fullday' && countLeaveWeekdays(data.start_date, data.end_date) === 0) {
+            setError('total_days', 'Selected dates do not include any weekdays.');
+
+            return;
+        }
+
+        if (requiresHandover && !data.handover_person_id) {
+            setError('handover_person_id', 'A handover colleague is required by this leave policy.');
+
+            return;
+        }
+
+        if (requiresHandover && !data.handover_description.trim()) {
+            setError('handover_description', 'A handover description is required by this leave policy.');
+
+            return;
+        }
+
+        if (requiresHandover && isHandoverPersonConflicted) {
+            setError('handover_person_id', 'The selected handover colleague is on leave during these dates.');
+
+            return;
+        }
+
+        if (requiresAttachment && !hasExistingAttachment && !data.certificate) {
+            setError('certificate', 'A supporting document is required by this leave policy.');
+
+            return;
+        }
+
+        if (data.certificate && (data.certificate.size > 10 * 1024 * 1024 || !/\.(pdf|jpe?g|png|docx?)$/i.test(data.certificate.name))) {
+            setError('certificate', 'Choose a PDF, JPG, PNG, DOC or DOCX file no larger than 10 MB.');
+
+            return;
+        }
+
         post(`/leave-requests/${leaveRequest.id}`);
     }
 
@@ -392,8 +478,7 @@ export default function LeaveRequestsEdit({
                                             id={leaveTypeSelectId}
                                             type="text"
                                             value={selectedLeaveType?.leave_name ?? 'Leave type unavailable'}
-                                            readOnly
-                                            aria-readonly="true"
+                                            disabled
                                             className="mt-1.5 bg-muted text-muted-foreground"
                                         />
                                         {errors.leave_type_id && (
@@ -461,8 +546,9 @@ export default function LeaveRequestsEdit({
                                                 id={totalDaysId}
                                                 type="number"
                                                 step="0.5"
-                                                min="0.5"
+                                                min="0"
                                                 value={data.total_days}
+                                                readOnly={data.request_type === 'fullday'}
                                                 disabled={data.request_type !== 'fullday'}
                                                 onChange={(e) => setData('total_days', e.target.value)}
                                                 className="mt-1.5 font-semibold text-primary"
@@ -491,78 +577,81 @@ export default function LeaveRequestsEdit({
                             </div>
 
                             {/* Handover Section */}
-                            <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
-                                <h3 className="mb-2 text-base font-semibold text-foreground flex items-center gap-2">
-                                    <Clock className="size-4 text-primary" />
-                                    Handover / Delegation Details
-                                </h3>
-                                <p className="mb-4 text-xs text-muted-foreground">
-                                    Specify a colleague to take over duties during this leave period.
-                                </p>
+                            {requiresHandover && (
+                                <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
+                                    <h3 className="mb-2 text-base font-semibold text-foreground flex items-center gap-2">
+                                        <Clock className="size-4 text-primary" />
+                                        Handover / Delegation Details
+                                    </h3>
+                                    <p className="mb-4 text-xs text-muted-foreground">
+                                        Specify a colleague to take over duties during this leave period.
+                                    </p>
 
-                                <div className="space-y-4">
-                                    <div>
-                                        <Label htmlFor={handoverPersonSelectId}>
-                                            Handover Person
-                                            {requiresHandover && (
-                                                <span className="ml-1 text-destructive">*</span>
-                                            )}
-                                        </Label>
-                                        <select
-                                            id={handoverPersonSelectId}
-                                            value={data.handover_person_id}
-                                            onChange={(e) => setData('handover_person_id', e.target.value)}
-                                            required={requiresHandover}
-                                            className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                                        >
-                                            <option value="">-- No handover person required / assigned --</option>
-                                            {candidateHandoverEmployees.map((emp) => {
-                                                const onLeave = handoverAvailabilityMap.get(emp.id) === true;
-                                                return (
-                                                    <option
-                                                        key={emp.id}
-                                                        value={emp.id}
-                                                        disabled={onLeave}
-                                                    >
-                                                        {emp.user?.name ?? 'Unknown'} ({emp.designation ?? 'Staff'}) {onLeave ? '— (On leave on these dates)' : ''}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
-                                        {isHandoverPersonConflicted && (
-                                            <p className="mt-1 text-xs text-destructive font-medium flex items-center gap-1">
-                                                <AlertCircle className="size-3.5" />
-                                                This colleague is also on leave during the requested dates. Please select someone else.
-                                            </p>
-                                        )}
-                                        {errors.handover_person_id && (
-                                            <p className="mt-1 text-xs text-destructive">{errors.handover_person_id}</p>
-                                        )}
-                                    </div>
-
-                                    {data.handover_person_id && (
+                                    <div className="space-y-4">
                                         <div>
-                                            <Label htmlFor={handoverDescId}>
-                                                Handover Tasks & Instructions
-                                                {requiresHandover && (
-                                                    <span className="ml-1 text-destructive">*</span>
-                                                )}
+                                            <Label htmlFor={handoverPersonSelectId}>
+                                                Handover Person <span className="ml-1 text-destructive">*</span>
                                             </Label>
-                                            <Textarea
-                                                id={handoverDescId}
-                                                value={data.handover_description}
-                                                onChange={(e) => setData('handover_description', e.target.value)}
-                                                required={requiresHandover}
-                                                placeholder="Key duties, urgent contacts, pending tickets..."
-                                                className="mt-1.5 min-h-[80px]"
-                                            />
-                                            {errors.handover_description && (
-                                                <p className="mt-1 text-xs text-destructive">{errors.handover_description}</p>
+                                            <select
+                                                id={handoverPersonSelectId}
+                                                value={data.handover_person_id}
+                                                onChange={(e) => {
+                                                    setData('handover_person_id', e.target.value);
+                                                    clearErrors('handover_person_id');
+                                                }}
+                                                required
+                                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
+                                            >
+                                                <option value="">-- Select a handover person --</option>
+                                                {candidateHandoverEmployees.map((emp) => {
+                                                    const onLeave = handoverAvailabilityMap.get(emp.id) === true;
+
+                                                    return (
+                                                        <option
+                                                            key={emp.id}
+                                                            value={emp.id}
+                                                            disabled={onLeave}
+                                                        >
+                                                            {emp.user?.name ?? 'Unknown'} ({emp.designation ?? 'Staff'}) {onLeave ? '— (On leave on these dates)' : ''}
+                                                        </option>
+                                                    );
+                                                })}
+                                            </select>
+                                            {isHandoverPersonConflicted && (
+                                                <p className="mt-1 text-xs text-destructive font-medium flex items-center gap-1">
+                                                    <AlertCircle className="size-3.5" />
+                                                    This colleague is also on leave during the requested dates. Please select someone else.
+                                                </p>
+                                            )}
+                                            {errors.handover_person_id && (
+                                                <p className="mt-1 text-xs text-destructive">{errors.handover_person_id}</p>
                                             )}
                                         </div>
-                                    )}
+
+                                        {data.handover_person_id && (
+                                            <div>
+                                                <Label htmlFor={handoverDescId}>
+                                                    Handover Tasks & Instructions <span className="ml-1 text-destructive">*</span>
+                                                </Label>
+                                                <Textarea
+                                                    id={handoverDescId}
+                                                    value={data.handover_description}
+                                                    onChange={(e) => {
+                                                        setData('handover_description', e.target.value);
+                                                        clearErrors('handover_description');
+                                                    }}
+                                                    required
+                                                    placeholder="Key duties, urgent contacts, pending tickets..."
+                                                    className="mt-1.5 min-h-[80px]"
+                                                />
+                                                {errors.handover_description && (
+                                                    <p className="mt-1 text-xs text-destructive">{errors.handover_description}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         {/* Sidebar: Balances & Attachments */}
@@ -603,50 +692,57 @@ export default function LeaveRequestsEdit({
                             </div>
 
                             {/* Attachments / Certificate */}
-                            <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
-                                <h4 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
-                                    <FileUp className="size-4 text-muted-foreground" />
-                                    Supporting Document
-                                </h4>
+                            {(requiresAttachment || hasExistingAttachment) && (
+                                <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
+                                    <h4 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+                                        <FileUp className="size-4 text-muted-foreground" />
+                                        Supporting Document
+                                    </h4>
 
-                                {leaveRequest.files && leaveRequest.files.length > 0 && (
-                                    <div className="mb-4 space-y-2">
-                                        <p className="text-xs text-muted-foreground font-medium">Existing Attachment:</p>
-                                        {leaveRequest.files.map((f) => (
-                                            <a
-                                                key={f.id}
-                                                href={`/storage/${f.file_path}`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="flex items-center gap-2 rounded-md border border-border p-2 text-xs font-medium text-primary hover:underline"
-                                            >
-                                                <FileText className="size-4" />
-                                                View Uploaded Document
-                                            </a>
-                                        ))}
-                                    </div>
-                                )}
+                                    {leaveRequest.files && leaveRequest.files.length > 0 && (
+                                        <div className="mb-4 space-y-2">
+                                            <p className="text-xs text-muted-foreground font-medium">Existing Attachment:</p>
+                                            {leaveRequest.files.map((f) => (
+                                                <a
+                                                    key={f.id}
+                                                    href={`/storage/${f.file_path}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="flex items-center gap-2 rounded-md border border-border p-2 text-xs font-medium text-primary hover:underline"
+                                                >
+                                                    <FileText className="size-4" />
+                                                    View Uploaded Document
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
 
-                                <div>
-                                    <Label htmlFor={certificateId} className="text-xs text-muted-foreground">
-                                        Upload Replacement or New Document
-                                        {requiresAttachment && !hasExistingAttachment && (
-                                            <span className="ml-1 text-destructive">*</span>
-                                        )}
-                                    </Label>
-                                    <Input
-                                        id={certificateId}
-                                        type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                        required={requiresAttachment && !hasExistingAttachment}
-                                        onChange={(e) => setData('certificate', e.target.files?.[0] ?? null)}
-                                        className="mt-1.5 text-xs"
-                                    />
-                                    {errors.certificate && (
-                                        <p className="mt-1 text-xs text-destructive">{errors.certificate}</p>
+                                    {requiresAttachment && (
+                                        <div>
+                                            <Label htmlFor={certificateId} className="text-xs text-muted-foreground">
+                                                Upload Replacement or New Document
+                                                {!hasExistingAttachment && (
+                                                    <span className="ml-1 text-destructive">*</span>
+                                                )}
+                                            </Label>
+                                            <Input
+                                                id={certificateId}
+                                                type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                                required={requiresAttachment && !hasExistingAttachment}
+                                                onChange={(e) => {
+                                                    setData('certificate', e.target.files?.[0] ?? null);
+                                                    clearErrors('certificate');
+                                                }}
+                                                className="mt-1.5 text-xs"
+                                            />
+                                            {errors.certificate && (
+                                                <p className="mt-1 text-xs text-destructive">{errors.certificate}</p>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
-                            </div>
+                            )}
 
                             {/* Save Actions */}
                             <div className="flex flex-col gap-2">

@@ -16,6 +16,7 @@ class LeaveValidationService
 {
     public function __construct(
         private readonly LeaveTypeEligibilityService $leaveTypeEligibilityService,
+        private readonly LeaveDurationCalculator $leaveDurationCalculator,
     ) {}
 
     public function validatePolicyEligibility(
@@ -163,10 +164,14 @@ class LeaveValidationService
             ]);
         }
 
+        if ($requestType !== 'fullday' && ! $this->leaveDurationCalculator->isWeekday($startDate)) {
+            throw ValidationException::withMessages([
+                'request_type' => ['Half-day leave must be on a weekday.'],
+            ]);
+        }
+
         $totalDays = $requestType === 'fullday'
-            ? (! empty($data['total_days'])
-                ? (float) $data['total_days']
-                : (float) ($startDate->diffInDays($endDate->copy()->startOfDay()) + 1))
+            ? (float) $this->leaveDurationCalculator->countWeekdays($startDate, $endDate)
             : 0.5;
 
         if ($totalDays < 0.5) {
@@ -303,7 +308,7 @@ class LeaveValidationService
             $hasWeekend = false;
             $cursor = $startDate->copy();
             while ($cursor->lte($endDate)) {
-                if ($cursor->isWeekend() || $cursor->dayOfWeek === Carbon::FRIDAY) {
+                if ($cursor->isWeekend()) {
                     $hasWeekend = true;
                     break;
                 }

@@ -53,13 +53,13 @@ class LeavePolicy extends Model
     public function requiresAttachmentForDuration(float $totalDays): bool
     {
         return $this->requires_attachment
-            && ($this->requires_document_after_days === null || $totalDays > $this->requires_document_after_days);
+            && ($this->requires_document_after_days === null || $totalDays >= $this->requires_document_after_days);
     }
 
     public function requiresHandoverForDuration(float $totalDays): bool
     {
         return $this->requires_handover
-            && ($this->requires_document_after_days === null || $totalDays > $this->requires_document_after_days);
+            && ($this->requires_document_after_days === null || $totalDays >= $this->requires_document_after_days);
     }
 
     public function leaveType(): BelongsTo

@@ -24,6 +24,43 @@ test('hr user can view the apply leave page', function () {
         ->assertOk();
 });
 
+test('hr leave duration excludes saturdays and sundays from the selected date range', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Weekday Leave',
+        'code' => 'WEEKDAY-LEAVE',
+        'is_paid' => true,
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-11-07',
+            'end_date' => '2026-11-09',
+            'total_days' => 3,
+            'status' => 'applied',
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->firstOrFail();
+
+    expect((float) $leaveRequest->total_days)->toBe(1.0);
+});
+
 test('hr user can apply leave on behalf of employee with applied status', function () {
     $hrUser = createHrmsLoginUser('hr');
 
@@ -311,6 +348,7 @@ test('hr leave request documents and handover follow the policy duration thresho
         'requires_document_after_days' => 2,
         'requires_attachment' => true,
         'requires_handover' => true,
+        'requires_weekend_document' => true,
         'probation_applicable' => true,
     ]);
 
@@ -326,7 +364,8 @@ test('hr leave request documents and handover follow the policy duration thresho
             ->where('leaveTypes', fn ($leaveTypes) => collect($leaveTypes)->contains(
                 fn ($leaveTypeData) => $leaveTypeData['id'] === $leaveType->id
                     && $leaveTypeData['policies'][0]['annual_limit'] === 12
-                    && $leaveTypeData['policies'][0]['requires_document_after_days'] === 2,
+                    && $leaveTypeData['policies'][0]['requires_document_after_days'] === 2
+                    && $leaveTypeData['policies'][0]['requires_weekend_document'] === true,
             ))
         );
 
@@ -335,11 +374,30 @@ test('hr leave request documents and handover follow the policy duration thresho
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
             'start_date' => '2026-11-02',
-            'end_date' => '2026-11-03',
-            'total_days' => 2,
+            'end_date' => '2026-11-02',
+            'total_days' => 1,
             'status' => 'applied',
         ])
         ->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->latest('id')
+        ->firstOrFail();
+
+    $this->actingAs($hrUser)
+        ->withoutVite()
+        ->get(route('leave-requests.edit', $leaveRequest))
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-requests/edit')
+            ->where('leaveRequest.leave_type.policy.requires_document_after_days', 2)
+            ->where('leaveRequest.leave_type.policy.requires_weekend_document', true)
+            ->where('leaveTypes', fn ($leaveTypes) => collect($leaveTypes)->contains(
+                fn ($leaveTypeData) => $leaveTypeData['id'] === $leaveType->id
+                    && $leaveTypeData['policies'][0]['requires_weekend_document'] === true,
+            ))
+        );
 
     $this->actingAs($hrUser)
         ->from(route('leave-requests.create'))
@@ -347,8 +405,8 @@ test('hr leave request documents and handover follow the policy duration thresho
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
             'start_date' => '2026-11-05',
-            'end_date' => '2026-11-07',
-            'total_days' => 3,
+            'end_date' => '2026-11-06',
+            'total_days' => 2,
             'status' => 'applied',
         ])
         ->assertRedirect(route('leave-requests.create'))
@@ -360,8 +418,8 @@ test('hr leave request documents and handover follow the policy duration thresho
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
             'start_date' => '2026-11-05',
-            'end_date' => '2026-11-07',
-            'total_days' => 3,
+            'end_date' => '2026-11-06',
+            'total_days' => 2,
             'status' => 'applied',
             'handover_person_id' => $handoverEmployee->id,
             'handover_description' => 'Cover project work.',

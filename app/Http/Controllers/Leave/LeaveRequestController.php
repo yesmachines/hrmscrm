@@ -8,6 +8,7 @@ use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
+use App\Services\LeaveDurationCalculator;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveValidationService;
 use Carbon\Carbon;
@@ -55,7 +56,7 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover')
+            ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover,requires_weekend_document')
             ->select('id', 'leave_name', 'code', 'is_paid', 'requires_approval', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
@@ -85,6 +86,7 @@ class LeaveRequestController extends Controller
         Request $request,
         LeaveTypeEligibilityService $eligibilityService,
         LeaveValidationService $leaveValidationService,
+        LeaveDurationCalculator $leaveDurationCalculator,
     ): RedirectResponse {
         $validated = $request->validate([
             'employee_id' => 'required|exists:salescrm.employees,id',
@@ -92,7 +94,7 @@ class LeaveRequestController extends Controller
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
             'request_type' => 'nullable|in:fullday,firsthalf,secondhalf',
-            'total_days' => 'nullable|numeric|min:0.5',
+            'total_days' => 'nullable|numeric|min:0',
             'status' => 'required|in:applied,approved',
             'remarks' => 'nullable|string',
             'certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
@@ -120,11 +122,21 @@ class LeaveRequestController extends Controller
             ]);
         }
 
+        if ($requestType !== 'fullday' && ! $leaveDurationCalculator->isWeekday($startDate)) {
+            throw ValidationException::withMessages([
+                'request_type' => ['Half-day leave must be on a weekday.'],
+            ]);
+        }
+
         $totalDays = $requestType === 'fullday'
-            ? ($validated['total_days'] ?? (
-                Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-            ))
+            ? $leaveDurationCalculator->countWeekdays($startDate, $endDate)
             : 0.5;
+
+        if ($totalDays < 0.5) {
+            throw ValidationException::withMessages([
+                'total_days' => ['Selected dates do not include any weekdays.'],
+            ]);
+        }
 
         $leaveValidationService->validatePolicyEligibility(
             $employee,
@@ -323,7 +335,7 @@ class LeaveRequestController extends Controller
         });
 
         $leaveTypes = LeaveType::query()
-            ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover')
+            ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover,requires_weekend_document')
             ->select('id', 'leave_name', 'code', 'is_paid', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
@@ -374,6 +386,7 @@ class LeaveRequestController extends Controller
         LeaveRequest $leave_request,
         LeaveTypeEligibilityService $eligibilityService,
         LeaveValidationService $leaveValidationService,
+        LeaveDurationCalculator $leaveDurationCalculator,
     ) {
         // If full edit form submission (has start_date)
         if ($request->has('start_date')) {
@@ -383,7 +396,7 @@ class LeaveRequestController extends Controller
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
                 'request_type' => 'nullable|in:fullday,firsthalf,secondhalf',
-                'total_days' => 'nullable|numeric|min:0.5',
+                'total_days' => 'nullable|numeric|min:0',
                 'status' => 'required|in:applied,approved,rejected,cancelled',
                 'remarks' => 'nullable|string',
                 'certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
@@ -416,11 +429,22 @@ class LeaveRequestController extends Controller
                 ]);
             }
 
+            if ($requestType !== 'fullday' && ! $leaveDurationCalculator->isWeekday($startDate)) {
+                throw ValidationException::withMessages([
+                    'request_type' => ['Half-day leave must be on a weekday.'],
+                ]);
+            }
+
             $totalDays = $requestType === 'fullday'
-                ? ($validated['total_days'] ?? (
-                    Carbon::parse($validated['end_date'])->diffInDays(Carbon::parse($validated['start_date'])) + 1
-                ))
+                ? $leaveDurationCalculator->countWeekdays($startDate, $endDate)
                 : 0.5;
+
+            if ($totalDays < 0.5) {
+                throw ValidationException::withMessages([
+                    'total_days' => ['Selected dates do not include any weekdays.'],
+                ]);
+            }
+
             $isActiveRequest = in_array($validated['status'], ['applied', 'approved'], true);
 
             if ($isActiveRequest) {

@@ -454,7 +454,7 @@ class LeaveController extends Controller
             'start_date' => ['sometimes', 'date'],
             'end_date' => ['sometimes', 'date'],
             'request_type' => ['sometimes', 'in:fullday,firsthalf,secondhalf'],
-            'total_days' => ['sometimes', 'nullable', 'numeric', 'min:0.5'],
+            'total_days' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'status' => ['sometimes', 'in:applied'],
             'remarks' => ['sometimes', 'nullable', 'string'],
             'certificate' => ['sometimes', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:10240'],

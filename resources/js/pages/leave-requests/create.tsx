@@ -19,8 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
+import { countLeaveWeekdays } from '@/lib/leave-duration';
 import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
+import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -66,6 +67,7 @@ interface LeavePolicyOption {
     requires_document_after_days: number | null;
     requires_attachment: boolean;
     requires_handover: boolean;
+    requires_weekend_document: boolean;
 }
 
 interface LeaveBalanceItem {
@@ -92,6 +94,14 @@ interface Props {
     activeLeaves?: ActiveLeaveItem[];
 }
 
+function dateOnly(value: string | null | undefined): string | null {
+    const normalizedDate = value?.slice(0, 10);
+
+    return normalizedDate && /^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)
+        ? normalizedDate
+        : null;
+}
+
 export default function LeaveRequestsCreate({
     employees = [],
     leaveTypes = [],
@@ -116,8 +126,9 @@ export default function LeaveRequestsCreate({
     const [activeEmployeeIndex, setActiveEmployeeIndex] = useState(0);
     const [employeeSelectionError, setEmployeeSelectionError] = useState('');
     const employeeInputRef = useRef<HTMLInputElement>(null);
+    const certificateInputRef = useRef<HTMLInputElement>(null);
 
-    const { data, setData, post, processing, errors, clearErrors } = useForm({
+    const { data, setData, post, processing, errors, clearErrors, setError } = useForm({
         employee_id: '',
         leave_type_id: '',
         request_type: 'fullday',
@@ -135,57 +146,88 @@ export default function LeaveRequestsCreate({
         if (!employeeSearch.trim()) {
             return employees;
         }
+
         const term = employeeSearch.trim().toLowerCase();
+
         return employees.filter((emp) => {
             const name = emp.user?.name?.toLowerCase() ?? '';
             const code = emp.employee_code?.toLowerCase() ?? '';
             const num = emp.emp_num?.toLowerCase() ?? '';
             const desig = emp.designation?.toLowerCase() ?? '';
             const dept = emp.department?.name?.toLowerCase() ?? '';
+
             return name.includes(term) || code.includes(term) || num.includes(term) || desig.includes(term) || dept.includes(term);
         });
     }, [employees, employeeSearch]);
 
     // Calculate days between start and end date
     useEffect(() => {
-        if (data.start_date && data.end_date) {
-            const start = new Date(data.start_date);
-            const end = new Date(data.end_date);
-            if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
-                const diffTime = Math.abs(end.getTime() - start.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                setData('total_days', data.request_type === 'fullday' ? String(diffDays) : '0.5');
+        const startDate = dateOnly(data.start_date);
+        const endDate = dateOnly(data.end_date);
+
+        if (!startDate || !endDate || endDate < startDate) {
+            if (data.total_days !== '') {
+                setData('total_days', '');
             }
+
+            return;
         }
-    }, [data.start_date, data.end_date, data.request_type, setData]);
+
+        const weekdays = countLeaveWeekdays(startDate, endDate);
+        const totalDays = data.request_type === 'fullday' ? String(weekdays) : '0.5';
+
+        if (data.total_days !== totalDays) {
+            setData('total_days', totalDays);
+        }
+
+    }, [data.start_date, data.end_date, data.request_type, data.total_days, setData]);
 
     // Find current balance for selected employee and leave type
     const selectedBalance = useMemo(() => {
         if (!data.employee_id || !data.leave_type_id) {
             return null;
         }
+
         const empId = Number(data.employee_id);
         const typeId = Number(data.leave_type_id);
+
         return leaveBalances.find((b) => b.employee_id === empId && b.leave_type_id === typeId) ?? null;
     }, [data.employee_id, data.leave_type_id, leaveBalances]);
 
     const selectedEmployee = useMemo(() => {
-        if (!data.employee_id) return null;
+        if (!data.employee_id) {
+            return null;
+        }
+
         return employees.find((e) => String(e.id) === String(data.employee_id)) ?? null;
     }, [data.employee_id, employees]);
 
+    const clearPolicyDependentValues = () => {
+        setData('certificate', null);
+        setData('handover_person_id', '');
+        setData('handover_description', '');
+
+        if (certificateInputRef.current) {
+            certificateInputRef.current.value = '';
+        }
+
+        clearErrors('certificate', 'handover_person_id', 'handover_description');
+    };
+
     const selectEmployee = (employee: EmployeeOption) => {
         setData('employee_id', String(employee.id));
+        setData('leave_type_id', '');
+        clearPolicyDependentValues();
         setEmployeeSearch('');
         setEmployeeDropdownOpen(false);
         setActiveEmployeeIndex(0);
         setEmployeeSelectionError('');
-        clearErrors('employee_id');
+        clearErrors('employee_id', 'leave_type_id', 'start_date', 'end_date', 'total_days');
     };
 
     const availableLeaveTypes = useMemo(() => {
         if (!selectedEmployee) {
-            return leaveTypes;
+            return [];
         }
 
         return filterEligibleLeaveTypes(
@@ -199,25 +241,61 @@ export default function LeaveRequestsCreate({
         if (data.leave_type_id && !availableLeaveTypes.some((lt) => String(lt.id) === String(data.leave_type_id))) {
             setData('leave_type_id', '');
         }
-    }, [availableLeaveTypes]);
+
+    }, [availableLeaveTypes, data.leave_type_id, setData]);
 
     const selectedLeaveType = useMemo(() => {
-        if (!data.leave_type_id) return null;
+        if (!data.leave_type_id) {
+            return null;
+        }
+
         return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? null;
     }, [data.leave_type_id, availableLeaveTypes]);
 
     const selectedPolicy = useMemo(() => {
-        if (!selectedLeaveType) return null;
+        if (!selectedLeaveType || selectedEmployee?.organisation_id == null) {
+            return null;
+        }
 
         return selectedLeaveType.policies?.find(
             (policy) => Number(policy.organisation_id) === Number(selectedEmployee?.organisation_id),
-        ) ?? selectedLeaveType.policy ?? null;
+        ) ?? null;
     }, [selectedEmployee, selectedLeaveType]);
 
     const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
         selectedPolicy,
         Number(data.total_days || 0),
+        data.start_date,
+        data.end_date,
     );
+
+    useEffect(() => {
+        if (!requiresAttachment && data.certificate) {
+            setData('certificate', null);
+
+            if (certificateInputRef.current) {
+                certificateInputRef.current.value = '';
+            }
+
+            clearErrors('certificate');
+        }
+
+    }, [clearErrors, data.certificate, requiresAttachment, setData]);
+
+    useEffect(() => {
+        if (!requiresHandover) {
+            if (data.handover_person_id) {
+                setData('handover_person_id', '');
+            }
+
+            if (data.handover_description) {
+                setData('handover_description', '');
+            }
+
+            clearErrors('handover_person_id', 'handover_description');
+        }
+
+    }, [clearErrors, data.handover_description, data.handover_person_id, requiresHandover, setData]);
 
     useEffect(() => {
         if (selectedLeaveType) {
@@ -226,44 +304,151 @@ export default function LeaveRequestsCreate({
     }, [selectedLeaveType, setData]);
 
     const candidateHandoverEmployees = useMemo(() => {
-        if (!data.employee_id) return employees;
+        if (!data.employee_id) {
+            return employees;
+        }
+
         const currentEmpId = Number(data.employee_id);
+
         return employees.filter((emp) => emp.id !== currentEmpId);
     }, [data.employee_id, employees]);
 
     const isEmployeeOnLeave = (empId: number): boolean => {
-        if (!data.start_date || !data.end_date) return false;
-        const reqStart = new Date(data.start_date);
-        const reqEnd = new Date(data.end_date);
-        if (isNaN(reqStart.getTime()) || isNaN(reqEnd.getTime())) return false;
+        const requestStart = dateOnly(data.start_date);
+        const requestEnd = dateOnly(data.end_date);
 
-        return (activeLeaves || []).some((leave) => {
-            if (leave.employee_id !== empId) return false;
-            const lStart = new Date(leave.start_date);
-            const lEnd = new Date(leave.end_date);
-            return lStart <= reqEnd && lEnd >= reqStart;
+        if (!requestStart || !requestEnd || requestEnd < requestStart) {
+            return false;
+        }
+
+        return activeLeaves.some((leave) => {
+            if (leave.employee_id !== empId || !['applied', 'approved'].includes(leave.status)) {
+                return false;
+            }
+
+            const leaveStart = dateOnly(leave.start_date);
+            const leaveEnd = dateOnly(leave.end_date);
+
+            return leaveStart !== null && leaveEnd !== null && leaveStart <= requestEnd && leaveEnd >= requestStart;
         });
     };
 
-    const isSelectedHandoverOnLeave = useMemo(() => {
-        if (!data.handover_person_id) return false;
-        return isEmployeeOnLeave(Number(data.handover_person_id));
-    }, [data.handover_person_id, data.start_date, data.end_date, activeLeaves]);
+    const hasApplicantOverlap = selectedEmployee ? isEmployeeOnLeave(selectedEmployee.id) : false;
+    const isSelectedHandoverOnLeave = Boolean(data.handover_person_id) && isEmployeeOnLeave(Number(data.handover_person_id));
 
     useEffect(() => {
         if (data.handover_person_id && String(data.employee_id) === String(data.handover_person_id)) {
             setData('handover_person_id', '');
         }
-    }, [data.employee_id]);
+
+    }, [data.employee_id, data.handover_person_id, setData]);
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!data.employee_id) {
-            setEmployeeSelectionError('Please select an employee.');
+        clearErrors();
+        setEmployeeSelectionError('');
+
+        if (!data.employee_id || !selectedEmployee) {
+            const message = 'Please select an employee first.';
+            setEmployeeSelectionError(message);
+            setError('employee_id', message);
             setEmployeeDropdownOpen(true);
             employeeInputRef.current?.focus();
+
             return;
         }
+
+        if (!data.leave_type_id || !selectedLeaveType) {
+            setError('leave_type_id', 'Please select a leave type.');
+
+            return;
+        }
+
+        const startDate = dateOnly(data.start_date);
+        const endDate = dateOnly(data.end_date);
+
+        if (!startDate) {
+            setError('start_date', 'Please select a start date.');
+
+            return;
+        }
+
+        if (!endDate) {
+            setError('end_date', 'Please select an end date.');
+
+            return;
+        }
+
+        if (endDate < startDate) {
+            setError('end_date', 'End date must be on or after the start date.');
+
+            return;
+        }
+
+        if (data.request_type !== 'fullday' && startDate !== endDate) {
+            setError('request_type', 'Half-day leave must start and end on the same date.');
+
+            return;
+        }
+
+        if (data.request_type !== 'fullday' && countLeaveWeekdays(startDate, startDate) === 0) {
+            setError('request_type', 'Half-day leave must be on a weekday.');
+
+            return;
+        }
+
+        const totalDays = data.request_type === 'fullday' ? Number(data.total_days) : 0.5;
+
+        if (!Number.isFinite(totalDays) || totalDays < 0.5) {
+            setError('total_days', 'Leave duration must be at least 0.5 days.');
+
+            return;
+        }
+
+        if (hasApplicantOverlap) {
+            setError('start_date', 'This employee already has an applied or approved leave request overlapping these dates.');
+
+            return;
+        }
+
+        const policyRequirements = getLeavePolicyRequirements(selectedPolicy, totalDays, startDate, endDate);
+
+        if (policyRequirements.requiresHandover && !data.handover_person_id) {
+            setError('handover_person_id', 'A handover colleague is required by this leave policy.');
+
+            return;
+        }
+
+        if (data.handover_person_id && Number(data.handover_person_id) === selectedEmployee.id) {
+            setError('handover_person_id', 'You cannot select the employee themselves as the handover colleague.');
+
+            return;
+        }
+
+        if (data.handover_person_id && isEmployeeOnLeave(Number(data.handover_person_id))) {
+            setError('handover_person_id', 'The selected handover colleague is on leave during these dates.');
+
+            return;
+        }
+
+        if (policyRequirements.requiresHandover && !data.handover_description.trim()) {
+            setError('handover_description', 'A handover description is required by this leave policy.');
+
+            return;
+        }
+
+        if (policyRequirements.requiresAttachment && !data.certificate) {
+            setError('certificate', 'A supporting document is required by this leave policy.');
+
+            return;
+        }
+
+        if (data.certificate && (data.certificate.size > 10 * 1024 * 1024 || !/\.(pdf|jpe?g|png|docx?)$/i.test(data.certificate.name))) {
+            setError('certificate', 'Choose a PDF, JPG, PNG, DOC or DOCX file no larger than 10 MB.');
+
+            return;
+        }
+
         post('/leave-requests');
     };
 
@@ -287,7 +472,7 @@ export default function LeaveRequestsCreate({
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     {/* Main Form */}
                     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm lg:col-span-2">
-                        <form onSubmit={submit} className="space-y-6">
+                        <form onSubmit={submit} noValidate className="space-y-6">
                             {/* Employee Selection */}
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
@@ -333,9 +518,11 @@ export default function LeaveRequestsCreate({
                                         onChange={(e) => {
                                             setEmployeeSearch(e.target.value);
                                             setData('employee_id', '');
+                                            setData('leave_type_id', '');
+                                            clearPolicyDependentValues();
                                             setActiveEmployeeIndex(0);
                                             setEmployeeSelectionError('');
-                                            clearErrors('employee_id');
+                                            clearErrors('employee_id', 'leave_type_id', 'start_date', 'end_date', 'total_days');
                                             setEmployeeDropdownOpen(true);
                                         }}
                                         onKeyDown={(e) => {
@@ -421,11 +608,16 @@ export default function LeaveRequestsCreate({
                                 <select
                                     id={leaveTypeSelectId}
                                     value={data.leave_type_id}
-                                    onChange={(e) => setData('leave_type_id', e.target.value)}
+                                    onChange={(e) => {
+                                        clearPolicyDependentValues();
+                                        setData('leave_type_id', e.target.value);
+                                        clearErrors('leave_type_id');
+                                    }}
+                                    disabled={!selectedEmployee}
                                     className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                     required
                                 >
-                                    <option value="">-- Choose Leave Type --</option>
+                                    <option value="">{selectedEmployee ? '-- Choose Leave Type --' : 'Select an employee first'}</option>
                                     {availableLeaveTypes.map((type) => {
                                         const policy = type.policies?.find(
                                             (item) => Number(item.organisation_id) === Number(selectedEmployee?.organisation_id),
@@ -433,6 +625,8 @@ export default function LeaveRequestsCreate({
                                         const { requiresAttachment: attachmentRequired } = getLeavePolicyRequirements(
                                             policy,
                                             Number(data.total_days || 0),
+                                            data.start_date,
+                                            data.end_date,
                                         );
 
                                         return (
@@ -444,6 +638,11 @@ export default function LeaveRequestsCreate({
                                         );
                                     })}
                                 </select>
+                                {!selectedEmployee && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Select an employee first to load leave types and the policy for their organisation.
+                                    </p>
+                                )}
                                 {errors.leave_type_id && (
                                     <p className="text-sm text-destructive">{errors.leave_type_id}</p>
                                 )}
@@ -454,7 +653,10 @@ export default function LeaveRequestsCreate({
                                 <select
                                     id={requestTypeSelectId}
                                     value={data.request_type}
-                                    onChange={(e) => setData('request_type', e.target.value)}
+                                    onChange={(e) => {
+                                        setData('request_type', e.target.value);
+                                        clearErrors('request_type', 'total_days');
+                                    }}
                                     className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                                     required
                                 >
@@ -481,7 +683,10 @@ export default function LeaveRequestsCreate({
                                     <FormattedDatePicker
                                         id={startDateId}
                                         value={data.start_date}
-                                        onChange={(value) => setData('start_date', value)}
+                                        onChange={(value) => {
+                                            setData('start_date', value);
+                                            clearErrors('start_date', 'end_date', 'total_days');
+                                        }}
                                         required
                                     />
                                     {errors.start_date && (
@@ -498,7 +703,10 @@ export default function LeaveRequestsCreate({
                                         min={data.start_date}
                                         max={data.request_type === 'fullday' ? undefined : data.start_date}
                                         value={data.end_date}
-                                        onChange={(value) => setData('end_date', value)}
+                                        onChange={(value) => {
+                                            setData('end_date', value);
+                                            clearErrors('start_date', 'end_date', 'total_days');
+                                        }}
                                         required
                                     />
                                     {errors.end_date && (
@@ -512,17 +720,28 @@ export default function LeaveRequestsCreate({
                                         id={totalDaysId}
                                         type="number"
                                         step="0.5"
-                                        min="0.5"
+                                        min="0"
                                         placeholder="e.g. 1 or 0.5"
                                         value={data.total_days}
+                                        readOnly={data.request_type === 'fullday'}
                                         disabled={data.request_type !== 'fullday'}
-                                        onChange={(e) => setData('total_days', e.target.value)}
+                                        onChange={(e) => {
+                                            setData('total_days', e.target.value);
+                                            clearErrors('total_days', 'certificate', 'handover_person_id', 'handover_description');
+                                        }}
                                     />
                                     {errors.total_days && (
                                         <p className="text-sm text-destructive">{errors.total_days}</p>
                                     )}
                                 </div>
                             </div>
+
+                            {hasApplicantOverlap && (
+                                <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                                    <span>This employee already has an applied or approved leave request overlapping these dates.</span>
+                                </div>
+                            )}
 
                             {/* Status Option for HR */}
                             <div className="space-y-2">
@@ -578,7 +797,7 @@ export default function LeaveRequestsCreate({
                             </div>
 
                             {/* Work Handover Section */}
-                            {(requiresHandover || Boolean(data.handover_person_id)) && (
+                            {requiresHandover && (
                                 <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-5">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
@@ -609,12 +828,16 @@ export default function LeaveRequestsCreate({
                                             id={handoverPersonSelectId}
                                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                             value={data.handover_person_id}
-                                            onChange={(e) => setData('handover_person_id', e.target.value)}
+                                            onChange={(e) => {
+                                                setData('handover_person_id', e.target.value);
+                                                clearErrors('handover_person_id');
+                                            }}
                                             required={requiresHandover}
                                         >
                                             <option value="">Select colleague to handover work to...</option>
                                             {candidateHandoverEmployees.map((emp) => {
                                                 const onLeave = isEmployeeOnLeave(emp.id);
+
                                                 return (
                                                     <option key={emp.id} value={emp.id} disabled={onLeave}>
                                                         {emp.user?.name ?? `Employee #${emp.id}`}
@@ -650,7 +873,10 @@ export default function LeaveRequestsCreate({
                                             rows={3}
                                             placeholder="Detail active tasks, pending approvals, and primary contact coverage during your leave..."
                                             value={data.handover_description}
-                                            onChange={(e) => setData('handover_description', e.target.value)}
+                                            onChange={(e) => {
+                                                setData('handover_description', e.target.value);
+                                                clearErrors('handover_description');
+                                            }}
                                             required={requiresHandover}
                                         />
                                         {errors.handover_description && (
@@ -661,31 +887,32 @@ export default function LeaveRequestsCreate({
                             )}
 
                             {/* Document / Certificate Attachment */}
-                            <div className="space-y-2">
-                                <Label htmlFor={certificateId} className="flex items-center gap-1.5">
-                                    <FileUp className="size-4 text-muted-foreground" />
-                                    Attachment / Certificate
-                                    {requiresAttachment && (
-                                        <span className="text-destructive">*</span>
+                            {requiresAttachment && (
+                                <div className="space-y-2">
+                                    <Label htmlFor={certificateId} className="flex items-center gap-1.5">
+                                        <FileUp className="size-4 text-muted-foreground" />
+                                        Attachment / Certificate <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Input
+                                        ref={certificateInputRef}
+                                        id={certificateId}
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                        required
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0] || null;
+                                            setData('certificate', file);
+                                            clearErrors('certificate');
+                                        }}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Accepted formats: PDF, JPG, PNG, DOC, DOCX up to 10MB.
+                                    </p>
+                                    {errors.certificate && (
+                                        <p className="text-sm text-destructive">{errors.certificate}</p>
                                     )}
-                                </Label>
-                                <Input
-                                    id={certificateId}
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                    required={requiresAttachment}
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0] || null;
-                                        setData('certificate', file);
-                                    }}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Accepted formats: PDF, JPG, PNG, DOC, DOCX up to 10MB.
-                                </p>
-                                {errors.certificate && (
-                                    <p className="text-sm text-destructive">{errors.certificate}</p>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
                             {/* Action Buttons */}
                             <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">

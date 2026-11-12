@@ -157,17 +157,20 @@ test('employee leave type without approval is auto-approved and deducts balance 
 
     $response = $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $leaveType->id,
-        'start_date' => '2026-12-10',
-        'end_date' => '2026-12-11',
+        'start_date' => '2026-12-11',
+        'end_date' => '2026-12-14',
         'request_type' => 'fullday',
-        'total_days' => 2,
+        'total_days' => 4,
     ]);
 
     $response->assertCreated()
         ->assertJsonPath('data.request_type', 'fullday')
+        ->assertJsonPath('data.total_days', 2)
         ->assertJsonPath('data.status', 'approved');
 
     $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $leaveRequest->total_days)->toBe(2.0);
+
     $history = DB::table('leave_histories')
         ->where('leave_request_id', $leaveRequest->id)
         ->first();
