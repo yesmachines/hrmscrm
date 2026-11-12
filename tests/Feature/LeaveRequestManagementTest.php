@@ -393,8 +393,10 @@ test('hr leave request documents and handover follow the policy duration thresho
             ->component('leave-requests/edit')
             ->where('leaveRequest.leave_type.policy.requires_document_after_days', 2)
             ->where('leaveRequest.leave_type.policy.requires_weekend_document', true)
+            ->where('leaveRequest.leave_type.policy.annual_limit', 12)
             ->where('leaveTypes', fn ($leaveTypes) => collect($leaveTypes)->contains(
                 fn ($leaveTypeData) => $leaveTypeData['id'] === $leaveType->id
+                    && $leaveTypeData['policies'][0]['annual_limit'] === 12
                     && $leaveTypeData['policies'][0]['requires_weekend_document'] === true,
             ))
         );

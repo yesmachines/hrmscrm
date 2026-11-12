@@ -683,13 +683,24 @@ export default function LeaveRequestsEdit({
                                         No balance record found for this employee and leave type.
                                     </p>
                                 )}
-                                {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined && (
-                                    <div className="mt-3 flex justify-between border-t border-border pt-3 text-xs">
-                                        <span className="text-muted-foreground">Policy annual limit</span>
-                                        <span className="font-medium text-foreground">{selectedPolicy.annual_limit} days</span>
-                                    </div>
-                                )}
                             </div>
+
+                            {selectedLeaveType && (
+                                <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
+                                    <h4 className="text-sm font-semibold text-foreground">
+                                        Policy Annual Limit
+                                    </h4>
+                                    {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined ? (
+                                        <p className="mt-2 text-sm text-muted-foreground">
+                                            {selectedPolicy.annual_limit} days per year
+                                        </p>
+                                    ) : (
+                                        <p className="mt-2 text-sm text-muted-foreground">
+                                            No annual limit configured for this organisation.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Attachments / Certificate */}
                             {(requiresAttachment || hasExistingAttachment) && (

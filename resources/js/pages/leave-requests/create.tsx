@@ -1023,12 +1023,6 @@ export default function LeaveRequestsCreate({
                                             {selectedLeaveType.is_paid ? 'Paid Leave' : 'Unpaid Leave'}
                                         </span>
                                     </div>
-                                    {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined && (
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-muted-foreground">Policy annual limit:</span>
-                                            <span className="font-medium text-foreground">{selectedPolicy.annual_limit} days</span>
-                                        </div>
-                                    )}
                                     {requiresAttachment && (
                                         <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 p-2 rounded mt-2">
                                             <ShieldAlert className="size-3.5 shrink-0" />
@@ -1038,6 +1032,23 @@ export default function LeaveRequestsCreate({
                                 </div>
                             )}
                         </div>
+
+                        {selectedLeaveType && (
+                            <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
+                                <h3 className="text-sm font-semibold text-foreground">
+                                    Policy Annual Limit
+                                </h3>
+                                {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined ? (
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                        {selectedPolicy.annual_limit} days per year
+                                    </p>
+                                ) : (
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                        No annual limit configured for this organisation.
+                                    </p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Audit Note */}
                         <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-xs text-blue-900 flex items-start gap-2.5">

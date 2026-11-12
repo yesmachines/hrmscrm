@@ -130,9 +130,14 @@ test('authenticated users can manage leave types and leave policies', function (
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('leave-policies/show')
+            ->where('leavePolicy.annual_limit', 24)
+            ->where('leavePolicy.allow_once', 1)
+            ->where('leavePolicy.allow_balance', 0)
+            ->where('leavePolicy.requires_document_after_days', 3)
             ->where('leavePolicy.carry_forward_weeks', 8)
             ->where('leavePolicy.requires_attachment', 1)
             ->where('leavePolicy.requires_handover', 1)
+            ->where('leavePolicy.exclude_rules', ['weekends' => true])
         );
 
     $this->actingAs($admin)

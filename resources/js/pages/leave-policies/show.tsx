@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { Head, Link, setLayoutProps } from '@inertiajs/react';
+import type { ReactNode } from 'react';
 import LeavePolicyController from '@/actions/App/Http/Controllers/Leave/LeavePolicyController';
 import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
@@ -10,6 +10,9 @@ type LeavePolicy = {
     id: number;
     leave_type_id: number;
     organisation_id: number;
+    annual_limit: number | null;
+    allow_once: number;
+    allow_balance: number;
     requires_document_after_days: number | null;
     requires_weekend_document: number;
     requires_handover: number;
@@ -19,6 +22,7 @@ type LeavePolicy = {
     requires_attachment: number;
     probation_applicable: number;
     minimum_service_months: number | null;
+    exclude_rules: unknown[] | Record<string, unknown> | null;
     tiers: {
         id: number;
         from_day: number;
@@ -137,6 +141,22 @@ export default function LeavePoliciesShow({
                         value={leavePolicy.organisation?.name}
                     />
                     <Detail
+                        label="Annual limit"
+                        value={
+                            leavePolicy.annual_limit === null
+                                ? null
+                                : `${leavePolicy.annual_limit} days`
+                        }
+                    />
+                    <Detail
+                        label="Allow once"
+                        value={yesNo(leavePolicy.allow_once)}
+                    />
+                    <Detail
+                        label="Allow balance"
+                        value={yesNo(leavePolicy.allow_balance)}
+                    />
+                    <Detail
                         label="Requires document after days"
                         value={leavePolicy.requires_document_after_days}
                     />
@@ -167,6 +187,14 @@ export default function LeavePoliciesShow({
                     <Detail
                         label="Probation applicable"
                         value={yesNo(leavePolicy.probation_applicable)}
+                    />
+                    <Detail
+                        label="Exclude rules"
+                        value={
+                            leavePolicy.exclude_rules === null
+                                ? null
+                                : JSON.stringify(leavePolicy.exclude_rules)
+                        }
                     />
                     <Detail label="Remarks" value={leavePolicy.remarks} />
                 </Section>
