@@ -117,6 +117,8 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('events', EventController::class);
 
     // Rewards Module
+    Route::get('rewards/template', [RewardController::class, 'downloadTemplate'])->name('rewards.template');
+    Route::post('rewards/bulk-import', [RewardController::class, 'bulkImport'])->name('rewards.bulk-import');
     Route::get('rewards/{reward}/download-form', [RewardController::class, 'downloadForm'])->name('rewards.download-form');
     Route::get('rewards/{reward}/download-attachment', [RewardController::class, 'downloadAttachment'])->name('rewards.download-attachment');
     Route::post('rewards/{reward}/status', [RewardController::class, 'updateStatus'])->name('rewards.update-status');

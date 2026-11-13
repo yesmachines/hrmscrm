@@ -4,6 +4,7 @@ import {
     Award,
     Calendar,
     CheckCircle2,
+    ChevronDown,
     Clock,
     DollarSign,
     Download,
@@ -29,6 +30,14 @@ import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Dialog,
     DialogContent,
@@ -87,9 +96,11 @@ interface RewardItem {
     category_id: number;
     submitted_by: number | null;
     amount: number | string;
+    currency?: string;
     status: 'pending' | 'approved' | 'paid' | 'rejected';
     description: string;
     document_path: string | null;
+    document_file?: string | null;
     submitted_date: string;
     created_at: string;
     updated_at: string;
@@ -126,6 +137,7 @@ interface Props {
         date_filter?: string;
         search?: string;
     };
+    isHrOrFinance?: boolean;
 }
 
 export default function RewardsIndex({
@@ -134,23 +146,31 @@ export default function RewardsIndex({
     categories,
     employees,
     filters,
+    isHrOrFinance = false,
 }: Props) {
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
     const [statusFilter, setStatusFilter] = useState(filters.status || 'all');
     const [categoryFilter, setCategoryFilter] = useState(filters.category_id || 'all');
     const [dateFilter, setDateFilter] = useState(filters.date_filter || 'all');
 
-    // Dialog state for Apply / Nominate Reward Claim
+    // Dialog state for Add / Nominate Reward Claim
     const [applyDialogOpen, setApplyDialogOpen] = useState(false);
     const [formCategoryId, setFormCategoryId] = useState('');
     const [formSubmittedBy, setFormSubmittedBy] = useState('');
     const [formAmount, setFormAmount] = useState('');
+    const [formCurrency, setFormCurrency] = useState('AED');
+    const [formStatus, setFormStatus] = useState<'pending' | 'approved' | 'paid'>('pending');
+    const [formSubmittedDate, setFormSubmittedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [formComments, setFormComments] = useState('');
     const [formDescription, setFormDescription] = useState('');
     const [formDocument, setFormDocument] = useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Dialog state for Claim Details & Approval Audit Trail
     const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+    const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
     const [selectedReward, setSelectedReward] = useState<RewardItem | null>(null);
     const [actionComment, setActionComment] = useState('');
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -185,8 +205,32 @@ export default function RewardsIndex({
         setFormCategoryId('');
         setFormSubmittedBy('');
         setFormAmount('');
+        setFormCurrency('AED');
+        setFormStatus('pending');
+        setFormSubmittedDate(new Date().toISOString().split('T')[0]);
+        setFormComments('');
         setFormDescription('');
         setFormDocument(null);
+    };
+
+    const handleBulkImport = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!importFile) return;
+
+        setIsImporting(true);
+        const formData = new FormData();
+        formData.append('file', importFile);
+
+        router.post('/rewards/bulk-import', formData, {
+            onSuccess: () => {
+                setIsImporting(false);
+                setImportDialogOpen(false);
+                setImportFile(null);
+            },
+            onError: () => {
+                setIsImporting(false);
+            },
+        });
     };
 
     const handleApplyClaim = (e: React.FormEvent) => {
@@ -199,6 +243,14 @@ export default function RewardsIndex({
             formData.append('submitted_by', formSubmittedBy);
         }
         formData.append('amount', formAmount);
+        formData.append('currency', formCurrency);
+        formData.append('status', formStatus);
+        if (formSubmittedDate) {
+            formData.append('submitted_date', formSubmittedDate);
+        }
+        if (formComments) {
+            formData.append('comments', formComments);
+        }
         formData.append('description', formDescription);
         if (formDocument) {
             formData.append('document', formDocument);
@@ -260,13 +312,17 @@ export default function RewardsIndex({
         }
     };
 
-    const formatCurrency = (val: number | string) => {
+    const formatCurrency = (val: number | string, curr: string = 'AED') => {
         const num = Number(val) || 0;
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-            maximumFractionDigits: 2,
-        }).format(num);
+        try {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: curr || 'AED',
+                maximumFractionDigits: 2,
+            }).format(num);
+        } catch {
+            return `${curr} ${num.toFixed(2)}`;
+        }
     };
 
     const getStatusBadge = (status: string) => {
@@ -317,11 +373,58 @@ export default function RewardsIndex({
                             description="Reward eligible team members, track nomination claims, disburse incentives, and view complete audit history"
                         />
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                        {isHrOrFinance && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="gap-2 shadow-2xs">
+                                        <FileSpreadsheet className="size-4 text-emerald-600" />
+                                        <span>Import & Template</span>
+                                        <ChevronDown className="size-3.5 text-muted-foreground" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                                        Bulk Operations
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuItem
+                                        onClick={() => setImportDialogOpen(true)}
+                                        className="gap-2 cursor-pointer"
+                                    >
+                                        <UploadCloud className="size-4 text-primary" />
+                                        <span>Bulk Import Rewards</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                                        Download Formats
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuItem asChild>
+                                        <a
+                                            href="/rewards/template?format=excel"
+                                            download="rewards_bulk_import_template.xls"
+                                            className="gap-2 cursor-pointer flex items-center"
+                                        >
+                                            <FileSpreadsheet className="size-4 text-emerald-600" />
+                                            <span>Sample Excel (.xls)</span>
+                                        </a>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                        <a
+                                            href="/rewards/template?format=csv"
+                                            download="rewards_bulk_import_template.csv"
+                                            className="gap-2 cursor-pointer flex items-center"
+                                        >
+                                            <Download className="size-4 text-muted-foreground" />
+                                            <span>Sample CSV (.csv)</span>
+                                        </a>
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
                         <Link href="/reward-categories">
-                            <Button variant="outline" className="gap-2">
-                                <FolderTree className="size-4" />
-                                Reward Categories
+                            <Button variant="outline" className="gap-2 shadow-2xs">
+                                <FolderTree className="size-4 text-muted-foreground" />
+                                <span>Reward Categories</span>
                             </Button>
                         </Link>
                         <Button
@@ -329,10 +432,10 @@ export default function RewardsIndex({
                                 resetClaimForm();
                                 setApplyDialogOpen(true);
                             }}
-                            className="gap-2 shadow-sm"
+                            className="gap-2 shadow-sm font-medium"
                         >
                             <Plus className="size-4" />
-                            Apply for Reward
+                            <span>{isHrOrFinance ? 'Add / Record Reward' : 'Apply for Reward'}</span>
                         </Button>
                     </div>
                 </div>
@@ -635,7 +738,7 @@ export default function RewardsIndex({
                                                 </div>
                                             </td>
                                             <td className="px-5 py-3.5 text-right font-semibold text-foreground">
-                                                {formatCurrency(reward.amount)}
+                                                {formatCurrency(reward.amount, reward.currency)}
                                             </td>
                                             <td className="px-5 py-3.5 text-xs text-muted-foreground">
                                                 {formatDate(reward.submitted_date)}
@@ -743,109 +846,180 @@ export default function RewardsIndex({
                 </div>
             </div>
 
-            {/* Modal: Apply / Nominate for Reward */}
+            {/* Modal: Add / Record Reward */}
             <Dialog open={applyDialogOpen} onOpenChange={setApplyDialogOpen}>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-2xl sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Award className="size-5 text-primary" />
-                            Apply for Reward Claim
+                            Add / Record Reward
                         </DialogTitle>
                         <DialogDescription>
-                            Submit a reward claim for yourself or nominate an eligible team member.
+                            Record an existing reward for an employee or submit a new reward claim.
                         </DialogDescription>
                     </DialogHeader>
 
                     <form onSubmit={handleApplyClaim} className="space-y-4 pt-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="category_id">
-                                Reward Category <span className="text-destructive">*</span>
-                            </Label>
-                            <Select
-                                value={formCategoryId}
-                                onValueChange={setFormCategoryId}
-                                required
-                            >
-                                <SelectTrigger id="category_id">
-                                    <SelectValue placeholder="Select reward type / category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {categories.map((cat) => (
-                                        <SelectItem key={cat.id} value={String(cat.id)}>
-                                            {cat.reward_name} ({cat.short_code})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        {/* Row 1: Category & Employee */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="category_id">
+                                    Reward Category <span className="text-destructive">*</span>
+                                </Label>
+                                <Select
+                                    value={formCategoryId}
+                                    onValueChange={setFormCategoryId}
+                                    required
+                                >
+                                    <SelectTrigger id="category_id">
+                                        <SelectValue placeholder="Select reward category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {categories.map((cat) => (
+                                            <SelectItem key={cat.id} value={String(cat.id)}>
+                                                {cat.reward_name} ({cat.short_code})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="submitted_by">Employee (Awarded To)</Label>
+                                <Select
+                                    value={formSubmittedBy}
+                                    onValueChange={setFormSubmittedBy}
+                                >
+                                    <SelectTrigger id="submitted_by">
+                                        <SelectValue placeholder="Current User (Default)" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Current User</SelectItem>
+                                        {employees.map((emp) => (
+                                            <SelectItem key={emp.id} value={String(emp.id)}>
+                                                {emp.user?.name || `Employee #${emp.emp_num}`}
+                                                {emp.emp_num ? ` (${emp.emp_num})` : ''}
+                                                {emp.designation ? ` - ${emp.designation}` : ''}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <Label htmlFor="submitted_by">Employee Nominated / Claiming</Label>
-                            <Select
-                                value={formSubmittedBy}
-                                onValueChange={setFormSubmittedBy}
-                            >
-                                <SelectTrigger id="submitted_by">
-                                    <SelectValue placeholder="Current Logged In Employee (Default)" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Current User</SelectItem>
-                                    {employees.map((emp) => (
-                                        <SelectItem key={emp.id} value={String(emp.id)}>
-                                            {emp.user?.name || `Employee #${emp.emp_num}`}
-                                            {emp.emp_num ? ` (${emp.emp_num})` : ''}
-                                            {emp.designation ? ` - ${emp.designation}` : ''}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        {/* Row 2: Status & Award Date */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="reward_status">
+                                    Reward Status <span className="text-destructive">*</span>
+                                </Label>
+                                <Select
+                                    value={formStatus}
+                                    onValueChange={(val: 'pending' | 'approved' | 'paid') => setFormStatus(val)}
+                                    required
+                                >
+                                    <SelectTrigger id="reward_status">
+                                        <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="approved">Approved (Existing Reward)</SelectItem>
+                                        <SelectItem value="paid">Paid (Existing Reward Processed)</SelectItem>
+                                        <SelectItem value="pending">Pending Approval (New Claim)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="submitted_date">
+                                    Award / Granted Date <span className="text-destructive">*</span>
+                                </Label>
+                                <Input
+                                    id="submitted_date"
+                                    type="date"
+                                    value={formSubmittedDate}
+                                    onChange={(e) => setFormSubmittedDate(e.target.value)}
+                                    required
+                                />
+                            </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <Label htmlFor="amount">
-                                Reward Amount (₹) <span className="text-destructive">*</span>
-                            </Label>
-                            <Input
-                                id="amount"
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                placeholder="e.g. 5000"
-                                value={formAmount}
-                                onChange={(e) => setFormAmount(e.target.value)}
-                                required
-                            />
+                        {/* Row 3: Amount with Currency & Attachment */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="amount">
+                                    Reward Amount <span className="text-destructive">*</span>
+                                </Label>
+                                <div className="flex">
+                                    <Select
+                                        value={formCurrency}
+                                        onValueChange={setFormCurrency}
+                                    >
+                                        <SelectTrigger id="currency" className="w-[95px] rounded-r-none border-r-0 focus:z-10 shrink-0">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="AED">AED</SelectItem>
+                                            <SelectItem value="SAR">SAR</SelectItem>
+                                            <SelectItem value="INR">INR</SelectItem>
+                                            <SelectItem value="USD">USD</SelectItem>
+                                            <SelectItem value="EUR">EUR</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Input
+                                        id="amount"
+                                        type="number"
+                                        step="0.01"
+                                        min="0.01"
+                                        placeholder="5,000"
+                                        value={formAmount}
+                                        onChange={(e) => setFormAmount(e.target.value)}
+                                        className="rounded-l-none focus:z-10 flex-1"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="document">Supporting Document / Proof</Label>
+                                <Input
+                                    id="document"
+                                    type="file"
+                                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                                    className="cursor-pointer file:cursor-pointer text-xs"
+                                    onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                            setFormDocument(e.target.files[0]);
+                                        }
+                                    }}
+                                />
+                            </div>
                         </div>
 
+                        {/* Row 4: Justification / Nomination Details */}
                         <div className="space-y-1.5">
                             <Label htmlFor="description">
                                 Justification / Nomination Details <span className="text-destructive">*</span>
                             </Label>
                             <Textarea
                                 id="description"
-                                rows={3}
-                                placeholder="Describe the achievement, project impact, milestone, or reason for this reward nomination..."
+                                rows={2}
+                                placeholder="Describe the achievement, project impact, milestone, or reason for this reward..."
                                 value={formDescription}
                                 onChange={(e) => setFormDescription(e.target.value)}
+                                className="resize-none"
                                 required
                             />
                         </div>
 
+                        {/* Row 5: Audit Notes / Remarks */}
                         <div className="space-y-1.5">
-                            <Label htmlFor="document">Supporting Document / Proof (Optional)</Label>
+                            <Label htmlFor="comments">Audit Notes / Remarks (Optional)</Label>
                             <Input
-                                id="document"
-                                type="file"
-                                accept=".pdf,.png,.jpg,.jpeg,.webp"
-                                onChange={(e) => {
-                                    if (e.target.files && e.target.files[0]) {
-                                        setFormDocument(e.target.files[0]);
-                                    }
-                                }}
+                                id="comments"
+                                placeholder="e.g. Recorded as existing company annual award."
+                                value={formComments}
+                                onChange={(e) => setFormComments(e.target.value)}
                             />
-                            <p className="text-[11px] text-muted-foreground">
-                                Upload certificates, client testimonials, emails, or scorecards (PDF, JPG, PNG up to 10MB).
-                            </p>
                         </div>
 
                         <DialogFooter className="pt-2">
@@ -858,7 +1032,17 @@ export default function RewardsIndex({
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={isSubmitting || !formCategoryId || !formAmount || !formDescription}>
-                                {isSubmitting ? 'Submitting Claim...' : 'Submit Claim'}
+                                {isSubmitting ? (
+                                    <>
+                                        <RefreshCw className="size-4 animate-spin mr-1.5" />
+                                        Submitting...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Plus className="size-4 mr-1.5" />
+                                        Save Reward
+                                    </>
+                                )}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -907,7 +1091,7 @@ export default function RewardsIndex({
                                     <div>
                                         <span className="text-xs text-muted-foreground uppercase font-semibold">Amount</span>
                                         <p className="text-base font-bold text-primary mt-0.5">
-                                            {formatCurrency(selectedReward.amount)}
+                                            {formatCurrency(selectedReward.amount, selectedReward.currency)}
                                         </p>
                                     </div>
                                     <div>
@@ -1088,6 +1272,96 @@ export default function RewardsIndex({
                             </DialogFooter>
                         </>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk Import Dialog */}
+            <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <FileSpreadsheet className="size-5 text-emerald-600" />
+                            Bulk Import Employee Rewards
+                        </DialogTitle>
+                        <DialogDescription>
+                            Upload a completed CSV file to import multiple rewards in bulk. You can download the pre-formatted template with guidelines.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={handleBulkImport} className="space-y-4 pt-2">
+                        <div className="rounded-lg border border-dashed border-border p-4 bg-muted/20 text-center">
+                            <UploadCloud className="mx-auto size-8 text-muted-foreground/70 mb-2" />
+                            <p className="text-sm font-medium">Select CSV Spreadsheet</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+                                Maximum file size: 5MB (.csv, .txt)
+                            </p>
+                            <Input
+                                type="file"
+                                accept=".csv,text/csv"
+                                required
+                                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                                className="cursor-pointer"
+                            />
+                        </div>
+
+                        <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1.5 text-muted-foreground">
+                            <p className="font-semibold text-foreground flex items-center gap-1.5">
+                                <Download className="size-3.5 text-primary" />
+                                Instructions & Columns:
+                            </p>
+                            <p>• <strong>employee_identifier</strong>: Employee Code (e.g. EMP001) or work email.</p>
+                            <p>• <strong>category</strong>: Name of the reward category (e.g. Employee of the Month).</p>
+                            <p>• <strong>amount</strong> & <strong>currency</strong>: Reward amount (e.g. 1500) and currency (AED).</p>
+                            <p>• <strong>status</strong>: pending, approved, or paid (defaults to approved).</p>
+                            <div className="pt-2 flex flex-wrap items-center gap-3">
+                                <a
+                                    href="/rewards/template?format=excel"
+                                    download="rewards_bulk_import_template.xls"
+                                    className="text-emerald-600 hover:text-emerald-700 hover:underline font-semibold inline-flex items-center gap-1.5"
+                                >
+                                    <FileSpreadsheet className="size-3.5" />
+                                    Download Sample Excel (.xls) &rarr;
+                                </a>
+                                <span className="text-muted-foreground/40">•</span>
+                                <a
+                                    href="/rewards/template?format=csv"
+                                    download="rewards_bulk_import_template.csv"
+                                    className="text-primary hover:underline font-medium inline-flex items-center gap-1"
+                                >
+                                    <Download className="size-3.5" />
+                                    Download CSV &rarr;
+                                </a>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="pt-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setImportDialogOpen(false)}
+                                disabled={isImporting}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={!importFile || isImporting}
+                                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                                {isImporting ? (
+                                    <>
+                                        <RefreshCw className="size-4 animate-spin" />
+                                        Importing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <UploadCloud className="size-4" />
+                                        Upload & Import
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </>

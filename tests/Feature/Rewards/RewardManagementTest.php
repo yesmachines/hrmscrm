@@ -2,6 +2,8 @@
 
 use App\Models\Reward;
 use App\Models\RewardCategory;
+use App\Models\SalesCrm\Employee;
+use Illuminate\Http\UploadedFile;
 
 test('authenticated hr or admin users can view rewards page with summary metrics', function () {
     $user = createHrmsLoginUser('admin');
@@ -232,4 +234,146 @@ test('rewards list can be filtered by status, category, and date', function () {
 
     $responseDate = $this->get(route('rewards.index', ['date_filter' => 'today']));
     $responseDate->assertOk();
+});
+
+test('hr or finance user can add an existing approved reward for an employee via web', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $this->actingAs($hrUser);
+
+    $employeeUser = createHrmsLoginUser('admin');
+    $employee = Employee::query()->create([
+        'user_id' => $employeeUser->id,
+        'emp_num' => 'EMP-'.uniqid(),
+        'designation' => 'Senior Developer',
+        'division' => 'Corporate',
+        'status' => 1,
+    ]);
+
+    $category = RewardCategory::factory()->create(['reward_name' => 'Annual Performance', 'short_code' => 'PERF']);
+
+    $pastDate = '2025-12-15';
+    $response = $this->post(route('rewards.store'), [
+        'category_id' => $category->id,
+        'submitted_by' => $employee->id,
+        'amount' => 12000,
+        'currency' => 'AED',
+        'status' => 'approved',
+        'submitted_date' => $pastDate,
+        'comments' => 'Annual recognition awarded at townhall.',
+        'description' => 'Exemplary project delivery and mentoring across teams.',
+    ]);
+
+    $response->assertRedirect(route('rewards.index'));
+
+    $this->assertDatabaseHas('rewards', [
+        'category_id' => $category->id,
+        'submitted_by' => $employee->id,
+        'amount' => 12000,
+        'currency' => 'AED',
+        'status' => 'approved',
+    ]);
+
+    $reward = Reward::latest('id')->first();
+    expect($reward->submitted_date->format('Y-m-d'))->toBe($pastDate);
+
+    $this->assertDatabaseHas('reward_approval_statuses', [
+        'reward_id' => $reward->id,
+        'status' => 'approved',
+        'done_by' => $hrUser->id,
+        'comments' => 'Annual recognition awarded at townhall.',
+    ]);
+});
+
+test('finance user can directly record an existing paid reward for an employee', function () {
+    $financeUser = createHrmsLoginUser('finance');
+    $this->actingAs($financeUser);
+
+    $employeeUser = createHrmsLoginUser('admin');
+    $employee = Employee::query()->create([
+        'user_id' => $employeeUser->id,
+        'emp_num' => 'EMP-'.uniqid(),
+        'designation' => 'Sales Executive',
+        'division' => 'Sales',
+        'status' => 1,
+    ]);
+
+    $category = RewardCategory::factory()->create(['reward_name' => 'Sales Milestone', 'short_code' => 'SALE']);
+
+    $response = $this->post(route('rewards.store'), [
+        'category_id' => $category->id,
+        'submitted_by' => $employee->id,
+        'amount' => 5000,
+        'currency' => 'AED',
+        'status' => 'paid',
+        'comments' => 'Paid via payroll bank transfer.',
+        'description' => 'Achieved 150% of annual quota.',
+    ]);
+
+    $response->assertRedirect(route('rewards.index'));
+
+    $reward = Reward::latest('id')->first();
+    expect($reward->status)->toBe('paid');
+
+    $this->assertDatabaseHas('reward_approval_statuses', [
+        'reward_id' => $reward->id,
+        'status' => 'paid',
+        'done_by' => $financeUser->id,
+        'comments' => 'Paid via payroll bank transfer.',
+    ]);
+});
+
+test('hr user can download bulk import csv and excel template via web', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $this->actingAs($hrUser);
+
+    // Default or explicit excel format
+    $responseExcel = $this->get(route('rewards.template', ['format' => 'excel']));
+    $responseExcel->assertOk()
+        ->assertHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8');
+    expect($responseExcel->getContent())->toContain('Workbook')
+        ->toContain('Reward_Import_Template');
+
+    // CSV format
+    $responseCsv = $this->get(route('rewards.template', ['format' => 'csv']));
+    $responseCsv->assertOk()
+        ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+    expect($responseCsv->getContent())->toContain('employee_identifier,category,amount,currency,award_date,status,description,comments');
+});
+
+test('hr user can bulk import rewards via csv file upload on web', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $this->actingAs($hrUser);
+
+    $employeeUser = createHrmsLoginUser('admin');
+    $employee = Employee::query()->create([
+        'user_id' => $employeeUser->id,
+        'emp_num' => 'EMP-'.uniqid(),
+        'designation' => 'Support Engineer',
+        'division' => 'Operations',
+        'status' => 1,
+    ]);
+
+    $category = RewardCategory::factory()->create([
+        'reward_name' => 'Quarterly Hero',
+        'status' => 1,
+    ]);
+
+    $csvContent = "employee_identifier,category,amount,currency,award_date,status,description,comments\n"
+        ."{$employee->emp_num},Quarterly Hero,1800,AED,2026-11-01,approved,Resolved 500 tickets with 99% CSAT,Quarterly review\n";
+
+    $file = UploadedFile::fake()->createWithContent('rewards_batch.csv', $csvContent);
+
+    $response = $this->post(route('rewards.bulk-import'), [
+        'file' => $file,
+    ]);
+
+    $response->assertRedirect(route('rewards.index'));
+    $response->assertSessionHas('success');
+
+    $this->assertDatabaseHas('rewards', [
+        'submitted_by' => $employee->id,
+        'amount' => 1800,
+        'status' => 'approved',
+        'description' => 'Resolved 500 tickets with 99% CSAT',
+    ]);
 });

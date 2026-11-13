@@ -182,9 +182,12 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
 
     // Rewards
     Route::get('rewards/categories', [RewardController::class, 'categories'])->name('api.v1.hr.rewards.categories');
-    Route::get('rewards', [RewardController::class, 'index'])->name('api.v1.hr.rewards.index');
-    Route::post('rewards', [RewardController::class, 'store'])->name('api.v1.hr.rewards.store');
-    Route::get('rewards/{id}', [RewardController::class, 'show'])->name('api.v1.hr.rewards.show');
+    Route::get('rewards/template', [RewardController::class, 'downloadTemplate'])->name('api.v1.hr.rewards.template');
+    Route::post('rewards/bulk-import', [RewardController::class, 'bulkImport'])->name('api.v1.hr.rewards.bulk-import');
+    Route::get('rewards', [RewardController::class, 'hrIndex'])->name('api.v1.hr.rewards.index');
+    Route::post('rewards', [RewardController::class, 'hrStore'])->name('api.v1.hr.rewards.store');
+    Route::get('rewards/{id}', [RewardController::class, 'hrShow'])->name('api.v1.hr.rewards.show');
+    Route::post('rewards/{id}/status', [RewardController::class, 'updateHrStatus'])->name('api.v1.hr.rewards.status');
 
     // Socials
     Route::get('socials', [SocialController::class, 'index'])->name('api.v1.hr.socials.index');

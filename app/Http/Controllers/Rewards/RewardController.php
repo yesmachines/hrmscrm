@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Reward;
 use App\Models\RewardCategory;
 use App\Models\SalesCrm\Employee;
+use App\Services\RewardBulkImportService;
 use App\Support\SalesCrmRoles;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -113,17 +114,20 @@ class RewardController extends Controller
             ->orderBy('emp_num')
             ->get(['id', 'user_id', 'emp_num', 'designation']);
 
+        $isHrOrFinance = $request->user() ? SalesCrmRoles::userHasAnyRole((int) $request->user()->id, ['hr', 'admin', 'finance']) : false;
+
         return Inertia::render('rewards/index', [
             'summary' => $summary,
             'rewards' => $rewards,
             'categories' => $categories,
             'employees' => $employees,
             'filters' => $request->only(['status', 'category_id', 'date_filter', 'search']),
+            'isHrOrFinance' => $isHrOrFinance,
         ]);
     }
 
     /**
-     * Store a newly submitted reward claim.
+     * Store a newly submitted reward claim or existing reward.
      */
     public function store(Request $request): RedirectResponse
     {
@@ -134,7 +138,19 @@ class RewardController extends Controller
             'currency' => ['nullable', 'string', 'max:10'],
             'description' => ['required', 'string'],
             'document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'status' => ['nullable', Rule::in(['pending', 'approved', 'paid'])],
+            'submitted_date' => ['nullable', 'date'],
+            'comments' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $status = $validated['status'] ?? 'pending';
+
+        if (in_array($status, ['approved', 'paid'], true)) {
+            $user = $request->user();
+            if (! $user || ! SalesCrmRoles::userHasAnyRole((int) $user->id, ['admin', 'hr', 'finance'])) {
+                abort(403, 'Only HR, Finance, and Admin users can add approved or paid rewards.');
+            }
+        }
 
         // Resolve employee ID
         $employeeId = $validated['submitted_by'] ?? null;
@@ -161,6 +177,10 @@ class RewardController extends Controller
             $filePath = $request->file('document')->store('rewards', 'public');
         }
 
+        $submittedDate = ! empty($validated['submitted_date'])
+            ? Carbon::parse($validated['submitted_date'])
+            : now();
+
         $reward = Reward::query()->create([
             'category_id' => $validated['category_id'],
             'submitted_by' => $employeeId,
@@ -169,20 +189,26 @@ class RewardController extends Controller
             'amount' => $validated['amount'],
             'currency' => $validated['currency'] ?? 'AED',
             'document_file' => $filePath,
-            'submitted_date' => now(),
-            'status' => 'pending',
+            'submitted_date' => $submittedDate,
+            'status' => $status,
         ]);
+
+        $defaultComment = match ($status) {
+            'paid' => 'Existing reward recorded as paid.',
+            'approved' => 'Existing reward recorded as approved.',
+            default => 'Claim applied and submitted for approval.',
+        };
 
         // Create initial history log
         $reward->approvalStatuses()->create([
             'done_by' => $request->user()?->id ?? 1,
-            'done_on' => now(),
-            'comments' => 'Claim applied and submitted for approval.',
-            'status' => 'pending',
+            'done_on' => $submittedDate,
+            'comments' => ! empty($validated['comments']) ? $validated['comments'] : $defaultComment,
+            'status' => $status,
         ]);
 
         return redirect()->route('rewards.index')
-            ->with('success', "Reward claim {$claimNo} submitted successfully.");
+            ->with('success', "Reward claim {$claimNo} recorded successfully.");
     }
 
     /**
@@ -254,6 +280,59 @@ class RewardController extends Controller
             Storage::disk('public')->path($reward->document_file),
             $reward->claim_no.'-attachment.'.pathinfo($reward->document_file, PATHINFO_EXTENSION)
         );
+    }
+
+    /**
+     * Download sample CSV or Excel template for bulk importing rewards.
+     */
+    public function downloadTemplate(Request $request, RewardBulkImportService $importService): HttpResponse
+    {
+        $format = strtolower((string) $request->query('format', 'excel'));
+
+        if ($format === 'csv') {
+            $csv = $importService->generateTemplateCsv();
+
+            return response($csv, 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="rewards_bulk_import_template.csv"',
+            ]);
+        }
+
+        $excelXml = $importService->generateTemplateExcel();
+
+        return response($excelXml, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="rewards_bulk_import_template.xls"',
+        ]);
+    }
+
+    /**
+     * Bulk import employee rewards via CSV upload.
+     */
+    public function bulkImport(Request $request, RewardBulkImportService $importService): RedirectResponse
+    {
+        $user = $request->user();
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+        ]);
+
+        try {
+            $result = $importService->importCsv($request->file('file'), $user);
+
+            if ($result['failed_count'] > 0) {
+                $errorMsg = "Imported {$result['imported_count']} records, but {$result['failed_count']} failed. First error: ".($result['errors'][0]['error'] ?? 'Unknown error');
+
+                return redirect()->route('rewards.index')->with('warning', $errorMsg);
+            }
+
+            return redirect()->route('rewards.index')
+                ->with('success', "Successfully imported all {$result['imported_count']} employee rewards.");
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('rewards.index')->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            return redirect()->route('rewards.index')->with('error', 'Bulk import failed: '.$e->getMessage());
+        }
     }
 
     /**
