@@ -39,6 +39,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.leaves.index');
         Route::get('leaves/meta', [LeaveController::class, 'meta'])->name('api.v1.leaves.meta');
+        Route::post('leaves/validate', [LeaveController::class, 'validateForm'])->name('api.v1.leaves.validate');
         Route::get('leaves/festivals', [LeaveController::class, 'festivals'])->name('api.v1.leaves.festivals');
         Route::get('leaves/holidays', [LeaveController::class, 'festivals'])->name('api.v1.leaves.holidays');
         Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.leaves.store');
@@ -133,6 +134,7 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
     // Leaves
     Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.hr.leaves.index');
     Route::get('leaves/meta', [LeaveController::class, 'meta'])->name('api.v1.hr.leaves.meta');
+    Route::post('leaves/validate', [LeaveController::class, 'validateForm'])->name('api.v1.hr.leaves.validate');
     Route::get('leaves/festivals', [LeaveController::class, 'festivals'])->name('api.v1.hr.leaves.festivals');
     Route::get('leaves/holidays', [LeaveController::class, 'festivals'])->name('api.v1.hr.leaves.holidays');
     Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.hr.leaves.store');

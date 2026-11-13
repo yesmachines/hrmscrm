@@ -309,6 +309,284 @@ test('hr leave requests enforce one-time, annual, and minimum-service policy rul
         ->assertSessionHasErrors(['leave_type_id']);
 });
 
+test('parental leave requires a child birth date within six months and stores it', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'organisation_id' => $organisation->id,
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Parental Leave',
+        'code' => 'PARENTAL',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'annual_limit' => 5,
+        'allow_balance' => false,
+        'probation_applicable' => true,
+    ]);
+    EmployeeProfile::query()->create([
+        'employee_id' => $employee->id,
+        'marital_status' => 'married',
+    ]);
+    $leaveStartDate = now()->addWeek()->startOfDay();
+    $requestData = [
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => $leaveStartDate->toDateString(),
+        'end_date' => $leaveStartDate->toDateString(),
+        'total_days' => 1,
+        'status' => 'applied',
+    ];
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), $requestData)
+        ->assertRedirect(route('leave-requests.create'));
+
+    expect(LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->exists())->toBeFalse();
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            ...$requestData,
+            'child_birth_date' => $leaveStartDate->copy()->addMonths(6)->toDateString(),
+        ])
+        ->assertRedirect(route('leave-requests.create'));
+
+    expect(LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->exists())->toBeFalse();
+
+    $childBirthDate = $leaveStartDate->copy()->addDays(3)->toDateString();
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            ...$requestData,
+            'child_birth_date' => $childBirthDate,
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->firstOrFail();
+
+    expect($leaveRequest->details()->where('field_key', 'child_birth_date')->value('field_value'))
+        ->toBe($childBirthDate);
+
+    $this->actingAs($hrUser)
+        ->withoutVite()
+        ->get(route('leave-requests.edit', $leaveRequest))
+        ->assertInertia(fn ($page) => $page
+            ->component('leave-requests/edit')
+            ->where('leaveRequest.child_birth_date', $childBirthDate));
+});
+
+test('maternity leave requires a married employee and expected due date', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'organisation_id' => $organisation->id,
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Maternity Leave',
+        'code' => 'MATERNITY',
+        'gender' => 'female',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'allow_balance' => false,
+        'probation_applicable' => true,
+    ]);
+    EmployeeProfile::query()->create([
+        'employee_id' => $employee->id,
+        'gender' => 'F',
+        'marital_status' => 'single',
+    ]);
+    $requestData = [
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => now()->addWeek()->toDateString(),
+        'end_date' => now()->addWeek()->addDay()->toDateString(),
+        'status' => 'applied',
+    ];
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), [
+            ...$requestData,
+            'due_date' => now()->addMonths(2)->toDateString(),
+        ])
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['leave_type_id']);
+
+    EmployeeProfile::query()->where('employee_id', $employee->id)->update(['marital_status' => 'married']);
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), $requestData)
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['due_date']);
+
+    $dueDate = now()->addMonths(2)->toDateString();
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            ...$requestData,
+            'due_date' => $dueDate,
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->firstOrFail();
+
+    expect($leaveRequest->details()->where('field_key', 'due_date')->value('field_value'))
+        ->toBe($dueDate);
+});
+
+test('paternity leave requires and stores a child birth date', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'organisation_id' => $organisation->id,
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Paternity Leave',
+        'code' => 'PATERNITY',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'allow_balance' => false,
+        'probation_applicable' => true,
+    ]);
+    $leaveStartDate = now()->addWeek()->startOfDay();
+    $childBirthDate = $leaveStartDate->copy()->addDays(3)->toDateString();
+    $requestData = [
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => $leaveStartDate->toDateString(),
+        'end_date' => $leaveStartDate->toDateString(),
+        'status' => 'applied',
+    ];
+
+    $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), $requestData)
+        ->assertRedirect(route('leave-requests.create'))
+        ->assertSessionHasErrors(['child_birth_date']);
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            ...$requestData,
+            'child_birth_date' => $childBirthDate,
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->firstOrFail();
+
+    expect($leaveRequest->details()->where('field_key', 'child_birth_date')->value('field_value'))
+        ->toBe($childBirthDate);
+});
+
+test('hr leave form validation endpoint returns shared eligibility errors without creating a request', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $organisation = Organisation::query()->firstOrCreate(
+        ['id' => 1],
+        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
+    );
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'organisation_id' => $organisation->id,
+        'designation' => 'Developer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Capped Leave',
+        'code' => 'VALIDATE-CAPPED',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => $organisation->id,
+        'annual_limit' => 1,
+        'allow_balance' => false,
+        'probation_applicable' => true,
+    ]);
+    LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-01-05',
+        'end_date' => '2026-01-05',
+        'request_type' => 'fullday',
+        'total_days' => 1,
+        'status' => 'applied',
+    ]);
+
+    $response = $this->actingAs($hrUser)
+        ->postJson(route('leave-requests.validate'), [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-12-01',
+            'end_date' => '2026-12-01',
+            'request_type' => 'fullday',
+        ]);
+
+    $response->assertOk()
+        ->assertJsonPath('valid', false)
+        ->assertJsonPath('errors.total_days.0', fn ($message) => str_contains($message, 'annual limit'));
+
+    expect(LeaveRequest::query()->where('employee_id', $employee->id)->count())->toBe(1);
+});
+
 test('hr leave request documents and handover follow the policy duration threshold', function () {
     Storage::fake('public');
     $hrUser = createHrmsLoginUser('hr');

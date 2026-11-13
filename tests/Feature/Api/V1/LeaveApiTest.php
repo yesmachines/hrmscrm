@@ -66,6 +66,176 @@ test('leave submission validates emergency and travel contact numbers', function
         ->assertJsonValidationErrors(['emergency_contact_no', 'travel_contact_no']);
 });
 
+test('leave validation endpoint rejects marital status and reports missing maternity due date', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Maternity Validation User',
+        'email' => 'leave.maternity-validation@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-MAT-VALIDATE',
+        'organisation_id' => 1,
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    EmployeeProfile::query()->create([
+        'employee_id' => $employee->id,
+        'gender' => 'F',
+        'marital_status' => 'single',
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Maternity Leave',
+        'code' => 'MATERNITY',
+        'gender' => 'female',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+    ]);
+    $token = $user->createToken('test')->plainTextToken;
+    $payload = [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => now()->addWeek()->toDateString(),
+        'end_date' => now()->addWeek()->addDay()->toDateString(),
+    ];
+
+    $this->withToken($token)
+        ->postJson('/api/v1/leaves/validate', $payload)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['leave_type_id']);
+
+    EmployeeProfile::query()->where('employee_id', $employee->id)->update(['marital_status' => 'married']);
+
+    $this->withToken($token)
+        ->postJson('/api/v1/leaves/validate', $payload)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['due_date']);
+
+    expect(LeaveRequest::query()->where('employee_id', $employee->id)->exists())->toBeFalse();
+});
+
+test('parental leave submission accepts an expected birth date after leave starts', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Parental Leave User',
+        'email' => 'leave.parental@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-PARENTAL-01',
+        'organisation_id' => 1,
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    EmployeeProfile::query()->create([
+        'employee_id' => $employee->id,
+        'marital_status' => 'married',
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Parental Leave',
+        'code' => 'PARENTAL',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'annual_limit' => 5,
+        'allow_balance' => false,
+    ]);
+    $leaveStartDate = now()->addWeek()->startOfDay();
+    $childBirthDate = $leaveStartDate->copy()->addDays(3)->toDateString();
+    $token = $user->createToken('test')->plainTextToken;
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => $leaveStartDate->toDateString(),
+        'end_date' => $leaveStartDate->toDateString(),
+        'request_type' => 'fullday',
+        'child_birth_date' => $leaveStartDate->copy()->addMonths(6)->toDateString(),
+    ])->assertUnprocessable();
+
+    expect(LeaveRequest::query()->where('employee_id', $employee->id)->exists())->toBeFalse();
+
+    $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => $leaveStartDate->toDateString(),
+        'end_date' => $leaveStartDate->toDateString(),
+        'request_type' => 'fullday',
+        'child_birth_date' => $childBirthDate,
+    ])->assertCreated();
+
+    $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
+
+    expect($leaveRequest->details()->where('field_key', 'child_birth_date')->value('field_value'))
+        ->toBe($childBirthDate);
+});
+
+test('paternity leave submission requires and stores child birth date', function () {
+    $user = SalesCrmUser::query()->create([
+        'name' => 'Paternity Leave User',
+        'email' => 'leave.paternity@example.com',
+        'password' => Hash::make('Password123!'),
+        'email_verified_at' => now(),
+    ]);
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-PATERNITY-01',
+        'organisation_id' => 1,
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Paternity Leave',
+        'code' => 'PATERNITY',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'organisation_id' => 1,
+        'allow_balance' => false,
+    ]);
+    $leaveStartDate = now()->addWeek()->startOfDay();
+    $token = $user->createToken('test')->plainTextToken;
+    $payload = [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => $leaveStartDate->toDateString(),
+        'end_date' => $leaveStartDate->toDateString(),
+    ];
+
+    $this->withToken($token)
+        ->postJson('/api/v1/leaves', $payload)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['child_birth_date']);
+
+    expect(LeaveRequest::query()->where('employee_id', $employee->id)->exists())->toBeFalse();
+
+    $childBirthDate = $leaveStartDate->copy()->addDays(3)->toDateString();
+    $this->withToken($token)
+        ->postJson('/api/v1/leaves', [
+            ...$payload,
+            'child_birth_date' => $childBirthDate,
+        ])
+        ->assertCreated();
+
+    $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
+    expect($leaveRequest->details()->where('field_key', 'child_birth_date')->value('field_value'))
+        ->toBe($childBirthDate);
+});
+
 test('leave submission stores half-day request type and duration', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Half Day User',
@@ -1385,7 +1555,7 @@ test('applying maternity leave fails for male employee with validation error', f
     expect($response->json('errors.leave_type_id.0'))->toContain('only applicable for female employees');
 });
 
-test('applying maternity leave succeeds for female employee', function () {
+test('applying maternity leave succeeds for married female employee and stores expected due date', function () {
     $femaleUser = SalesCrmUser::query()->create([
         'name' => 'Jane Female Applier',
         'email' => 'jane.applier@example.com',
@@ -1406,6 +1576,7 @@ test('applying maternity leave succeeds for female employee', function () {
     EmployeeProfile::query()->create([
         'employee_id' => $femaleEmployee->id,
         'gender' => 'F',
+        'marital_status' => 'married',
     ]);
 
     $maternityLeave = LeaveType::query()->create([
@@ -1437,6 +1608,9 @@ test('applying maternity leave succeeds for female employee', function () {
         'leave_type_id' => $maternityLeave->id,
         'status' => 'applied',
     ]);
+    $leaveRequest = LeaveRequest::query()->where('employee_id', $femaleEmployee->id)->firstOrFail();
+    expect($leaveRequest->details()->where('field_key', 'due_date')->value('field_value'))
+        ->toBe('2026-11-05');
 });
 
 test('applying leave fails if selected handover person is also on leave during requested dates', function () {

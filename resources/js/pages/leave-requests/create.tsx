@@ -33,10 +33,12 @@ interface EmployeeOption {
     organisation_id: number | null;
     gender?: string | null;
     religion?: string | null;
+    marital_status?: string | null;
     profile?: {
         id?: number;
         gender?: string | null;
         religion?: string | null;
+        marital_status?: string | null;
     } | null;
     department?: {
         id: number;
@@ -112,8 +114,10 @@ export default function LeaveRequestsCreate({
     const employeeListboxId = useId();
     const leaveTypeSelectId = useId();
     const requestTypeSelectId = useId();
+    const dueDateId = useId();
     const startDateId = useId();
     const endDateId = useId();
+    const childBirthDateId = useId();
     const totalDaysId = useId();
     const statusSelectId = useId();
     const remarksId = useId();
@@ -140,6 +144,8 @@ export default function LeaveRequestsCreate({
         certificate: null as File | null,
         handover_person_id: '',
         handover_description: '',
+        child_birth_date: '',
+        due_date: '',
     });
 
     const filteredEmployees = useMemo(() => {
@@ -206,12 +212,14 @@ export default function LeaveRequestsCreate({
         setData('certificate', null);
         setData('handover_person_id', '');
         setData('handover_description', '');
+        setData('child_birth_date', '');
+        setData('due_date', '');
 
         if (certificateInputRef.current) {
             certificateInputRef.current.value = '';
         }
 
-        clearErrors('certificate', 'handover_person_id', 'handover_description');
+        clearErrors('certificate', 'handover_person_id', 'handover_description', 'child_birth_date', 'due_date');
     };
 
     const selectEmployee = (employee: EmployeeOption) => {
@@ -251,6 +259,8 @@ export default function LeaveRequestsCreate({
 
         return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? null;
     }, [data.leave_type_id, availableLeaveTypes]);
+    const isMaternityLeave = selectedLeaveType?.code === 'MATERNITY';
+    const requiresChildBirthDate = ['PARENTAL', 'PATERNITY'].includes(selectedLeaveType?.code ?? '');
 
     const selectedPolicy = useMemo(() => {
         if (!selectedLeaveType || selectedEmployee?.organisation_id == null) {
@@ -268,6 +278,81 @@ export default function LeaveRequestsCreate({
         data.start_date,
         data.end_date,
     );
+    const eligibilityPayload = useMemo(() => {
+        if (!selectedEmployee || !selectedLeaveType || !data.start_date || !data.end_date) {
+            return null;
+        }
+
+        return {
+            employee_id: selectedEmployee.id,
+            leave_type_id: selectedLeaveType.id,
+            request_type: data.request_type,
+            start_date: data.start_date,
+            end_date: data.end_date,
+            total_days: data.total_days,
+            child_birth_date: data.child_birth_date || null,
+            due_date: data.due_date || null,
+            handover_person_id: data.handover_person_id || null,
+            handover_description: data.handover_description || null,
+        };
+    }, [
+        data.child_birth_date,
+        data.due_date,
+        data.end_date,
+        data.handover_description,
+        data.handover_person_id,
+        data.request_type,
+        data.start_date,
+        data.total_days,
+        selectedEmployee,
+        selectedLeaveType,
+    ]);
+    useEffect(() => {
+        if (!eligibilityPayload) {
+            return;
+        }
+
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => {
+            fetch('/leave-requests/validate', {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
+                },
+                body: JSON.stringify(eligibilityPayload),
+            }).then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('Unable to validate the leave request.');
+                }
+
+                const result = await response.json() as { valid: boolean; errors?: Record<string, string[]> };
+
+                if (!result.valid && result.errors) {
+
+                    clearErrors();
+
+                    for (const [field, messages] of Object.entries(result.errors)) {
+                        if (messages[0]) {
+                            setError(field as keyof typeof data, messages[0]);
+                        }
+                    }
+                }
+            }).catch((error: unknown) => {
+                if (error instanceof Error && error.name !== 'AbortError') {
+                    console.error(error);
+                }
+            });
+        }, 300);
+
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [clearErrors, eligibilityPayload, setError]);
 
     useEffect(() => {
         if (!requiresAttachment && data.certificate) {
@@ -360,6 +445,18 @@ export default function LeaveRequestsCreate({
 
         if (!data.leave_type_id || !selectedLeaveType) {
             setError('leave_type_id', 'Please select a leave type.');
+
+            return;
+        }
+
+        if (requiresChildBirthDate && !data.child_birth_date) {
+            setError('child_birth_date', "The child's date of birth is required for this leave type.");
+
+            return;
+        }
+
+        if (isMaternityLeave && !data.due_date) {
+            setError('due_date', 'An expected due date is required for Maternity Leave.');
 
             return;
         }
@@ -647,6 +744,49 @@ export default function LeaveRequestsCreate({
                                     <p className="text-sm text-destructive">{errors.leave_type_id}</p>
                                 )}
                             </div>
+
+                            {isMaternityLeave && (
+                                <div className="space-y-2">
+                                    <Label htmlFor={dueDateId}>
+                                        Expected Due Date <span className="text-destructive">*</span>
+                                    </Label>
+                                    <FormattedDatePicker
+                                        id={dueDateId}
+                                        value={data.due_date}
+                                        onChange={(value) => {
+                                            setData('due_date', value);
+                                            clearErrors('due_date');
+                                        }}
+                                        required
+                                    />
+                                    {errors.due_date && <p className="text-sm text-destructive">{errors.due_date}</p>}
+                                </div>
+                            )}
+
+                            {requiresChildBirthDate && (
+                                <div className="space-y-2">
+                                    <Label htmlFor={childBirthDateId}>
+                                        Child&apos;s Date of Birth <span className="text-destructive">*</span>
+                                    </Label>
+                                    <FormattedDatePicker
+                                        id={childBirthDateId}
+                                        value={data.child_birth_date}
+                                        onChange={(value) => {
+                                            setData('child_birth_date', value);
+                                            clearErrors('child_birth_date');
+                                        }}
+                                        required
+                                    />
+                                    {selectedLeaveType?.code === 'PARENTAL' && (
+                                        <p className="text-xs text-muted-foreground">
+                                            The leave start date must be within six months of the child&apos;s birth.
+                                        </p>
+                                    )}
+                                    {errors.child_birth_date && (
+                                        <p className="text-sm text-destructive">{errors.child_birth_date}</p>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="space-y-2">
                                 <Label htmlFor={requestTypeSelectId}>Leave duration type</Label>

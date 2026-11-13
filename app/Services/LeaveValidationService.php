@@ -88,6 +88,97 @@ class LeaveValidationService
         }
     }
 
+    public function validateParentalLeave(
+        LeaveType $leaveType,
+        mixed $childBirthDate,
+        Carbon $leaveStartDate,
+    ): void {
+        if (! in_array($leaveType->code, ['PARENTAL', 'PATERNITY'], true)) {
+            return;
+        }
+
+        if (! is_string($childBirthDate) || trim($childBirthDate) === '') {
+            throw ValidationException::withMessages([
+                'child_birth_date' => ["The child's date of birth is required for Parental Leave."],
+            ]);
+        }
+
+        $birthDate = Carbon::parse($childBirthDate)->startOfDay();
+        $monthsBetweenBirthAndLeaveStart = abs($birthDate->diffInMonths($leaveStartDate));
+
+        if ($monthsBetweenBirthAndLeaveStart >= 6) {
+            throw ValidationException::withMessages([
+                'child_birth_date' => ["Parental Leave must start within six months of the child's birth."],
+            ]);
+        }
+    }
+
+    /**
+     * Validate the date inputs required by a specific leave type.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     *
+     * @throws ValidationException
+     */
+    public function validateLeaveTypeDetails(LeaveType $leaveType, array $data, Carbon $leaveStartDate): array
+    {
+        $profile = $data['employee_profile'] ?? null;
+
+        if (
+            in_array($leaveType->code, ['MATERNITY', 'PARENTAL'], true)
+            && (! $profile instanceof EmployeeProfile
+                || strtolower(trim((string) $profile->marital_status)) !== 'married')
+        ) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => ["{$leaveType->leave_name} is only available to employees whose marital status is married."],
+            ]);
+        }
+
+        if ($leaveType->code === 'MATERNITY') {
+            if (! is_string($data['due_date'] ?? null) || trim($data['due_date']) === '') {
+                throw ValidationException::withMessages([
+                    'due_date' => ['An expected due date is required for Maternity Leave.'],
+                ]);
+            }
+        }
+
+        if (in_array($leaveType->code, ['PARENTAL', 'PATERNITY'], true)) {
+            $this->validateParentalLeave(
+                $leaveType,
+                $data['child_birth_date'] ?? null,
+                $leaveStartDate,
+            );
+        }
+
+        return $this->leaveTypeDetailValues($leaveType, $data);
+    }
+
+    /**
+     * Return the special date fields applicable to a leave type.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, string>
+     */
+    public function leaveTypeDetailValues(LeaveType $leaveType, array $data): array
+    {
+        $fields = match ($leaveType->code) {
+            'MATERNITY' => ['due_date' => 'Expected Due Date'],
+            'PARENTAL', 'PATERNITY' => ['child_birth_date' => 'Child Birth Date'],
+            default => [],
+        };
+
+        $values = [];
+        foreach ($fields as $key => $label) {
+            $value = $data[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                $values[$key] = $value;
+            }
+        }
+
+        return $values;
+    }
+
     /**
      * Validate all leave type and policy constraints for a leave application.
      *
@@ -210,6 +301,10 @@ class LeaveValidationService
         $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
         $this->leaveTypeEligibilityService->assertEligible($leaveType, $rawEmployeeGender, $profile?->religion);
+        $this->validateLeaveTypeDetails($leaveType, [
+            ...$data,
+            'employee_profile' => $profile,
+        ], $startDate);
 
         $this->validatePolicyEligibility(
             $employee,
@@ -318,16 +413,6 @@ class LeaveValidationService
             if ($hasWeekend) {
                 $attachmentRequired = true;
                 $attachmentMessage ??= 'A supporting document is required for leaves spanning across weekends.';
-            }
-        }
-
-        // Condition E: Special Leave Type checks (Parental, Maternity)
-        if ($leaveType->code === 'PARENTAL' && ! empty($data['child_birth_date'])) {
-            $childAgeMonths = Carbon::parse($data['child_birth_date'])->diffInMonths(now());
-            if ($childAgeMonths >= 6) {
-                throw ValidationException::withMessages([
-                    'child_birth_date' => ['Child must be under 6 months of age to qualify for Parental Leave.'],
-                ]);
             }
         }
 

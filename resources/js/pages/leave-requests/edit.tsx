@@ -31,10 +31,12 @@ interface EmployeeOption {
     organisation_id: number | null;
     gender?: string | null;
     religion?: string | null;
+    marital_status?: string | null;
     profile?: {
         id?: number;
         gender?: string | null;
         religion?: string | null;
+        marital_status?: string | null;
     } | null;
     department?: {
         id: number;
@@ -99,6 +101,8 @@ interface LeaveRequestItem {
     handover_person_id?: string | null;
     handover_description?: string | null;
     files?: { id: number; file_path: string }[];
+    child_birth_date?: string | null;
+    due_date?: string | null;
 }
 
 interface Props {
@@ -119,8 +123,10 @@ export default function LeaveRequestsEdit({
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
     const requestTypeSelectId = useId();
+    const dueDateId = useId();
     const startDateId = useId();
     const endDateId = useId();
+    const childBirthDateId = useId();
     const totalDaysId = useId();
     const statusSelectId = useId();
     const remarksId = useId();
@@ -144,6 +150,8 @@ export default function LeaveRequestsEdit({
         certificate: null as File | null,
         handover_person_id: leaveRequest.handover_person_id ?? '',
         handover_description: leaveRequest.handover_description ?? '',
+        child_birth_date: leaveRequest.child_birth_date ?? '',
+        due_date: leaveRequest.due_date ?? '',
     });
 
     // Calculate days between start and end date when dates change
@@ -220,12 +228,88 @@ export default function LeaveRequestsEdit({
             : null;
     }, [leaveRequest.employee_id, leaveRequest.leave_type_id, selectedEmployee, selectedLeaveType]);
 
+    const isParentalLeave = selectedLeaveType?.code === 'PARENTAL';
+    const isMaternityLeave = selectedLeaveType?.code === 'MATERNITY';
+    const requiresChildBirthDate = ['PARENTAL', 'PATERNITY'].includes(selectedLeaveType?.code ?? '');
+    const isActiveRequest = ['applied', 'approved'].includes(data.status);
+
     const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
         selectedPolicy,
         Number(data.total_days || 0),
         data.start_date,
         data.end_date,
     );
+    const eligibilityPayload = useMemo(() => ({
+        employee_id: Number(data.employee_id),
+        leave_type_id: Number(data.leave_type_id),
+        request_type: data.request_type,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        total_days: data.total_days,
+        due_date: data.due_date || null,
+        child_birth_date: data.child_birth_date || null,
+        handover_person_id: data.handover_person_id || null,
+        handover_description: data.handover_description || null,
+        ignore_leave_request_id: leaveRequest.id,
+    }), [
+        data.child_birth_date,
+        data.due_date,
+        data.employee_id,
+        data.end_date,
+        data.handover_description,
+        data.handover_person_id,
+        data.leave_type_id,
+        data.request_type,
+        data.start_date,
+        data.total_days,
+        leaveRequest.id,
+    ]);
+    useEffect(() => {
+        if (!eligibilityPayload.start_date || !eligibilityPayload.end_date) {
+            return;
+        }
+
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => {
+            fetch('/leave-requests/validate', {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
+                },
+                body: JSON.stringify(eligibilityPayload),
+            }).then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('Unable to validate the leave request.');
+                }
+
+                const result = await response.json() as { valid: boolean; errors?: Record<string, string[]> };
+
+                if (!result.valid && result.errors) {
+
+                    clearErrors();
+
+                    for (const [field, messages] of Object.entries(result.errors)) {
+                        if (messages[0]) {
+                            setError(field as keyof typeof data, messages[0]);
+                        }
+                    }
+                }
+            }).catch((error: unknown) => {
+                if (error instanceof Error && error.name !== 'AbortError') {
+                    console.error(error);
+                }
+            });
+        }, 300);
+
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [clearErrors, eligibilityPayload, setError]);
 
     const candidateHandoverEmployees = useMemo(() => {
         if (!data.employee_id) {
@@ -291,6 +375,18 @@ export default function LeaveRequestsEdit({
 
         if (data.request_type === 'fullday' && countLeaveWeekdays(data.start_date, data.end_date) === 0) {
             setError('total_days', 'Selected dates do not include any weekdays.');
+
+            return;
+        }
+
+        if (requiresChildBirthDate && isActiveRequest && !data.child_birth_date) {
+            setError('child_birth_date', "The child's date of birth is required for this leave type.");
+
+            return;
+        }
+
+        if (isMaternityLeave && isActiveRequest && !data.due_date) {
+            setError('due_date', 'An expected due date is required for Maternity Leave.');
 
             return;
         }
@@ -442,6 +538,53 @@ export default function LeaveRequestsEdit({
                                             <p className="mt-1 text-xs text-destructive">{errors.employee_id}</p>
                                         )}
                                     </div>
+
+                                    {isMaternityLeave && (
+                                        <div>
+                                            <Label htmlFor={dueDateId}>
+                                                Expected Due Date
+                                                {isActiveRequest && <span className="text-destructive"> *</span>}
+                                            </Label>
+                                            <FormattedDatePicker
+                                                id={dueDateId}
+                                                value={data.due_date}
+                                                onChange={(value) => {
+                                                    setData('due_date', value);
+                                                    clearErrors('due_date');
+                                                }}
+                                                className="mt-1.5"
+                                                required={isActiveRequest}
+                                            />
+                                            {errors.due_date && <p className="mt-1 text-xs text-destructive">{errors.due_date}</p>}
+                                        </div>
+                                    )}
+
+                                    {requiresChildBirthDate && (
+                                        <div>
+                                            <Label htmlFor={childBirthDateId}>
+                                                Child&apos;s Date of Birth
+                                                {isActiveRequest && <span className="text-destructive"> *</span>}
+                                            </Label>
+                                            <FormattedDatePicker
+                                                id={childBirthDateId}
+                                                value={data.child_birth_date}
+                                                onChange={(value) => {
+                                                    setData('child_birth_date', value);
+                                                    clearErrors('child_birth_date');
+                                                }}
+                                                className="mt-1.5"
+                                                required={isActiveRequest}
+                                            />
+                                            {isParentalLeave && (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    The leave start date must be within six months of the child&apos;s birth.
+                                                </p>
+                                            )}
+                                            {errors.child_birth_date && (
+                                                <p className="mt-1 text-xs text-destructive">{errors.child_birth_date}</p>
+                                            )}
+                                        </div>
+                                    )}
 
                                     <div>
                                         <Label htmlFor={statusSelectId}>Request Status</Label>

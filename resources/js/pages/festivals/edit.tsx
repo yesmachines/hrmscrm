@@ -21,9 +21,11 @@ type FestivalData = {
 export default function FestivalEdit({
     festival,
     countries,
+    religionOptions,
 }: {
     festival: FestivalData;
     countries: { id: number; name: string }[];
+    religionOptions: { value: string; label: string }[];
 }) {
     const { data, setData, put, processing, errors } = useForm({
         name: festival.name,
@@ -74,6 +76,7 @@ export default function FestivalEdit({
                         errors={errors}
                         defaults={data}
                         countriesList={countries}
+                        religionOptions={religionOptions}
                         onCountriesChange={(newCountries) => setData('countries', newCountries)}
                     />
 

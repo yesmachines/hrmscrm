@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Leave;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreFestivalRequest extends FormRequest
 {
@@ -25,7 +26,7 @@ class StoreFestivalRequest extends FormRequest
                 ? ['nullable', 'date']
                 : ['required', 'date', 'after_or_equal:start_date'],
             'is_active' => ['boolean'],
-            'religion' => ['nullable', 'string', 'max:255'],
+            'religion' => ['nullable', 'string', 'max:255', Rule::in(config('params.leave_type.religion_options', []))],
             'countries' => ['nullable', 'array'],
             'countries.*' => ['integer'],
         ];

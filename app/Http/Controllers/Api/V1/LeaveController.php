@@ -79,6 +79,11 @@ class LeaveController extends Controller
                 'code' => $type->code,
                 'is_paid' => (bool) $type->is_paid,
                 'requires_approval' => (bool) $type->requires_approval,
+                'detail_fields' => match ($type->code) {
+                    'MATERNITY' => ['due_date'],
+                    'PARENTAL', 'PATERNITY' => ['child_birth_date'],
+                    default => [],
+                },
                 'annual_limit' => $policy?->annual_limit,
                 'gender' => $type->gender,
                 'religion' => $type->religion,
@@ -113,6 +118,78 @@ class LeaveController extends Controller
             'leave_types' => $typesData,
             'types' => $typesData,
         ]);
+    }
+
+    /**
+     * Validate the current leave form without creating a leave request.
+     */
+    #[OA\Post(
+        path: '/api/v1/leaves/validate',
+        summary: 'Validate leave request details',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave request is valid'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee record not found'),
+            new OA\Response(response: 422, description: 'Validation errors'),
+        ]
+    )]
+    public function validateForm(Request $request, LeaveValidationService $validationService)
+    {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        $employee = Employee::query()->where('user_id', $user->id)->first();
+        if (! $employee) {
+            return $this->errorResponse('Employee record not found.', 404);
+        }
+
+        $validated = $request->validate([
+            'leave_type_id' => ['required', 'integer', 'exists:leave_types,id'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date'],
+            'request_type' => ['nullable', 'in:fullday,firsthalf,secondhalf'],
+            'due_date' => ['nullable', 'date'],
+            'child_birth_date' => ['nullable', 'date'],
+            'handover_person_id' => ['nullable', 'exists:salescrm.employees,id'],
+            'handover_description' => ['nullable', 'string'],
+            'emergency_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
+            'travel_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
+            'traveling_outside_country' => ['nullable', 'boolean'],
+            'destination' => ['nullable', 'string'],
+            'festival_id' => ['nullable', 'exists:festivals,id'],
+        ]);
+        $ignoreLeaveRequestId = $request->input('ignore_leave_request_id');
+        if ($ignoreLeaveRequestId !== null) {
+            $request->validate([
+                'ignore_leave_request_id' => ['integer', 'exists:leave_requests,id'],
+            ]);
+        }
+
+        try {
+            $validation = $validationService->validateApplication(
+                $employee,
+                array_merge($request->all(), $validated),
+                $request->hasFile('certificate'),
+                $ignoreLeaveRequestId === null ? null : (int) $ignoreLeaveRequestId,
+            );
+        } catch (ValidationException $exception) {
+            return $this->errorResponse($exception->getMessage(), 422, $exception->errors());
+        }
+
+        return $this->successResponse([
+            'eligible' => true,
+            'leave_type_id' => $validation['leave_type']->id,
+            'leave_type_code' => $validation['leave_type']->code,
+            'total_days' => $validation['total_days'],
+            'attachment_required' => $validation['attachment_required'],
+            'handover_required' => $validation['policy']?->requiresHandoverForDuration($validation['total_days']) ?? false,
+            'annual_limit' => $validation['policy']?->annual_limit,
+            'remarks' => $validation['remarks'],
+        ], 'Leave request details are valid.');
     }
 
     /**
@@ -216,6 +293,8 @@ class LeaveController extends Controller
                         new OA\Property(property: 'end_date', type: 'string', format: 'date'),
                         new OA\Property(property: 'request_type', type: 'string', enum: ['fullday', 'firsthalf', 'secondhalf']),
                         new OA\Property(property: 'reason', type: 'string'),
+                        new OA\Property(property: 'due_date', type: 'string', format: 'date', description: 'Required for Maternity Leave.'),
+                        new OA\Property(property: 'child_birth_date', type: 'string', format: 'date', description: "Required for Parental and Paternity Leave. For Parental Leave, the leave start date must be within six months of the child's birth."),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),
                         new OA\Property(property: 'emergency_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
@@ -243,15 +322,17 @@ class LeaveController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'emergency_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
             'travel_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
+            'due_date' => ['nullable', 'date'],
+            'child_birth_date' => ['nullable', 'date'],
         ]);
 
         try {
             $validation = $validationService->validateApplication(
                 $employee,
-                $request->all(),
+                array_merge($request->all(), $validated),
                 $request->hasFile('certificate')
             );
         } catch (ValidationException $e) {
@@ -359,20 +440,12 @@ class LeaveController extends Controller
             }
         }
 
-        // Store special details
-        if ($leaveType->code === 'MATERNITY' && $request->filled('due_date')) {
+        foreach ($validationService->leaveTypeDetailValues($leaveType, $validated) as $fieldKey => $fieldValue) {
+            $fieldName = $fieldKey === 'due_date' ? 'Expected Due Date' : 'Child Birth Date';
             $leaveRequest->details()->create([
-                'field_name' => 'Expected Due Date',
-                'field_key' => 'due_date',
-                'field_value' => (string) $request->input('due_date'),
-            ]);
-        }
-
-        if ($leaveType->code === 'PARENTAL' && $request->filled('child_birth_date')) {
-            $leaveRequest->details()->create([
-                'field_name' => 'Child Birth Date',
-                'field_key' => 'child_birth_date',
-                'field_value' => (string) $request->input('child_birth_date'),
+                'field_name' => $fieldName,
+                'field_key' => $fieldKey,
+                'field_value' => $fieldValue,
             ]);
         }
 
@@ -514,6 +587,7 @@ class LeaveController extends Controller
         } catch (ValidationException $e) {
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
         }
+        $leaveType = $validation['leave_type'];
 
         if (! $request->exists('remarks')) {
             $validation['remarks'] = $leaveRequest->remarks;
@@ -599,6 +673,11 @@ class LeaveController extends Controller
                         $request->input($input),
                     );
                 }
+            }
+
+            foreach ($validationService->leaveTypeDetailValues($leaveType, $validationData) as $fieldKey => $fieldValue) {
+                $fieldName = $fieldKey === 'due_date' ? 'Expected Due Date' : 'Child Birth Date';
+                $this->updateLeaveRequestDetail($leaveRequest, $fieldKey, $fieldName, $fieldValue);
             }
 
             if ($request->exists('festival_id')) {

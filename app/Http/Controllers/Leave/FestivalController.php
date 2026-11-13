@@ -38,6 +38,7 @@ class FestivalController extends Controller
 
         return Inertia::render('festivals/create', [
             'countries' => $countries,
+            'religionOptions' => $this->religionOptions(),
         ]);
     }
 
@@ -79,6 +80,7 @@ class FestivalController extends Controller
         return Inertia::render('festivals/edit', [
             'festival' => $this->payload($festival),
             'countries' => $countries,
+            'religionOptions' => $this->religionOptions($festival->religion),
         ]);
     }
 
@@ -152,5 +154,26 @@ class FestivalController extends Controller
             'end_date' => $festival->end_date?->format('Y-m-d'),
             'countries' => $countries,
         ];
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function religionOptions(?string $currentReligion = null): array
+    {
+        $religions = config('params.leave_type.religion_options', []);
+
+        if (
+            $currentReligion !== null
+            && $currentReligion !== ''
+            && ! in_array($currentReligion, $religions, true)
+        ) {
+            $religions[] = $currentReligion;
+        }
+
+        return array_map(
+            fn (string $religion): array => ['value' => $religion, 'label' => $religion],
+            $religions,
+        );
     }
 }

@@ -21,6 +21,7 @@ type Props = {
     errors: Errors;
     defaults?: FestivalFormValues;
     countriesList?: { id: number; name: string }[];
+    religionOptions?: { value: string; label: string }[];
     onCountriesChange?: (countries: number[]) => void;
 };
 
@@ -51,6 +52,7 @@ export default function FestivalFormFields({
     errors,
     defaults = {},
     countriesList = [],
+    religionOptions = [],
     onCountriesChange,
 }: Props) {
     const isHoliday = defaults.type === 'holiday';
@@ -92,13 +94,20 @@ export default function FestivalFormFields({
                     </select>
                 </Field>
 
-                <Field label="Religion" name="religion" error={errors.religion}>
-                    <Input
+                <Field label="Religion (optional)" name="religion" error={errors.religion}>
+                    <select
                         id="religion"
                         name="religion"
-                        placeholder="e.g. Muslim, Hindu, Christian (optional)"
                         defaultValue={defaults.religion ?? ''}
-                    />
+                        className={fieldClass}
+                    >
+                        <option value="">All religions</option>
+                        {religionOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
                 </Field>
 
                 {defaults.shortcode && (

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Festival;
 use App\Models\LeavePolicy;
 use App\Models\LeaveType;
 use App\Models\Organisation;
@@ -457,6 +458,66 @@ test('leave type gender and religion are validated against configured options an
 
     expect($leaveType->fresh()->gender)->toBeNull()
         ->and($leaveType->fresh()->religion)->toBe('Hinduism');
+});
+
+test('festival forms use configured religion options and retain legacy religions', function () {
+    $admin = createHrmsLoginUser('admin');
+    $religionOptions = collect(config('params.leave_type.religion_options'))
+        ->map(fn (string $religion) => ['value' => $religion, 'label' => $religion])
+        ->all();
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('festivals.create'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('festivals/create')
+            ->where('religionOptions', $religionOptions));
+
+    $legacyFestival = Festival::query()->create([
+        'name' => 'Legacy Festival',
+        'type' => 'festival',
+        'religion' => 'Muslim',
+        'shortcode' => 'LEGACY26',
+        'start_date' => '2026-11-13',
+        'end_date' => '2026-11-13',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('festivals.edit', $legacyFestival))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('festivals/edit')
+            ->where('religionOptions', [
+                ...$religionOptions,
+                ['value' => 'Muslim', 'label' => 'Muslim'],
+            ]));
+
+    $this->actingAs($admin)
+        ->from(route('festivals.create'))
+        ->post(route('festivals.store'), [
+            'name' => 'Unsupported Religion Festival',
+            'type' => 'festival',
+            'religion' => 'Zoroastrianism',
+            'start_date' => '2026-11-13',
+            'is_active' => '1',
+        ])
+        ->assertRedirect(route('festivals.create'))
+        ->assertSessionHasErrors(['religion']);
+
+    $this->actingAs($admin)
+        ->put(route('festivals.update', $legacyFestival), [
+            'name' => 'Legacy Festival',
+            'type' => 'festival',
+            'religion' => 'Muslim',
+            'start_date' => '2026-11-13',
+            'is_active' => '1',
+        ])
+        ->assertRedirect(route('festivals.index'));
+
+    expect($legacyFestival->fresh()->religion)->toBe('Muslim');
 });
 
 test('leave policy create page keeps leave types available across organisations', function () {

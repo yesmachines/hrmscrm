@@ -8,8 +8,10 @@ import FestivalFormFields from './form-fields';
 
 export default function FestivalCreate({
     countries,
+    religionOptions,
 }: {
     countries: { id: number; name: string }[];
+    religionOptions: { value: string; label: string }[];
 }) {
     const { data, setData, post, processing, errors } = useForm({
         name: '',
@@ -59,6 +61,7 @@ export default function FestivalCreate({
                         errors={errors}
                         defaults={data}
                         countriesList={countries}
+                        religionOptions={religionOptions}
                         onCountriesChange={(newCountries) => setData('countries', newCountries)}
                     />
 

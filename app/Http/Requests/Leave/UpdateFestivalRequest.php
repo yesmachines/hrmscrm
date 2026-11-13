@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Leave;
 
+use App\Models\Festival;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateFestivalRequest extends FormRequest
 {
@@ -14,6 +16,17 @@ class UpdateFestivalRequest extends FormRequest
     public function rules(): array
     {
         $isFestival = $this->input('type', 'festival') === 'festival';
+        $religions = config('params.leave_type.religion_options', []);
+        $festival = $this->route('festival');
+        $currentReligion = $festival instanceof Festival ? $festival->religion : null;
+
+        if (
+            $currentReligion !== null
+            && $currentReligion !== ''
+            && ! in_array($currentReligion, $religions, true)
+        ) {
+            $religions[] = $currentReligion;
+        }
 
         return [
             'name' => ['required', 'string', 'max:255', 'unique:festivals,name,'.$this->route('festival')->id],
@@ -25,7 +38,7 @@ class UpdateFestivalRequest extends FormRequest
                 ? ['nullable', 'date']
                 : ['required', 'date', 'after_or_equal:start_date'],
             'is_active' => ['boolean'],
-            'religion' => ['nullable', 'string', 'max:255'],
+            'religion' => ['nullable', 'string', 'max:255', Rule::in($religions)],
             'countries' => ['nullable', 'array'],
             'countries.*' => ['integer'],
         ];
