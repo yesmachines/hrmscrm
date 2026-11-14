@@ -11,6 +11,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use OpenApi\Attributes as OA;
 
 class DepartmentController extends Controller
 {
@@ -19,6 +20,22 @@ class DepartmentController extends Controller
     /**
      * Get a listing of departments (with search, filtering, and pagination support).
      */
+    #[OA\Get(
+        path: '/api/v1/departments',
+        summary: 'List all departments with filtering and pagination',
+        security: [['sanctum' => []]],
+        tags: ['Departments'],
+        parameters: [
+            new OA\Parameter(name: 'search', in: 'query', description: 'Search department name', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'all', in: 'query', description: 'Return all departments unpaginated (e.g. true for dropdowns)', required: false, schema: new OA\Schema(type: 'boolean')),
+            new OA\Parameter(name: 'per_page', in: 'query', description: 'Number of items per page', required: false, schema: new OA\Schema(type: 'integer', example: 15)),
+            new OA\Parameter(name: 'page', in: 'query', description: 'Page number', required: false, schema: new OA\Schema(type: 'integer', example: 1)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Departments retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request, DepartmentService $departmentService): JsonResponse
     {
         $user = $request->user();
@@ -65,6 +82,20 @@ class DepartmentController extends Controller
     /**
      * Get details for a single department.
      */
+    #[OA\Get(
+        path: '/api/v1/departments/{id}',
+        summary: 'Get department details by ID',
+        security: [['sanctum' => []]],
+        tags: ['Departments'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, description: 'Department ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Department retrieved successfully'),
+            new OA\Response(response: 404, description: 'Department not found'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function show(Request $request, int|string $id): JsonResponse
     {
         $user = $request->user();

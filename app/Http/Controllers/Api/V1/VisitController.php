@@ -9,12 +9,29 @@ use App\Services\VisitService;
 use App\Support\SalesCrmRoles;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use OpenApi\Attributes as OA;
 
 class VisitController extends Controller
 {
     /**
      * List visit history / requests.
      */
+    #[OA\Get(
+        path: '/api/v1/visits',
+        summary: 'List client/office visits',
+        security: [['sanctum' => []]],
+        tags: ['Visits'],
+        parameters: [
+            new OA\Parameter(name: 'status', in: 'query', description: 'Filter by status (pending, approved, rejected)', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'all', in: 'query', description: 'Return all visits (HR only)', required: false, schema: new OA\Schema(type: 'boolean')),
+            new OA\Parameter(name: 'per_page', in: 'query', description: 'Page size', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'page', in: 'query', description: 'Page number', required: false, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Visits retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request, VisitService $visitService): JsonResponse
     {
         $user = $request->user();
@@ -45,6 +62,43 @@ class VisitController extends Controller
     /**
      * Submit a new visit request.
      */
+    #[OA\Post(
+        path: '/api/v1/visits',
+        summary: 'Submit a new visit request',
+        security: [['sanctum' => []]],
+        tags: ['Visits'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['total_visitors', 'visitor_details', 'company', 'contact_no', 'email', 'purpose', 'location', 'expected_start_date'],
+                properties: [
+                    new OA\Property(property: 'total_visitors', type: 'integer', example: 2),
+                    new OA\Property(
+                        property: 'visitor_details',
+                        type: 'array',
+                        items: new OA\Items(
+                            properties: [
+                                new OA\Property(property: 'name', type: 'string', example: 'Alex Smith'),
+                                new OA\Property(property: 'designation', type: 'string', example: 'Procurement Specialist'),
+                            ]
+                        )
+                    ),
+                    new OA\Property(property: 'company', type: 'string', example: 'Acme Corp'),
+                    new OA\Property(property: 'contact_no', type: 'string', example: '+971501234567'),
+                    new OA\Property(property: 'email', type: 'string', example: 'alex@acme.com'),
+                    new OA\Property(property: 'purpose', type: 'string', example: 'Contract signing & technical review'),
+                    new OA\Property(property: 'location', type: 'string', example: 'Head Office - Room 402'),
+                    new OA\Property(property: 'expected_start_date', type: 'string', format: 'date-time', example: '2026-11-25 10:00:00'),
+                    new OA\Property(property: 'expected_end_date', type: 'string', format: 'date-time', example: '2026-11-25 13:00:00'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Visit request submitted successfully'),
+            new OA\Response(response: 422, description: 'Validation error'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -96,6 +150,20 @@ class VisitController extends Controller
     /**
      * Get visit details.
      */
+    #[OA\Get(
+        path: '/api/v1/visits/{visit}',
+        summary: 'Get visit details',
+        security: [['sanctum' => []]],
+        tags: ['Visits'],
+        parameters: [
+            new OA\Parameter(name: 'visit', in: 'path', required: true, description: 'Visit ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Visit retrieved successfully'),
+            new OA\Response(response: 404, description: 'Visit not found'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function show(Visit $visit): JsonResponse
     {
         $visit->load([
@@ -112,6 +180,27 @@ class VisitController extends Controller
     /**
      * Approve visit request by HR.
      */
+    #[OA\Post(
+        path: '/api/v1/visits/{visit}/approve',
+        summary: 'Approve a visit request',
+        security: [['sanctum' => []]],
+        tags: ['Visits'],
+        parameters: [
+            new OA\Parameter(name: 'visit', in: 'path', required: true, description: 'Visit ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        requestBody: new OA\RequestBody(
+            required: false,
+            content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: 'instructions', type: 'string', example: 'Visitor pass issued at reception'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Visit approved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function approve(Request $request, Visit $visit, VisitService $visitService): JsonResponse
     {
         $user = $request->user();
@@ -137,6 +226,29 @@ class VisitController extends Controller
     /**
      * Reject visit request by HR.
      */
+    #[OA\Post(
+        path: '/api/v1/visits/{visit}/reject',
+        summary: 'Reject a visit request with reason',
+        security: [['sanctum' => []]],
+        tags: ['Visits'],
+        parameters: [
+            new OA\Parameter(name: 'visit', in: 'path', required: true, description: 'Visit ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['rejected_reason'],
+                properties: [
+                    new OA\Property(property: 'rejected_reason', type: 'string', example: 'Meeting room unavailable during the specified time'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Visit request rejected'),
+            new OA\Response(response: 422, description: 'Validation failed'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function reject(Request $request, Visit $visit, VisitService $visitService): JsonResponse
     {
         $user = $request->user();
@@ -162,6 +274,29 @@ class VisitController extends Controller
     /**
      * Update visit status to completed or cancelled.
      */
+    #[OA\Post(
+        path: '/api/v1/visits/{visit}/status',
+        summary: 'Update visit status (completed, cancelled)',
+        security: [['sanctum' => []]],
+        tags: ['Visits'],
+        parameters: [
+            new OA\Parameter(name: 'visit', in: 'path', required: true, description: 'Visit ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['status'],
+                properties: [
+                    new OA\Property(property: 'status', type: 'string', enum: ['completed', 'cancelled'], example: 'completed'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Visit status updated successfully'),
+            new OA\Response(response: 422, description: 'Validation failed'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function updateStatus(Request $request, Visit $visit, VisitService $visitService): JsonResponse
     {
         $validated = $request->validate([

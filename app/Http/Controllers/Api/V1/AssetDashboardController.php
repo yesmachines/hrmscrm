@@ -5,9 +5,10 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\AssetRequest;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use OpenApi\Attributes as OA;
 
 class AssetDashboardController extends Controller
 {
@@ -16,6 +17,16 @@ class AssetDashboardController extends Controller
      *
      * Response shape mirrors project ApiResponse trait: { statusCode, message, data }
      */
+    #[OA\Get(
+        path: '/api/v1/hr/assets/dashboard',
+        summary: 'Assets dashboard summary metrics (HR & Admin)',
+        security: [['sanctum' => []]],
+        tags: ['Assets'],
+        responses: [
+            new OA\Response(response: 200, description: 'Asset metrics retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $total = Asset::query()->count();
@@ -68,7 +79,7 @@ class AssetDashboardController extends Controller
                     'requested_date' => $r->requested_date?->toDateString(),
                     'requested_date_label' => $r->requested_date ? (
                         (function ($d) {
-                            $now = \Illuminate\Support\Carbon::now()->startOfDay();
+                            $now = Carbon::now()->startOfDay();
                             $target = $d->startOfDay();
 
                             // Future date

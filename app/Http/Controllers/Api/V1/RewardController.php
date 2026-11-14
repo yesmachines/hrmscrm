@@ -44,6 +44,23 @@ class RewardController extends Controller
      * Get employee personal rewards summary for the mobile dashboard.
      * Shows this month's reward amount, this year's total reward amount, and total count.
      */
+    #[OA\Get(
+        path: '/api/v1/rewards/summary',
+        summary: 'Get employee personal rewards summary metrics',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'year', in: 'query', description: 'Filter by year (e.g. 2026)', required: false, schema: new OA\Schema(type: 'integer', example: 2026)),
+            new OA\Parameter(name: 'month', in: 'query', description: 'Filter by month number 1-12', required: false, schema: new OA\Schema(type: 'integer', example: 11)),
+            new OA\Parameter(name: 'category_id', in: 'query', description: 'Filter by category ID', required: false, schema: new OA\Schema(type: 'integer', example: 1)),
+            new OA\Parameter(name: 'status', in: 'query', description: 'Filter by status (approved, paid, pending)', required: false, schema: new OA\Schema(type: 'string', example: 'approved')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Rewards summary retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee record not found'),
+        ]
+    )]
     public function summary(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -164,6 +181,27 @@ class RewardController extends Controller
     /**
      * Get list of rewards for the authenticated employee (Self-Service).
      */
+    #[OA\Get(
+        path: '/api/v1/rewards',
+        summary: 'List personal rewards for the authenticated employee',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'status', in: 'query', description: 'Filter by status (pending, approved, paid, rejected)', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'category_id', in: 'query', description: 'Filter by category ID', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'year', in: 'query', description: 'Filter by submission year (e.g. 2026)', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'month', in: 'query', description: 'Filter by submission month number (1-12)', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'date_filter', in: 'query', description: 'Quick keyword: today, this_month, last_month', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'search', in: 'query', description: 'Search in claim_no, category, or description', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'per_page', in: 'query', description: 'Pagination page size (default 15)', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'page', in: 'query', description: 'Page number', required: false, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Rewards list retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 404, description: 'Employee record not found'),
+        ]
+    )]
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -242,6 +280,26 @@ class RewardController extends Controller
     /**
      * Get list of all rewards across employees (HR / Finance Access).
      */
+    #[OA\Get(
+        path: '/api/v1/hr/rewards',
+        summary: 'List all rewards across employees (HR & Finance)',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'employee_id', in: 'query', description: 'Filter by specific employee ID', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'status', in: 'query', description: 'Filter by status (pending, approved, paid, rejected)', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'category_id', in: 'query', description: 'Filter by category ID', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'date_filter', in: 'query', description: 'Quick keyword: today, this_month, last_month', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'search', in: 'query', description: 'Search across claim_no, employee name, category or description', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'per_page', in: 'query', description: 'Pagination page size (default 15)', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'page', in: 'query', description: 'Page number', required: false, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'HR rewards list retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Forbidden (HR/Finance/Admin required)'),
+        ]
+    )]
     public function hrIndex(Request $request): JsonResponse
     {
         $query = Reward::with([
@@ -306,6 +364,37 @@ class RewardController extends Controller
     /**
      * Apply / Nominate for a reward (Self-Service or HR delegation).
      */
+    #[OA\Post(
+        path: '/api/v1/rewards',
+        summary: 'Submit / nominate a reward claim',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\MediaType(
+                mediaType: 'multipart/form-data',
+                schema: new OA\Schema(
+                    required: ['category_id', 'amount', 'description'],
+                    properties: [
+                        new OA\Property(property: 'category_id', type: 'integer', example: 1),
+                        new OA\Property(property: 'amount', type: 'number', format: 'float', example: 500.00),
+                        new OA\Property(property: 'currency', type: 'string', example: 'AED'),
+                        new OA\Property(property: 'description', type: 'string', example: 'Completed critical project deployment'),
+                        new OA\Property(property: 'employee_id', type: 'integer', description: 'Optional for HR users to submit on behalf of an employee', example: 4),
+                        new OA\Property(property: 'status', type: 'string', enum: ['pending', 'approved', 'paid'], example: 'pending'),
+                        new OA\Property(property: 'submitted_date', type: 'string', format: 'date', example: '2026-11-14'),
+                        new OA\Property(property: 'comments', type: 'string', example: 'Approved nomination by supervisor'),
+                        new OA\Property(property: 'document', type: 'string', format: 'binary', description: 'Supporting document (PDF, PNG, JPG up to 10MB)'),
+                    ]
+                )
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Reward claim submitted successfully'),
+            new OA\Response(response: 422, description: 'Validation failed'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -392,6 +481,37 @@ class RewardController extends Controller
     /**
      * Add existing or new reward for an employee (HR / Finance Access).
      */
+    #[OA\Post(
+        path: '/api/v1/hr/rewards',
+        summary: 'Add / record a reward for any employee (HR & Finance)',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\MediaType(
+                mediaType: 'multipart/form-data',
+                schema: new OA\Schema(
+                    required: ['category_id', 'amount', 'description'],
+                    properties: [
+                        new OA\Property(property: 'employee_id', type: 'integer', description: 'Employee receiving the reward', example: 4),
+                        new OA\Property(property: 'category_id', type: 'integer', example: 1),
+                        new OA\Property(property: 'amount', type: 'number', format: 'float', example: 1000.00),
+                        new OA\Property(property: 'currency', type: 'string', example: 'AED'),
+                        new OA\Property(property: 'description', type: 'string', example: 'Annual outstanding achievement award'),
+                        new OA\Property(property: 'status', type: 'string', enum: ['pending', 'approved', 'paid'], example: 'approved'),
+                        new OA\Property(property: 'award_date', type: 'string', format: 'date', example: '2026-11-01'),
+                        new OA\Property(property: 'comments', type: 'string', example: 'Awarded by Executive Director'),
+                        new OA\Property(property: 'document', type: 'string', format: 'binary', description: 'Supporting certificate or voucher file'),
+                    ]
+                )
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Reward recorded successfully'),
+            new OA\Response(response: 422, description: 'Validation failed'),
+            new OA\Response(response: 403, description: 'Forbidden (HR/Finance required)'),
+        ]
+    )]
     public function hrStore(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -482,6 +602,20 @@ class RewardController extends Controller
     /**
      * Get specific reward details (Self-Service).
      */
+    #[OA\Get(
+        path: '/api/v1/rewards/{id}',
+        summary: 'Get details of an employee reward claim',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, description: 'Reward ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Reward details fetched successfully'),
+            new OA\Response(response: 404, description: 'Reward claim not found'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function show(Request $request, $id): JsonResponse
     {
         $user = $request->user();
@@ -517,6 +651,20 @@ class RewardController extends Controller
     /**
      * Get specific reward details (HR / Finance Access).
      */
+    #[OA\Get(
+        path: '/api/v1/hr/rewards/{id}',
+        summary: 'Get details of any employee reward (HR & Finance)',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, description: 'Reward ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Reward details fetched successfully'),
+            new OA\Response(response: 404, description: 'Reward record not found'),
+            new OA\Response(response: 403, description: 'Forbidden (HR/Finance required)'),
+        ]
+    )]
     public function hrShow(Request $request, $id): JsonResponse
     {
         $reward = Reward::with([
@@ -541,6 +689,31 @@ class RewardController extends Controller
     /**
      * Update claim approval status via HR API (Approve, Mark as Paid, Reject).
      */
+    #[OA\Post(
+        path: '/api/v1/hr/rewards/{id}/status',
+        summary: 'Update reward claim status (Approve, Pay, Reject)',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, description: 'Reward ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['status'],
+                properties: [
+                    new OA\Property(property: 'status', type: 'string', enum: ['approved', 'paid', 'rejected'], example: 'approved'),
+                    new OA\Property(property: 'comments', type: 'string', description: 'Mandatory when rejecting', example: 'Approved by HR manager'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Status updated successfully'),
+            new OA\Response(response: 422, description: 'Validation failed or missing rejection comments'),
+            new OA\Response(response: 403, description: 'Only Finance or Admin can mark as paid'),
+            new OA\Response(response: 404, description: 'Reward claim not found'),
+        ]
+    )]
     public function updateHrStatus(Request $request, $id): JsonResponse
     {
         $user = $request->user();
@@ -595,6 +768,20 @@ class RewardController extends Controller
     /**
      * Download sample CSV or Excel template for bulk importing rewards.
      */
+    #[OA\Get(
+        path: '/api/v1/hr/rewards/template',
+        summary: 'Download sample Excel or CSV template for rewards bulk import',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'format', in: 'query', description: 'Template format: excel (default) or csv', required: false, schema: new OA\Schema(type: 'string', enum: ['excel', 'csv'], example: 'excel')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'File download stream (.xls or .csv)'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Forbidden (HR/Finance required)'),
+        ]
+    )]
     public function downloadTemplate(Request $request, RewardBulkImportService $importService): Response
     {
         $format = strtolower((string) $request->query('format', 'excel'));
@@ -619,6 +806,29 @@ class RewardController extends Controller
     /**
      * Bulk import employee rewards from CSV file.
      */
+    #[OA\Post(
+        path: '/api/v1/hr/rewards/bulk-import',
+        summary: 'Bulk import employee rewards via CSV upload (HR & Finance)',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\MediaType(
+                mediaType: 'multipart/form-data',
+                schema: new OA\Schema(
+                    required: ['file'],
+                    properties: [
+                        new OA\Property(property: 'file', type: 'string', format: 'binary', description: 'CSV file containing employee rewards (max 5MB)'),
+                    ]
+                )
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Bulk import processed with counts of success and failure'),
+            new OA\Response(response: 422, description: 'CSV format or validation errors'),
+            new OA\Response(response: 403, description: 'Forbidden (HR/Finance required)'),
+        ]
+    )]
     public function bulkImport(Request $request, RewardBulkImportService $importService): JsonResponse
     {
         $user = $request->user();

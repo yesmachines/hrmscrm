@@ -45,6 +45,19 @@ class EventController extends Controller
     /**
      * Today's events specifically tailored for dashboard display.
      */
+    #[OA\Get(
+        path: '/api/v1/events/today',
+        summary: 'Get today events for dashboard widget',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        parameters: [
+            new OA\Parameter(name: 'limit', in: 'query', description: 'Limit number of events (default 3)', required: false, schema: new OA\Schema(type: 'integer', example: 3)),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Events retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function today(Request $request): JsonResponse
     {
         $limit = (int) $request->input('limit', 3);
@@ -70,6 +83,16 @@ class EventController extends Controller
     /**
      * List all active event types.
      */
+    #[OA\Get(
+        path: '/api/v1/events/types',
+        summary: 'List event types with icons and priorities',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        responses: [
+            new OA\Response(response: 200, description: 'Event types retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function types(): JsonResponse
     {
         $types = EventType::query()
@@ -84,6 +107,20 @@ class EventController extends Controller
     /**
      * Get a single event.
      */
+    #[OA\Get(
+        path: '/api/v1/events/{id}',
+        summary: 'Get details of a single event',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, description: 'Event ID', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Event details retrieved successfully'),
+            new OA\Response(response: 404, description: 'Event not found'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function show(int $id): JsonResponse
     {
         $event = Event::query()
@@ -106,6 +143,37 @@ class EventController extends Controller
     /**
      * Create an event via API.
      */
+    #[OA\Post(
+        path: '/api/v1/events',
+        summary: 'Create a new corporate event or reminder',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\MediaType(
+                mediaType: 'multipart/form-data',
+                schema: new OA\Schema(
+                    required: ['event_type_id', 'title', 'start_datetime'],
+                    properties: [
+                        new OA\Property(property: 'event_type_id', type: 'integer', example: 1),
+                        new OA\Property(property: 'title', type: 'string', example: 'Annual Townhall Meeting'),
+                        new OA\Property(property: 'description', type: 'string', example: 'All company quarterly update'),
+                        new OA\Property(property: 'start_datetime', type: 'string', format: 'date-time', example: '2026-11-20 10:00:00'),
+                        new OA\Property(property: 'end_datetime', type: 'string', format: 'date-time', example: '2026-11-20 12:00:00'),
+                        new OA\Property(property: 'external_link', type: 'string', example: 'https://meet.google.com/xyz'),
+                        new OA\Property(property: 'status', type: 'string', enum: ['draft', 'published', 'cancelled'], example: 'published'),
+                        new OA\Property(property: 'show_dashboard', type: 'boolean', example: true),
+                        new OA\Property(property: 'file', type: 'string', format: 'binary', description: 'Event flyer or banner'),
+                    ]
+                )
+            )
+        ),
+        responses: [
+            new OA\Response(response: 201, description: 'Event created successfully'),
+            new OA\Response(response: 422, description: 'Validation failed'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function store(Request $request, EventService $eventService): JsonResponse
     {
         $validated = $request->validate([

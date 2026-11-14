@@ -18,9 +18,32 @@ class DashboardController extends Controller
      */
     #[OA\Get(
         path: '/api/v1/dashboard',
-        summary: 'Get consolidated employee mobile dashboard overview',
+        summary: 'Get consolidated employee mobile dashboard overview with rewards',
         security: [['sanctum' => []]],
         tags: ['Dashboard'],
+        parameters: [
+            new OA\Parameter(
+                name: 'year',
+                in: 'query',
+                description: 'Filter stats and monthly breakdown by year (defaults to current year)',
+                required: false,
+                schema: new OA\Schema(type: 'integer', example: 2026)
+            ),
+            new OA\Parameter(
+                name: 'month',
+                in: 'query',
+                description: 'Filter stats by month number 1-12 (defaults to current month)',
+                required: false,
+                schema: new OA\Schema(type: 'integer', example: 11)
+            ),
+            new OA\Parameter(
+                name: 'category_id',
+                in: 'query',
+                description: 'Filter rewards by category ID',
+                required: false,
+                schema: new OA\Schema(type: 'integer', example: 2)
+            ),
+        ],
         responses: [
             new OA\Response(response: 200, description: 'Dashboard data retrieved successfully'),
             new OA\Response(response: 401, description: 'Unauthenticated'),

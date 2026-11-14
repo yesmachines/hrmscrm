@@ -39,6 +39,94 @@
                 ]
             }
         },
+        "/api/v1/hr/assets": {
+            "get": {
+                "tags": [
+                    "Assets"
+                ],
+                "summary": "List inventory assets for a selected category or employee",
+                "operationId": "df4de3c462f71e244337a13e4535d2a4",
+                "parameters": [
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "employee_id",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Assets retrieved with 15-item pagination"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Only HR/Admin can filter assets by employee"
+                    },
+                    "422": {
+                        "description": "Invalid filter"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/assets/dashboard": {
+            "get": {
+                "tags": [
+                    "Assets"
+                ],
+                "summary": "Assets dashboard summary metrics (HR & Admin)",
+                "description": "Return assets dashboard summary for HR.\n\nResponse shape mirrors project ApiResponse trait: { statusCode, message, data }",
+                "operationId": "fc6abe16d4f15cb54aa64d714eaa0b7a",
+                "responses": {
+                    "200": {
+                        "description": "Asset metrics retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/v1/login": {
             "post": {
                 "tags": [
@@ -125,19 +213,40 @@
                 "operationId": "13b43df400e475a157538f73617b8c3d",
                 "responses": {
                     "200": {
-                        "description": "User details",
+                        "description": "User details, including all employee and employee profile fields shown in the admin profile",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "id": {
+                                        "statusCode": {
                                             "type": "integer"
                                         },
-                                        "name": {
+                                        "message": {
                                             "type": "string"
                                         },
-                                        "email": {
-                                            "type": "string"
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer"
+                                                },
+                                                "name": {
+                                                    "type": "string"
+                                                },
+                                                "email": {
+                                                    "type": "string"
+                                                },
+                                                "roles": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "employee": {
+                                                    "description": "Complete employment details and personal, contact, visa, and education profile fields; null when no employee record exists",
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
                                         }
                                     },
                                     "type": "object"
@@ -166,6 +275,164 @@
                 "responses": {
                     "200": {
                         "description": "Logged out successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/dashboard": {
+            "get": {
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "Get consolidated employee mobile dashboard overview with rewards",
+                "description": "Get consolidated employee mobile dashboard overview including rewards, leaves, and activity.",
+                "operationId": "d1625943bfc57cc98d4de5135ef923aa",
+                "parameters": [
+                    {
+                        "name": "year",
+                        "in": "query",
+                        "description": "Filter stats and monthly breakdown by year (defaults to current year)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 2026
+                        }
+                    },
+                    {
+                        "name": "month",
+                        "in": "query",
+                        "description": "Filter stats by month number 1-12 (defaults to current month)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 11
+                        }
+                    },
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "Filter rewards by category ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 2
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Dashboard data retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee record not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/departments": {
+            "get": {
+                "tags": [
+                    "Departments"
+                ],
+                "summary": "List all departments with filtering and pagination",
+                "description": "Get a listing of departments (with search, filtering, and pagination support).",
+                "operationId": "149f8ee66a43550287b8c706fccbb9fd",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Search department name",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "all",
+                        "in": "query",
+                        "description": "Return all departments unpaginated (e.g. true for dropdowns)",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Number of items per page",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 15
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Departments retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/departments/{id}": {
+            "get": {
+                "tags": [
+                    "Departments"
+                ],
+                "summary": "Get department details by ID",
+                "description": "Get details for a single department.",
+                "operationId": "213b08ec70ae719037e76b87c6c17d76",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Department ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Department retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Department not found"
                     },
                     "401": {
                         "description": "Unauthenticated"
@@ -245,6 +512,178 @@
                 ]
             }
         },
+        "/api/v1/hr/documents": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "List documents across employees for HR",
+                "description": "List documents across all employees for HR.",
+                "operationId": "cb8e1e257ccdc0810ec45dee7f8f57bc",
+                "parameters": [
+                    {
+                        "name": "employee_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "document_type_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Documents retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/documents/{id}/status": {
+            "post": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Approve or reject an employee document",
+                "description": "Approve or reject an employee document as HR.",
+                "operationId": "a914b339519316e235ee6b51b2aa7c29",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "status"
+                                ],
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "approved",
+                                            "rejected"
+                                        ]
+                                    },
+                                    "remarks": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Document status updated successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Document not found"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/documents/policies": {
+            "get": {
+                "tags": [
+                    "Documents"
+                ],
+                "summary": "Get policy documents",
+                "description": "HR Policy Documents Screen (Matching iPhone 16 Plus - 11).",
+                "operationId": "7358e799712f76fbdf8a0db08cda5fdd",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "HR Policies retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/v1/documents/letters": {
             "get": {
                 "tags": [
@@ -253,6 +692,43 @@
                 "summary": "Get employee letter requests list",
                 "description": "Letter Requests List (Matching iPhone 16 Plus - 12).",
                 "operationId": "757df955729bd244985f8260b24d2072",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Search document title or document type name",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Letter requests retrieved successfully"
@@ -278,13 +754,13 @@
                 "description": "Submit Letter Request (NOC, Salary Certificate, Salary Transfer Letter, Pay Slip).",
                 "operationId": "d3d2a25c46a55dc55f4c55497a7f6f0f",
                 "requestBody": {
+                    "description": "Submit the employee-provided fields configured as true in the selected document type field_requires.",
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "document_type_id",
-                                    "purpose"
+                                    "document_type_id"
                                 ],
                                 "properties": {
                                     "document_type_id": {
@@ -303,10 +779,6 @@
                                         "type": "string",
                                         "example": "Employment Visa Process"
                                     },
-                                    "details": {
-                                        "type": "string",
-                                        "nullable": true
-                                    },
                                     "to_address": {
                                         "type": "string",
                                         "nullable": true
@@ -314,6 +786,27 @@
                                     "visa_designation": {
                                         "type": "string",
                                         "nullable": true
+                                    },
+                                    "destination_country": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "maxLength": 100
+                                    },
+                                    "salary_amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "nullable": true
+                                    },
+                                    "currency": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z]{3}$",
+                                        "nullable": true,
+                                        "maxLength": 3
+                                    },
+                                    "bank_iban": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "maxLength": 100
                                     }
                                 },
                                 "type": "object"
@@ -517,6 +1010,405 @@
                         "sanctum": []
                     }
                 ]
+            },
+            "post": {
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Create a new corporate event or reminder",
+                "description": "Create an event via API.",
+                "operationId": "446e16eabb76930dc344352554f87ec9",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "event_type_id",
+                                    "title",
+                                    "start_datetime"
+                                ],
+                                "properties": {
+                                    "event_type_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "title": {
+                                        "type": "string",
+                                        "example": "Annual Townhall Meeting"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "All company quarterly update"
+                                    },
+                                    "start_datetime": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-11-20 10:00:00"
+                                    },
+                                    "end_datetime": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-11-20 12:00:00"
+                                    },
+                                    "external_link": {
+                                        "type": "string",
+                                        "example": "https://meet.google.com/xyz"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "example": "published",
+                                        "enum": [
+                                            "draft",
+                                            "published",
+                                            "cancelled"
+                                        ]
+                                    },
+                                    "show_dashboard": {
+                                        "type": "boolean",
+                                        "example": true
+                                    },
+                                    "file": {
+                                        "description": "Event flyer or banner",
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Event created successfully"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/events/today": {
+            "get": {
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Get today events for dashboard widget",
+                "description": "Today's events specifically tailored for dashboard display.",
+                "operationId": "d40fa6f5017e5e52b52018ca512efe8e",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Limit number of events (default 3)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 3
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Events retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/events/types": {
+            "get": {
+                "tags": [
+                    "Events"
+                ],
+                "summary": "List event types with icons and priorities",
+                "description": "List all active event types.",
+                "operationId": "f208d84002172b6e9c931c0ce0df7aa1",
+                "responses": {
+                    "200": {
+                        "description": "Event types retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/events/{id}": {
+            "get": {
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Get details of a single event",
+                "description": "Get a single event.",
+                "operationId": "954b2484f2b7374943e532424808976b",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Event ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Event details retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Event not found"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/documents/letters": {
+            "get": {
+                "tags": [
+                    "Documents - Letters"
+                ],
+                "summary": "List employee letter requests for HR review",
+                "operationId": "e651cd667c3a5f41f7abebf1065b3617",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 15
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Letter requests retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/documents/letters/{id}": {
+            "get": {
+                "tags": [
+                    "Documents - Letters"
+                ],
+                "summary": "Get an employee letter request for HR review",
+                "operationId": "c866430ff2aa5a8ff738479d205117fc",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Letter request details retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Letter request not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/documents/letters/{id}/approve": {
+            "post": {
+                "tags": [
+                    "Documents - Letters"
+                ],
+                "summary": "Approve an employee letter request and generate its letter",
+                "operationId": "cca4f4c101701325c6f9fefb24919b7f",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "description": "Submit only HR-provided details and remarks. Employee-submitted fields are read-only. Details are required for NOC and Salary Transfer Letter requests.",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "details": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "maxLength": 2000
+                                    },
+                                    "remarks": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Letter request approved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Letter request not found"
+                    },
+                    "409": {
+                        "description": "Letter request is no longer pending"
+                    },
+                    "422": {
+                        "description": "HR details are missing or invalid, or employee fields were submitted"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/documents/letters/{id}/reject": {
+            "post": {
+                "tags": [
+                    "Documents - Letters"
+                ],
+                "summary": "Reject an employee letter request",
+                "operationId": "a1f8efee9dad4dd4d7a498c0ae6f2b16",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "remarks"
+                                ],
+                                "properties": {
+                                    "remarks": {
+                                        "type": "string",
+                                        "maxLength": 500
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Letter request rejected successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "Letter request not found"
+                    },
+                    "409": {
+                        "description": "Letter request is no longer pending"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
             }
         },
         "/api/v1/ideas": {
@@ -635,6 +1527,14 @@
                                         "type": "string",
                                         "format": "date"
                                     },
+                                    "request_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fullday",
+                                            "firsthalf",
+                                            "secondhalf"
+                                        ]
+                                    },
                                     "reason": {
                                         "type": "string"
                                     },
@@ -642,6 +1542,14 @@
                                         "type": "integer"
                                     },
                                     "handover_description": {
+                                        "type": "string"
+                                    },
+                                    "emergency_contact_no": {
+                                        "description": "Digits only, with an optional leading +.",
+                                        "type": "string"
+                                    },
+                                    "travel_contact_no": {
+                                        "description": "Digits only, with an optional leading +.",
                                         "type": "string"
                                     },
                                     "files": {
@@ -709,6 +1617,43 @@
                         "sanctum": []
                     }
                 ]
+            },
+            "patch": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Update an applied leave request",
+                "description": "Update an applied leave request belonging to the authenticated employee.",
+                "operationId": "4f1435fcee435a5fb5456f2e19dba059",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Leave request updated successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Leave request not found"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
             }
         },
         "/api/v1/rewards/categories": {
@@ -722,6 +1667,668 @@
                 "responses": {
                     "200": {
                         "description": "Reward categories retrieved successfully"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/rewards/summary": {
+            "get": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Get employee personal rewards summary metrics",
+                "description": "Get employee personal rewards summary for the mobile dashboard.\nShows this month's reward amount, this year's total reward amount, and total count.",
+                "operationId": "e1f6d76b55bb103c7c0afb100b5e657e",
+                "parameters": [
+                    {
+                        "name": "year",
+                        "in": "query",
+                        "description": "Filter by year (e.g. 2026)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 2026
+                        }
+                    },
+                    {
+                        "name": "month",
+                        "in": "query",
+                        "description": "Filter by month number 1-12",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 11
+                        }
+                    },
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "Filter by category ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "example": 1
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filter by status (approved, paid, pending)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "approved"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Rewards summary retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee record not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/rewards": {
+            "get": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "List personal rewards for the authenticated employee",
+                "description": "Get list of rewards for the authenticated employee (Self-Service).",
+                "operationId": "2243f2fc410d44fc1af913cdaed17078",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filter by status (pending, approved, paid, rejected)",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "Filter by category ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "year",
+                        "in": "query",
+                        "description": "Filter by submission year (e.g. 2026)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "month",
+                        "in": "query",
+                        "description": "Filter by submission month number (1-12)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "date_filter",
+                        "in": "query",
+                        "description": "Quick keyword: today, this_month, last_month",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Search in claim_no, category, or description",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Pagination page size (default 15)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Rewards list retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee record not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Submit / nominate a reward claim",
+                "description": "Apply / Nominate for a reward (Self-Service or HR delegation).",
+                "operationId": "f531f064dad45259f8e2f27679433c70",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "category_id",
+                                    "amount",
+                                    "description"
+                                ],
+                                "properties": {
+                                    "category_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 500
+                                    },
+                                    "currency": {
+                                        "type": "string",
+                                        "example": "AED"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Completed critical project deployment"
+                                    },
+                                    "employee_id": {
+                                        "description": "Optional for HR users to submit on behalf of an employee",
+                                        "type": "integer",
+                                        "example": 4
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "example": "pending",
+                                        "enum": [
+                                            "pending",
+                                            "approved",
+                                            "paid"
+                                        ]
+                                    },
+                                    "submitted_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-11-14"
+                                    },
+                                    "comments": {
+                                        "type": "string",
+                                        "example": "Approved nomination by supervisor"
+                                    },
+                                    "document": {
+                                        "description": "Supporting document (PDF, PNG, JPG up to 10MB)",
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Reward claim submitted successfully"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/rewards": {
+            "get": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "List all rewards across employees (HR & Finance)",
+                "description": "Get list of all rewards across employees (HR / Finance Access).",
+                "operationId": "f9b9dc0b75274fb46c1f1ef97af29573",
+                "parameters": [
+                    {
+                        "name": "employee_id",
+                        "in": "query",
+                        "description": "Filter by specific employee ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filter by status (pending, approved, paid, rejected)",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "category_id",
+                        "in": "query",
+                        "description": "Filter by category ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "date_filter",
+                        "in": "query",
+                        "description": "Quick keyword: today, this_month, last_month",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Search across claim_no, employee name, category or description",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Pagination page size (default 15)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "HR rewards list retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden (HR/Finance/Admin required)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Add / record a reward for any employee (HR & Finance)",
+                "description": "Add existing or new reward for an employee (HR / Finance Access).",
+                "operationId": "85c2fc6479916b1691dd29e9fbb91f62",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "category_id",
+                                    "amount",
+                                    "description"
+                                ],
+                                "properties": {
+                                    "employee_id": {
+                                        "description": "Employee receiving the reward",
+                                        "type": "integer",
+                                        "example": 4
+                                    },
+                                    "category_id": {
+                                        "type": "integer",
+                                        "example": 1
+                                    },
+                                    "amount": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "example": 1000
+                                    },
+                                    "currency": {
+                                        "type": "string",
+                                        "example": "AED"
+                                    },
+                                    "description": {
+                                        "type": "string",
+                                        "example": "Annual outstanding achievement award"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "example": "approved",
+                                        "enum": [
+                                            "pending",
+                                            "approved",
+                                            "paid"
+                                        ]
+                                    },
+                                    "award_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "example": "2026-11-01"
+                                    },
+                                    "comments": {
+                                        "type": "string",
+                                        "example": "Awarded by Executive Director"
+                                    },
+                                    "document": {
+                                        "description": "Supporting certificate or voucher file",
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Reward recorded successfully"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    },
+                    "403": {
+                        "description": "Forbidden (HR/Finance required)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/rewards/{id}": {
+            "get": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Get details of an employee reward claim",
+                "description": "Get specific reward details (Self-Service).",
+                "operationId": "a2ad8bfbb0f73ccff7707b1c844a6ba5",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Reward ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reward details fetched successfully"
+                    },
+                    "404": {
+                        "description": "Reward claim not found"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/rewards/{id}": {
+            "get": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Get details of any employee reward (HR & Finance)",
+                "description": "Get specific reward details (HR / Finance Access).",
+                "operationId": "c259bcfe43604026ae5095687cee5591",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Reward ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reward details fetched successfully"
+                    },
+                    "404": {
+                        "description": "Reward record not found"
+                    },
+                    "403": {
+                        "description": "Forbidden (HR/Finance required)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/rewards/{id}/status": {
+            "post": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Update reward claim status (Approve, Pay, Reject)",
+                "description": "Update claim approval status via HR API (Approve, Mark as Paid, Reject).",
+                "operationId": "19beb504c0dfd59fa5d6971c0773f173",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "Reward ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "status"
+                                ],
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "example": "approved",
+                                        "enum": [
+                                            "approved",
+                                            "paid",
+                                            "rejected"
+                                        ]
+                                    },
+                                    "comments": {
+                                        "description": "Mandatory when rejecting",
+                                        "type": "string",
+                                        "example": "Approved by HR manager"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Status updated successfully"
+                    },
+                    "422": {
+                        "description": "Validation failed or missing rejection comments"
+                    },
+                    "403": {
+                        "description": "Only Finance or Admin can mark as paid"
+                    },
+                    "404": {
+                        "description": "Reward claim not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/rewards/template": {
+            "get": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Download sample Excel or CSV template for rewards bulk import",
+                "description": "Download sample CSV or Excel template for bulk importing rewards.",
+                "operationId": "89db152836588ef086b4c36bf6ff2862",
+                "parameters": [
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "description": "Template format: excel (default) or csv",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "example": "excel",
+                            "enum": [
+                                "excel",
+                                "csv"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File download stream (.xls or .csv)"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Forbidden (HR/Finance required)"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/rewards/bulk-import": {
+            "post": {
+                "tags": [
+                    "Rewards"
+                ],
+                "summary": "Bulk import employee rewards via CSV upload (HR & Finance)",
+                "description": "Bulk import employee rewards from CSV file.",
+                "operationId": "4ab8f5f551e733f36d7421ee50d7e6b2",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "file"
+                                ],
+                                "properties": {
+                                    "file": {
+                                        "description": "CSV file containing employee rewards (max 5MB)",
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Bulk import processed with counts of success and failure"
+                    },
+                    "422": {
+                        "description": "CSV format or validation errors"
+                    },
+                    "403": {
+                        "description": "Forbidden (HR/Finance required)"
                     }
                 },
                 "security": [
@@ -798,6 +2405,366 @@
                     }
                 ]
             }
+        },
+        "/api/v1/visits": {
+            "get": {
+                "tags": [
+                    "Visits"
+                ],
+                "summary": "List client/office visits",
+                "description": "List visit history / requests.",
+                "operationId": "1c1de867923027026f5da81dcb2bcf1d",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Filter by status (pending, approved, rejected)",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "all",
+                        "in": "query",
+                        "description": "Return all visits (HR only)",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "description": "Page size",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Page number",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Visits retrieved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Visits"
+                ],
+                "summary": "Submit a new visit request",
+                "description": "Submit a new visit request.",
+                "operationId": "412450c59a6681739a491514d4de9b37",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "total_visitors",
+                                    "visitor_details",
+                                    "company",
+                                    "contact_no",
+                                    "email",
+                                    "purpose",
+                                    "location",
+                                    "expected_start_date"
+                                ],
+                                "properties": {
+                                    "total_visitors": {
+                                        "type": "integer",
+                                        "example": 2
+                                    },
+                                    "visitor_details": {
+                                        "type": "array",
+                                        "items": {
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "Alex Smith"
+                                                },
+                                                "designation": {
+                                                    "type": "string",
+                                                    "example": "Procurement Specialist"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "company": {
+                                        "type": "string",
+                                        "example": "Acme Corp"
+                                    },
+                                    "contact_no": {
+                                        "type": "string",
+                                        "example": "+971501234567"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "example": "alex@acme.com"
+                                    },
+                                    "purpose": {
+                                        "type": "string",
+                                        "example": "Contract signing & technical review"
+                                    },
+                                    "location": {
+                                        "type": "string",
+                                        "example": "Head Office - Room 402"
+                                    },
+                                    "expected_start_date": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-11-25 10:00:00"
+                                    },
+                                    "expected_end_date": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2026-11-25 13:00:00"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Visit request submitted successfully"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/visits/{visit}": {
+            "get": {
+                "tags": [
+                    "Visits"
+                ],
+                "summary": "Get visit details",
+                "description": "Get visit details.",
+                "operationId": "70034771a9f3029a9e02c1af9b995636",
+                "parameters": [
+                    {
+                        "name": "visit",
+                        "in": "path",
+                        "description": "Visit ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Visit retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Visit not found"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/visits/{visit}/approve": {
+            "post": {
+                "tags": [
+                    "Visits"
+                ],
+                "summary": "Approve a visit request",
+                "description": "Approve visit request by HR.",
+                "operationId": "a55b74b36305f3af4abaf517af74a772",
+                "parameters": [
+                    {
+                        "name": "visit",
+                        "in": "path",
+                        "description": "Visit ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "instructions": {
+                                        "type": "string",
+                                        "example": "Visitor pass issued at reception"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Visit approved successfully"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/visits/{visit}/reject": {
+            "post": {
+                "tags": [
+                    "Visits"
+                ],
+                "summary": "Reject a visit request with reason",
+                "description": "Reject visit request by HR.",
+                "operationId": "c6915949819a5150553d535a73c96b01",
+                "parameters": [
+                    {
+                        "name": "visit",
+                        "in": "path",
+                        "description": "Visit ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "rejected_reason"
+                                ],
+                                "properties": {
+                                    "rejected_reason": {
+                                        "type": "string",
+                                        "example": "Meeting room unavailable during the specified time"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Visit request rejected"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/visits/{visit}/status": {
+            "post": {
+                "tags": [
+                    "Visits"
+                ],
+                "summary": "Update visit status (completed, cancelled)",
+                "description": "Update visit status to completed or cancelled.",
+                "operationId": "f3c4c9ec5e57ea8c2660a0338bd1fe95",
+                "parameters": [
+                    {
+                        "name": "visit",
+                        "in": "path",
+                        "description": "Visit ID",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "status"
+                                ],
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "example": "completed",
+                                        "enum": [
+                                            "completed",
+                                            "cancelled"
+                                        ]
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Visit status updated successfully"
+                    },
+                    "422": {
+                        "description": "Validation failed"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
         }
     },
     "components": {
@@ -818,6 +2785,14 @@
         {
             "name": "Authentication",
             "description": "Authentication"
+        },
+        {
+            "name": "Dashboard",
+            "description": "Dashboard"
+        },
+        {
+            "name": "Departments",
+            "description": "Departments"
         },
         {
             "name": "Documents",
@@ -850,6 +2825,10 @@
         {
             "name": "Social Media",
             "description": "Social Media"
+        },
+        {
+            "name": "Visits",
+            "description": "Visits"
         }
     ]
 }
