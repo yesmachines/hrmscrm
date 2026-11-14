@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\EmployeeProfile;
+use App\Models\Festival;
 use App\Models\LeaveBalance;
 use App\Models\LeaveHistory;
 use App\Models\LeavePolicy;
@@ -9,9 +10,13 @@ use App\Models\LeaveRequestApproval;
 use App\Models\LeaveRequestFile;
 use App\Models\LeaveType;
 use App\Models\Organisation;
+use App\Models\SalesCrm\Country;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
+use App\Services\FestivalLeaveService;
+use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -23,6 +28,195 @@ test('hr user can view the apply leave page', function () {
         ->get(route('leave-requests.create'))
         ->assertOk();
 });
+
+test('hr leave form reads festival country ids from the HRMS pivot table', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    $festival = Festival::query()->create([
+        'name' => 'Test Festival',
+        'type' => 'festival',
+        'religion' => 'Hindu',
+        'shortcode' => fake()->unique()->bothify('FEST-#####'),
+        'start_date' => '2026-11-14',
+        'end_date' => '2026-11-14',
+        'is_active' => true,
+    ]);
+    $countryId = 24680;
+
+    DB::table('festival_nationality')->insert([
+        'festival_id' => $festival->id,
+        'country_id' => $countryId,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->actingAs($hrUser)
+        ->withoutVite()
+        ->get(route('leave-requests.create'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('leave-requests/create')
+            ->where('festivals', fn ($festivals) => collect($festivals)->contains(
+                fn ($festivalData) => $festivalData['id'] === $festival->id
+                    && $festivalData['country_ids'] === [$countryId],
+            ))
+        );
+});
+
+test('hr leave forms resolve nationality names and ids for festival eligibility', function (string $nationality) {
+    $hrUser = createHrmsLoginUser('hr');
+    $country = Country::query()->firstOrCreate(
+        ['code' => 'FT'],
+        ['name' => 'Festival Test Country', 'status' => 1],
+    );
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    EmployeeProfile::query()->create([
+        'employee_id' => $employee->id,
+        'nationality' => $nationality === 'name' ? $country->name : (string) $country->id,
+        'home_country' => null,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Festival Test Leave',
+        'code' => fake()->unique()->bothify('FEST-#####'),
+        'status' => 1,
+    ]);
+    $leaveRequest = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-16',
+        'end_date' => '2026-11-16',
+        'total_days' => 1,
+        'status' => 'applied',
+    ]);
+
+    foreach ([
+        ['leave-requests.create', [], 'leave-requests/create'],
+        ['leave-requests.edit', [$leaveRequest], 'leave-requests/edit'],
+    ] as [$route, $parameters, $component]) {
+        $this->actingAs($hrUser)
+            ->withoutVite()
+            ->get(route($route, $parameters))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component($component)
+                ->where('employees', fn ($employees) => collect($employees)->contains(
+                    fn ($data) => $data['id'] === $employee->id
+                        && $data['country_ids'] === [(int) $country->id],
+                ))
+            );
+    }
+})->with(['name', 'id']);
+
+test('festival validation reads country ids from the HRMS pivot table', function () {
+    $festival = Festival::query()->create([
+        'name' => 'Test Festival',
+        'type' => 'festival',
+        'religion' => 'Hindu',
+        'shortcode' => fake()->unique()->bothify('FEST-#####'),
+        'start_date' => '2026-11-14',
+        'end_date' => '2026-11-14',
+        'is_active' => true,
+    ]);
+    $countryId = 24680;
+
+    DB::table('festival_nationality')->insert([
+        'festival_id' => $festival->id,
+        'country_id' => $countryId,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    expect(fn () => app(FestivalLeaveService::class)->validateSelection(
+        new LeaveType([
+            'leave_name' => 'Festival Leave',
+            'code' => 'FESTIVAL',
+        ]),
+        $festival->id,
+        new EmployeeProfile([
+            'home_country' => $countryId,
+            'religion' => 'Hindu',
+        ]),
+        Carbon::parse('2026-11-14'),
+        Carbon::parse('2026-11-14'),
+    ))->not->toThrow(Throwable::class);
+});
+
+test('hr festival submission validates and saves the selected festival', function (string $selection) {
+    $hrUser = createHrmsLoginUser('hr');
+    $employee = Employee::query()->create([
+        'user_id' => SalesCrmUser::factory()->create()->id,
+        'emp_num' => fake()->unique()->bothify('EMP-#####'),
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Festival Leave',
+        'code' => 'FESTIVAL',
+        'is_paid' => true,
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    $festival = Festival::query()->create([
+        'name' => 'Onam',
+        'type' => 'festival',
+        'shortcode' => fake()->unique()->bothify('ONA-#####'),
+        'start_date' => '2027-04-01',
+        'end_date' => '2027-04-01',
+        'is_active' => true,
+    ]);
+    $data = [
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'festival_id' => match ($selection) {
+            'valid', 'outside_dates' => $festival->id,
+            'missing' => null,
+            'nonexistent' => $festival->id + 1000,
+        },
+        'start_date' => '2027-04-01',
+        'end_date' => $selection === 'outside_dates' ? '2027-04-02' : '2027-04-01',
+        'request_type' => 'fullday',
+        'total_days' => 1,
+        'status' => 'applied',
+    ];
+
+    $response = $this->actingAs($hrUser)
+        ->from(route('leave-requests.create'))
+        ->post(route('leave-requests.store'), $data);
+
+    if ($selection !== 'valid') {
+        $response->assertRedirect(route('leave-requests.create'))
+            ->assertSessionHasErrors($selection === 'outside_dates' ? ['start_date', 'end_date'] : ['festival_id']);
+
+        $this->assertDatabaseMissing('leave_requests', [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+        ]);
+
+        return;
+    }
+
+    $response->assertSessionHasNoErrors()
+        ->assertRedirect(route('leave-requests.index'));
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $employee->id)
+        ->where('leave_type_id', $leaveType->id)
+        ->firstOrFail();
+
+    $this->assertDatabaseHas('leave_request_details', [
+        'leave_request_id' => $leaveRequest->id,
+        'field_key' => 'festival_id',
+        'field_value' => (string) $festival->id,
+    ]);
+})->with(['valid', 'missing', 'nonexistent', 'outside_dates']);
 
 test('hr leave duration excludes saturdays and sundays from the selected date range', function () {
     $hrUser = createHrmsLoginUser('hr');

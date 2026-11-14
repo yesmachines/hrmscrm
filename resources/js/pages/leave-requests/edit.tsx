@@ -29,6 +29,7 @@ interface EmployeeOption {
     employee_code: string | null;
     designation: string | null;
     organisation_id: number | null;
+    country_ids: number[];
     gender?: string | null;
     religion?: string | null;
     marital_status?: string | null;
@@ -37,6 +38,8 @@ interface EmployeeOption {
         gender?: string | null;
         religion?: string | null;
         marital_status?: string | null;
+        nationality?: string | null;
+        home_country?: number | null;
     } | null;
     department?: {
         id: number;
@@ -86,6 +89,16 @@ interface ActiveLeaveItem {
     status: string;
 }
 
+interface FestivalOption {
+    id: number;
+    name: string;
+    religion: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    country_ids: number[];
+    eligible_employee_ids: number[];
+}
+
 interface LeaveRequestItem {
     id: number;
     employee_id: number;
@@ -103,6 +116,7 @@ interface LeaveRequestItem {
     files?: { id: number; file_path: string }[];
     child_birth_date?: string | null;
     due_date?: string | null;
+    festival_id?: string | null;
 }
 
 interface Props {
@@ -111,6 +125,7 @@ interface Props {
     leaveTypes: LeaveTypeOption[];
     leaveBalances: LeaveBalanceItem[];
     activeLeaves?: ActiveLeaveItem[];
+    festivals?: FestivalOption[];
 }
 
 export default function LeaveRequestsEdit({
@@ -119,6 +134,7 @@ export default function LeaveRequestsEdit({
     leaveTypes = [],
     leaveBalances = [],
     activeLeaves = [],
+    festivals = [],
 }: Props) {
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
@@ -152,6 +168,7 @@ export default function LeaveRequestsEdit({
         handover_description: leaveRequest.handover_description ?? '',
         child_birth_date: leaveRequest.child_birth_date ?? '',
         due_date: leaveRequest.due_date ?? '',
+        festival_id: leaveRequest.festival_id ?? '',
     });
 
     // Calculate days between start and end date when dates change
@@ -231,6 +248,15 @@ export default function LeaveRequestsEdit({
     const isParentalLeave = selectedLeaveType?.code === 'PARENTAL';
     const isMaternityLeave = selectedLeaveType?.code === 'MATERNITY';
     const requiresChildBirthDate = ['PARENTAL', 'PATERNITY'].includes(selectedLeaveType?.code ?? '');
+    const isFestivalLeave = selectedLeaveType?.code === 'FESTIVAL'
+        || selectedLeaveType?.leave_name.toLowerCase().includes('festival') === true;
+    const eligibleFestivals = useMemo(() => {
+        if (!selectedEmployee) {
+            return [];
+        }
+
+        return festivals.filter((festival) => festival.eligible_employee_ids.includes(selectedEmployee.id));
+    }, [festivals, selectedEmployee]);
     const isActiveRequest = ['applied', 'approved'].includes(data.status);
 
     const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
@@ -250,9 +276,11 @@ export default function LeaveRequestsEdit({
         child_birth_date: data.child_birth_date || null,
         handover_person_id: data.handover_person_id || null,
         handover_description: data.handover_description || null,
+        festival_id: data.festival_id || null,
         ignore_leave_request_id: leaveRequest.id,
     }), [
         data.child_birth_date,
+        data.festival_id,
         data.due_date,
         data.employee_id,
         data.end_date,
@@ -288,10 +316,13 @@ export default function LeaveRequestsEdit({
 
                 const result = await response.json() as { valid: boolean; errors?: Record<string, string[]> };
 
+                if (controller.signal.aborted) {
+                    return;
+                }
+
+                clearErrors();
+
                 if (!result.valid && result.errors) {
-
-                    clearErrors();
-
                     for (const [field, messages] of Object.entries(result.errors)) {
                         if (messages[0]) {
                             setError(field as keyof typeof data, messages[0]);
@@ -387,6 +418,12 @@ export default function LeaveRequestsEdit({
 
         if (isMaternityLeave && isActiveRequest && !data.due_date) {
             setError('due_date', 'An expected due date is required for Maternity Leave.');
+
+            return;
+        }
+
+        if (isFestivalLeave && isActiveRequest && !data.festival_id) {
+            setError('festival_id', 'Please select a festival.');
 
             return;
         }
@@ -651,6 +688,35 @@ export default function LeaveRequestsEdit({
                                             <p className="mt-1 text-xs text-destructive">{errors.request_type}</p>
                                         )}
                                     </div>
+
+                                    {isFestivalLeave && (
+                                        <div>
+                                            <Label htmlFor="festival_id">Festival</Label>
+                                            <select
+                                                id="festival_id"
+                                                value={data.festival_id}
+                                                onChange={(event) => {
+                                                    const festival = eligibleFestivals.find((item) => String(item.id) === event.target.value);
+                                                    setData('festival_id', event.target.value);
+
+                                                    if (festival?.start_date) {
+                                                        setData('start_date', festival.start_date);
+                                                        setData('end_date', festival.end_date || festival.start_date);
+                                                    }
+
+                                                    clearErrors('festival_id', 'start_date', 'end_date');
+                                                }}
+                                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs"
+                                                required={isActiveRequest}
+                                            >
+                                                <option value="">-- Choose Festival --</option>
+                                                {eligibleFestivals.map((festival) => (
+                                                    <option key={festival.id} value={festival.id}>{festival.name}</option>
+                                                ))}
+                                            </select>
+                                            {errors.festival_id && <p className="mt-1 text-xs text-destructive">{errors.festival_id}</p>}
+                                        </div>
+                                    )}
 
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                         <div>

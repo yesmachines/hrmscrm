@@ -31,6 +31,7 @@ interface EmployeeOption {
     employee_code: string | null;
     designation: string | null;
     organisation_id: number | null;
+    country_ids: number[];
     gender?: string | null;
     religion?: string | null;
     marital_status?: string | null;
@@ -39,6 +40,8 @@ interface EmployeeOption {
         gender?: string | null;
         religion?: string | null;
         marital_status?: string | null;
+        nationality?: string | null;
+        home_country?: number | null;
     } | null;
     department?: {
         id: number;
@@ -89,11 +92,22 @@ interface ActiveLeaveItem {
     status: string;
 }
 
+interface FestivalOption {
+    id: number;
+    name: string;
+    religion: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    country_ids: number[];
+    eligible_employee_ids: number[];
+}
+
 interface Props {
     employees: EmployeeOption[];
     leaveTypes: LeaveTypeOption[];
     leaveBalances: LeaveBalanceItem[];
     activeLeaves?: ActiveLeaveItem[];
+    festivals?: FestivalOption[];
 }
 
 function dateOnly(value: string | null | undefined): string | null {
@@ -109,6 +123,7 @@ export default function LeaveRequestsCreate({
     leaveTypes = [],
     leaveBalances = [],
     activeLeaves = [],
+    festivals = [],
 }: Props) {
     const employeeSelectId = useId();
     const employeeListboxId = useId();
@@ -146,6 +161,7 @@ export default function LeaveRequestsCreate({
         handover_description: '',
         child_birth_date: '',
         due_date: '',
+        festival_id: '',
     });
 
     const filteredEmployees = useMemo(() => {
@@ -214,6 +230,7 @@ export default function LeaveRequestsCreate({
         setData('handover_description', '');
         setData('child_birth_date', '');
         setData('due_date', '');
+        setData('festival_id', '');
 
         if (certificateInputRef.current) {
             certificateInputRef.current.value = '';
@@ -261,6 +278,15 @@ export default function LeaveRequestsCreate({
     }, [data.leave_type_id, availableLeaveTypes]);
     const isMaternityLeave = selectedLeaveType?.code === 'MATERNITY';
     const requiresChildBirthDate = ['PARENTAL', 'PATERNITY'].includes(selectedLeaveType?.code ?? '');
+    const isFestivalLeave = selectedLeaveType?.code === 'FESTIVAL'
+        || selectedLeaveType?.leave_name.toLowerCase().includes('festival') === true;
+    const eligibleFestivals = useMemo(() => {
+        if (!selectedEmployee) {
+            return [];
+        }
+
+        return festivals.filter((festival) => festival.eligible_employee_ids.includes(selectedEmployee.id));
+    }, [festivals, selectedEmployee]);
 
     const selectedPolicy = useMemo(() => {
         if (!selectedLeaveType || selectedEmployee?.organisation_id == null) {
@@ -292,12 +318,14 @@ export default function LeaveRequestsCreate({
             total_days: data.total_days,
             child_birth_date: data.child_birth_date || null,
             due_date: data.due_date || null,
+            festival_id: data.festival_id || null,
             handover_person_id: data.handover_person_id || null,
             handover_description: data.handover_description || null,
         };
     }, [
         data.child_birth_date,
         data.due_date,
+        data.festival_id,
         data.end_date,
         data.handover_description,
         data.handover_person_id,
@@ -331,10 +359,13 @@ export default function LeaveRequestsCreate({
 
                 const result = await response.json() as { valid: boolean; errors?: Record<string, string[]> };
 
+                if (controller.signal.aborted) {
+                    return;
+                }
+
+                clearErrors();
+
                 if (!result.valid && result.errors) {
-
-                    clearErrors();
-
                     for (const [field, messages] of Object.entries(result.errors)) {
                         if (messages[0]) {
                             setError(field as keyof typeof data, messages[0]);
@@ -457,6 +488,12 @@ export default function LeaveRequestsCreate({
 
         if (isMaternityLeave && !data.due_date) {
             setError('due_date', 'An expected due date is required for Maternity Leave.');
+
+            return;
+        }
+
+        if (isFestivalLeave && !data.festival_id) {
+            setError('festival_id', 'Please select a festival.');
 
             return;
         }
@@ -760,6 +797,40 @@ export default function LeaveRequestsCreate({
                                         required
                                     />
                                     {errors.due_date && <p className="text-sm text-destructive">{errors.due_date}</p>}
+                                </div>
+                            )}
+
+                            {isFestivalLeave && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="festival_id">
+                                        Festival <span className="text-destructive">*</span>
+                                    </Label>
+                                    <select
+                                        id="festival_id"
+                                        value={data.festival_id}
+                                        onChange={(event) => {
+                                            const festival = eligibleFestivals.find((item) => String(item.id) === event.target.value);
+                                            setData('festival_id', event.target.value);
+
+                                            if (festival?.start_date) {
+                                                setData('start_date', festival.start_date);
+                                                setData('end_date', festival.end_date || festival.start_date);
+                                            }
+
+                                            clearErrors('festival_id', 'start_date', 'end_date');
+                                        }}
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                        required
+                                    >
+                                        <option value="">-- Choose Festival --</option>
+                                        {eligibleFestivals.map((festival) => (
+                                            <option key={festival.id} value={festival.id}>{festival.name}</option>
+                                        ))}
+                                    </select>
+                                    {errors.festival_id && <p className="text-sm text-destructive">{errors.festival_id}</p>}
+                                    {eligibleFestivals.length === 0 && (
+                                        <p className="text-sm text-muted-foreground">No festivals are applicable to this employee.</p>
+                                    )}
                                 </div>
                             )}
 

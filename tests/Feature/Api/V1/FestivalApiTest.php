@@ -4,6 +4,7 @@ use App\Models\EmployeeProfile;
 use App\Models\Festival;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Models\SalesCrm\Country;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,10 @@ beforeEach(function () {
     DB::table('leave_requests')->delete();
     DB::table('festival_nationality')->delete();
     DB::table('festivals')->delete();
+    Country::query()->firstOrCreate(
+        ['code' => 'IN'],
+        ['name' => 'India', 'status' => 1],
+    );
 });
 
 test('leaves festivals endpoint returns holidays matching employee nationality', function () {

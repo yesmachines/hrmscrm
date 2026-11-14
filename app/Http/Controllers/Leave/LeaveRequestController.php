@@ -8,6 +8,7 @@ use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
+use App\Services\FestivalLeaveService;
 use App\Services\LeaveDurationCalculator;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveValidationService;
@@ -21,6 +22,8 @@ use Inertia\Response;
 
 class LeaveRequestController extends Controller
 {
+    public function __construct(private readonly FestivalLeaveService $festivalLeaveService) {}
+
     public function index(Request $request): Response
     {
         $requests = LeaveRequest::with([
@@ -49,11 +52,16 @@ class LeaveRequestController extends Controller
             ->get();
 
         $profiles = Employee::profilesFor($employees);
-        $employees->each(function (Employee $emp) use ($profiles) {
+        $countryIdsByEmployee = $this->festivalLeaveService->countryIdsForProfiles($profiles);
+        $employees->each(function (Employee $emp) use ($profiles, $countryIdsByEmployee) {
             $profile = $profiles->get($emp->id);
+            $emp->country_ids = $countryIdsByEmployee->get($emp->id, []);
             $emp->gender = $profile?->gender;
             $emp->religion = $profile?->religion;
             $emp->marital_status = $profile?->marital_status;
+            if ($profile) {
+                $profile->makeVisible(['nationality', 'home_country']);
+            }
             $emp->setRelation('profile', $profile);
         });
 
@@ -81,6 +89,7 @@ class LeaveRequestController extends Controller
             'leaveTypes' => $leaveTypes,
             'leaveBalances' => $leaveBalances,
             'activeLeaves' => $activeLeaves,
+            'festivals' => $this->festivalLeaveService->optionsForEmployees($employees, $profiles, $countryIdsByEmployee),
         ]);
     }
 
@@ -96,13 +105,13 @@ class LeaveRequestController extends Controller
             'request_type' => ['nullable', 'in:fullday,firsthalf,secondhalf'],
             'due_date' => ['nullable', 'date'],
             'child_birth_date' => ['nullable', 'date'],
-            'festival_id' => ['nullable', 'exists:festivals,id'],
             'emergency_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
             'travel_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
             'traveling_outside_country' => ['nullable', 'boolean'],
             'destination' => ['nullable', 'string'],
             'handover_person_id' => ['nullable', 'exists:salescrm.employees,id'],
             'handover_description' => ['nullable', 'string'],
+            'festival_id' => ['nullable', 'integer', 'exists:festivals,id'],
             'certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:10240'],
             'ignore_leave_request_id' => ['nullable', 'integer', 'exists:leave_requests,id'],
         ]);
@@ -125,7 +134,6 @@ class LeaveRequestController extends Controller
                 'errors' => $exception->errors(),
             ]);
         }
-
         $leaveType = $validation['leave_type'];
 
         return response()->json([
@@ -162,6 +170,7 @@ class LeaveRequestController extends Controller
             'handover_description' => 'nullable|string',
             'due_date' => 'nullable|date',
             'child_birth_date' => 'nullable|date',
+            'festival_id' => 'nullable|integer|exists:festivals,id',
         ]);
 
         $employee = Employee::query()->findOrFail($validated['employee_id']);
@@ -207,6 +216,14 @@ class LeaveRequestController extends Controller
                 'employee_profile' => $profile,
             ],
             $startDate,
+        );
+        $this->festivalLeaveService->validate(
+            $employee,
+            $leaveType,
+            $validated['festival_id'] ?? null,
+            $profile,
+            $startDate,
+            $endDate,
         );
 
         $leaveValidationService->validatePolicyEligibility(
@@ -320,6 +337,7 @@ class LeaveRequestController extends Controller
                 'field_value' => $fieldValue,
             ]);
         }
+        $this->festivalLeaveService->syncSelection($leaveRequest, $leaveType, $validated['festival_id'] ?? null);
 
         if ($status === 'approved') {
             if ($requiresApproval) {
@@ -407,11 +425,16 @@ class LeaveRequestController extends Controller
             ->get();
 
         $profiles = Employee::profilesFor($employees);
-        $employees->each(function (Employee $emp) use ($profiles) {
+        $countryIdsByEmployee = $this->festivalLeaveService->countryIdsForProfiles($profiles);
+        $employees->each(function (Employee $emp) use ($profiles, $countryIdsByEmployee) {
             $profile = $profiles->get($emp->id);
+            $emp->country_ids = $countryIdsByEmployee->get($emp->id, []);
             $emp->gender = $profile?->gender;
             $emp->religion = $profile?->religion;
             $emp->marital_status = $profile?->marital_status;
+            if ($profile) {
+                $profile->makeVisible(['nationality', 'home_country']);
+            }
             $emp->setRelation('profile', $profile);
         });
 
@@ -421,6 +444,8 @@ class LeaveRequestController extends Controller
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
             ->get();
+
+        $festivals = $this->festivalLeaveService->optionsForEmployees($employees, $profiles, $countryIdsByEmployee);
 
         $year = (int) Carbon::parse($leave_request->start_date)->format('Y');
         $leaveBalances = LeaveBalance::query()
@@ -457,12 +482,14 @@ class LeaveRequestController extends Controller
                 'handover_description' => $handoverDescDetail?->field_value,
                 'child_birth_date' => $childBirthDateDetail?->field_value,
                 'due_date' => $leave_request->details->firstWhere('field_key', 'due_date')?->field_value,
+                'festival_id' => $leave_request->details->firstWhere('field_key', 'festival_id')?->field_value,
                 'files' => $leave_request->files,
             ],
             'employees' => $employees,
             'leaveTypes' => $leaveTypes,
             'leaveBalances' => $leaveBalances,
             'activeLeaves' => $activeLeaves,
+            'festivals' => $festivals,
         ]);
     }
 
@@ -489,6 +516,7 @@ class LeaveRequestController extends Controller
                 'handover_description' => 'nullable|string',
                 'due_date' => 'nullable|date',
                 'child_birth_date' => 'nullable|date',
+                'festival_id' => 'nullable|integer|exists:festivals,id',
             ]);
 
             if ((int) $validated['leave_type_id'] !== (int) $leave_request->leave_type_id) {
@@ -533,6 +561,9 @@ class LeaveRequestController extends Controller
             }
 
             $isActiveRequest = in_array($validated['status'], ['applied', 'approved'], true);
+            $festivalId = array_key_exists('festival_id', $validated)
+                ? $validated['festival_id']
+                : $leave_request->details->firstWhere('field_key', 'festival_id')?->field_value;
 
             if ($isActiveRequest) {
                 $leaveValidationService->validateLeaveTypeDetails(
@@ -542,6 +573,15 @@ class LeaveRequestController extends Controller
                         'employee_profile' => $profile,
                     ],
                     $startDate,
+                );
+                $this->festivalLeaveService->validate(
+                    $employee,
+                    $leaveType,
+                    $festivalId,
+                    $profile,
+                    $startDate,
+                    $endDate,
+                    (int) $leave_request->id,
                 );
 
                 $leaveValidationService->validatePolicyEligibility(
@@ -680,6 +720,7 @@ class LeaveRequestController extends Controller
                     $leave_request->details()->where('field_key', $fieldKey)->delete();
                 }
             }
+            $this->festivalLeaveService->syncSelection($leave_request, $leaveType, $festivalId);
 
             if ($request->hasFile('certificate')) {
                 $path = $request->file('certificate')->store('leave-certificates', 'public');
@@ -729,6 +770,24 @@ class LeaveRequestController extends Controller
             'status' => 'required|in:applied,approved,rejected,cancelled',
             'remarks' => 'nullable|string',
         ]);
+
+        $leaveType = $leave_request->leaveType;
+        if (
+            in_array($validated['status'], ['applied', 'approved'], true)
+            && $leaveType instanceof LeaveType
+            && $this->festivalLeaveService->isFestivalLeave($leaveType)
+        ) {
+            $employee = Employee::query()->findOrFail($leave_request->employee_id);
+            $this->festivalLeaveService->validate(
+                $employee,
+                $leaveType,
+                $leave_request->details->firstWhere('field_key', 'festival_id')?->field_value,
+                $employee->profile(),
+                Carbon::parse($leave_request->start_date)->startOfDay(),
+                Carbon::parse($leave_request->end_date)->endOfDay(),
+                (int) $leave_request->id,
+            );
+        }
 
         $oldState = [
             'status' => $leave_request->status,

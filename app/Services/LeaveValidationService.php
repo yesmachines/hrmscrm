@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\EmployeeProfile;
-use App\Models\Festival;
 use App\Models\LeaveBalance;
 use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
@@ -17,6 +16,7 @@ class LeaveValidationService
     public function __construct(
         private readonly LeaveTypeEligibilityService $leaveTypeEligibilityService,
         private readonly LeaveDurationCalculator $leaveDurationCalculator,
+        private readonly FestivalLeaveService $festivalLeaveService,
     ) {}
 
     public function validatePolicyEligibility(
@@ -422,49 +422,18 @@ class LeaveValidationService
             ]);
         }
 
-        // 13. Festival Leave Special Check
         $remarks = $data['remarks'] ?? null;
-        if ($leaveType->code === 'FESTIVAL' || stripos($leaveType->leave_name, 'Festival') !== false) {
-            if (empty($data['festival_id'])) {
-                throw ValidationException::withMessages([
-                    'festival_id' => ['Festival selection is required for Festival Leave.'],
-                ]);
-            }
-
-            $currentYear = $startDate->year;
-            $limitReachedQuery = LeaveRequest::where('employee_id', $employee->id)
-                ->where('leave_type_id', $leaveType->id)
-                ->whereYear('start_date', $currentYear)
-                ->whereIn('status', ['applied', 'approved']);
-
-            if ($ignoreLeaveRequestId !== null) {
-                $limitReachedQuery->where('id', '!=', $ignoreLeaveRequestId);
-            }
-
-            $limitReached = $limitReachedQuery->exists();
-
-            if ($limitReached) {
-                throw ValidationException::withMessages([
-                    'festival_id' => ['You have already availed a Festival Leave this year.'],
-                ]);
-            }
-
-            $festival = Festival::find($data['festival_id']);
-            if ($festival) {
-                if (! empty($festival->religion)) {
-                    $rawEmployeeReligion = strtolower(trim($profile?->religion ?? ''));
-                    $festivalReligion = strtolower(trim($festival->religion));
-                    if ($rawEmployeeReligion !== $festivalReligion
-                        && ! str_contains($rawEmployeeReligion, $festivalReligion)
-                        && ! str_contains($festivalReligion, $rawEmployeeReligion)
-                    ) {
-                        throw ValidationException::withMessages([
-                            'festival_id' => ["The selected festival ({$festival->name}) is only applicable for {$festival->religion} employees."],
-                        ]);
-                    }
-                }
-                $remarks = 'Festival: '.$festival->name.($remarks ? "\n".$remarks : '');
-            }
+        $festival = $this->festivalLeaveService->validate(
+            $employee,
+            $leaveType,
+            $data['festival_id'] ?? null,
+            $profile,
+            $startDate,
+            $endDate,
+            $ignoreLeaveRequestId,
+        );
+        if ($festival !== null) {
+            $remarks = 'Festival: '.$festival->name.($remarks ? "\n".$remarks : '');
         }
 
         return [
