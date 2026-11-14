@@ -323,3 +323,84 @@ test('hr user can bulk import rewards via csv', function () {
         'description' => 'Great job on delivery',
     ]);
 });
+
+test('employee can fetch their reward summary stats for mobile dashboard', function () {
+    $category = RewardCategory::factory()->create();
+
+    // Reward this month
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->regularEmployee->id,
+        'amount' => 500,
+        'status' => 'approved',
+        'submitted_date' => now()->startOfMonth()->addDays(2),
+    ]);
+
+    // Reward earlier this year
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->regularEmployee->id,
+        'amount' => 1000,
+        'status' => 'paid',
+        'submitted_date' => now()->startOfYear()->addDays(10),
+    ]);
+
+    // Reward from previous year (should count only towards lifetime total)
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->regularEmployee->id,
+        'amount' => 800,
+        'status' => 'paid',
+        'submitted_date' => now()->subYears(2)->toDateString(),
+    ]);
+
+    // Pending nomination (should not be counted in earned amounts)
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->regularEmployee->id,
+        'amount' => 300,
+        'status' => 'pending',
+        'submitted_date' => now()->toDateString(),
+    ]);
+
+    $response = $this->withToken($this->regularToken)
+        ->getJson('/api/v1/rewards/summary');
+
+    $response->assertOk()
+        ->assertJsonPath('statusCode', 200)
+        ->assertJsonPath('data.selected_month.amount', 500)
+        ->assertJsonPath('data.selected_month.count', 1)
+        ->assertJsonPath('data.selected_year.amount', 1500)
+        ->assertJsonPath('data.selected_year.count', 2)
+        ->assertJsonPath('data.total_rewards.amount', 2300)
+        ->assertJsonPath('data.total_rewards.count', 3)
+        ->assertJsonPath('data.pending_rewards_count', 1);
+
+    // Test with specific year filter
+    $responseFiltered = $this->withToken($this->regularToken)
+        ->getJson('/api/v1/rewards/summary?year='.(now()->year - 2));
+
+    $responseFiltered->assertOk()
+        ->assertJsonPath('data.selected_year.amount', 800)
+        ->assertJsonPath('data.selected_year.count', 1);
+
+    // Test filtering employee personal list endpoint
+    $responseList = $this->withToken($this->regularToken)
+        ->getJson('/api/v1/rewards?status=approved');
+
+    $responseList->assertOk()
+        ->assertJsonPath('data.total', 1);
+
+    // Test unified dashboard endpoint with rewards key and listing
+    $responseDashboard = $this->withToken($this->regularToken)
+        ->getJson('/api/v1/dashboard');
+
+    $responseDashboard->assertOk()
+        ->assertJsonPath('statusCode', 200)
+        ->assertJsonPath('data.employee.emp_num', $this->regularEmployee->emp_num)
+        ->assertJsonPath('data.rewards.this_month.amount', 500)
+        ->assertJsonPath('data.rewards.this_year.amount', 1500)
+        ->assertJsonPath('data.rewards.total_rewards.amount', 2300)
+        ->assertJsonPath('data.rewards.total_rewards.count', 3)
+        ->assertJsonCount(4, 'data.rewards.list');
+});

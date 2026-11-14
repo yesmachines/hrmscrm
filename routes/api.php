@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AssetController;
 use App\Http\Controllers\Api\V1\AssetDashboardController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\EmployeeController;
@@ -21,6 +22,7 @@ Route::prefix('v1')->group(function () {
         ->name('api.v1.login');
 
     Route::middleware('auth:sanctum')->group(function () {
+        Route::get('dashboard', [DashboardController::class, 'index'])->name('api.v1.dashboard');
         Route::get('me', [AuthController::class, 'me'])->name('api.v1.me');
         Route::post('logout', [AuthController::class, 'logout'])->name('api.v1.logout');
 
@@ -88,6 +90,7 @@ Route::prefix('v1')->group(function () {
 
         // Rewards Endpoints
         Route::get('rewards/categories', [RewardController::class, 'categories'])->name('api.v1.rewards.categories');
+        Route::get('rewards/summary', [RewardController::class, 'summary'])->name('api.v1.rewards.summary');
         Route::get('rewards', [RewardController::class, 'index'])->name('api.v1.rewards.index');
         Route::post('rewards', [RewardController::class, 'store'])->name('api.v1.rewards.store');
         Route::get('rewards/{id}', [RewardController::class, 'show'])->name('api.v1.rewards.show');

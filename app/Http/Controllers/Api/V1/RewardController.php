@@ -41,6 +41,127 @@ class RewardController extends Controller
     }
 
     /**
+     * Get employee personal rewards summary for the mobile dashboard.
+     * Shows this month's reward amount, this year's total reward amount, and total count.
+     */
+    public function summary(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        $employee = Employee::where('user_id', $user->id)->first();
+        if (! $employee) {
+            return $this->errorResponse('Employee record not found.', 404);
+        }
+
+        // Optional Year filter (e.g. ?year=2025), default to current year
+        $targetYear = $request->filled('year') ? (int) $request->input('year') : (int) now()->year;
+        $yearStart = Carbon::create($targetYear, 1, 1)->startOfYear();
+        $yearEnd = (clone $yearStart)->endOfYear();
+
+        // Optional Month filter (e.g. ?month=11 or ?date=2026-11), default to current month
+        if ($request->filled('month')) {
+            $monthNum = (int) $request->input('month');
+            $monthStart = Carbon::create($targetYear, $monthNum, 1)->startOfMonth();
+            $monthEnd = (clone $monthStart)->endOfMonth();
+        } else {
+            $monthStart = now()->startOfMonth();
+            $monthEnd = now()->endOfMonth();
+        }
+
+        // Base query for rewards awarded/approved/paid to this employee
+        $baseQuery = Reward::query()
+            ->where('submitted_by', $employee->id);
+
+        // Optional Category filter
+        if ($request->filled('category_id') && $request->input('category_id') !== 'all') {
+            $baseQuery->where('category_id', (int) $request->input('category_id'));
+        }
+
+        // Optional Status filter (default to approved/paid for earned rewards stats, or allow filtering)
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $baseQuery->where('status', $request->input('status'));
+        } else {
+            $baseQuery->whereIn('status', ['approved', 'paid']);
+        }
+
+        // Month metrics (filtered by target month)
+        $monthQuery = (clone $baseQuery)->whereBetween('submitted_date', [$monthStart, $monthEnd]);
+        $monthAmount = (float) $monthQuery->sum('amount');
+        $monthCount = $monthQuery->count();
+
+        // Year metrics (filtered by target year)
+        $yearQuery = (clone $baseQuery)->whereBetween('submitted_date', [$yearStart, $yearEnd]);
+        $yearAmount = (float) $yearQuery->sum('amount');
+        $yearCount = $yearQuery->count();
+
+        // Lifetime total metrics
+        $totalAmount = (float) (clone $baseQuery)->sum('amount');
+        $totalCount = (clone $baseQuery)->count();
+
+        // Pending nominations count for awareness
+        $pendingCount = Reward::query()
+            ->where('submitted_by', $employee->id)
+            ->where('status', 'pending')
+            ->count();
+
+        // Monthly breakdown for charts/graphs (for the selected year)
+        $monthlyBreakdown = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $mStart = Carbon::create($targetYear, $m, 1)->startOfMonth();
+            $mEnd = (clone $mStart)->endOfMonth();
+
+            $mRewards = (clone $baseQuery)->whereBetween('submitted_date', [$mStart, $mEnd]);
+            $monthlyBreakdown[] = [
+                'month_number' => $m,
+                'month_name' => $mStart->format('M'),
+                'amount' => round((float) $mRewards->sum('amount'), 2),
+                'count' => $mRewards->count(),
+            ];
+        }
+
+        // Recent rewards for dashboard list preview
+        $recentRewards = (clone $baseQuery)
+            ->with(['category:id,reward_name,short_code'])
+            ->orderByDesc('submitted_date')
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get(['id', 'claim_no', 'category_id', 'amount', 'currency', 'status', 'submitted_date', 'description']);
+
+        $currency = Reward::query()->where('submitted_by', $employee->id)->value('currency') ?: 'AED';
+
+        return $this->successResponse([
+            'currency' => $currency,
+            'filters_applied' => [
+                'year' => $targetYear,
+                'month' => (int) $monthStart->format('n'),
+                'category_id' => $request->input('category_id'),
+                'status' => $request->input('status'),
+            ],
+            'selected_month' => [
+                'month_number' => (int) $monthStart->format('n'),
+                'month_name' => $monthStart->format('F Y'),
+                'amount' => round($monthAmount, 2),
+                'count' => $monthCount,
+            ],
+            'selected_year' => [
+                'year' => $targetYear,
+                'amount' => round($yearAmount, 2),
+                'count' => $yearCount,
+            ],
+            'total_rewards' => [
+                'amount' => round($totalAmount, 2),
+                'count' => $totalCount,
+            ],
+            'monthly_breakdown' => $monthlyBreakdown,
+            'pending_rewards_count' => $pendingCount,
+            'recent_rewards' => $recentRewards,
+        ], 'Employee reward summary fetched successfully.');
+    }
+
+    /**
      * Get list of rewards for the authenticated employee (Self-Service).
      */
     public function index(Request $request): JsonResponse
@@ -55,7 +176,7 @@ class RewardController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $rewards = Reward::with([
+        $query = Reward::with([
             'category:id,reward_name,short_code',
             'employee:id,user_id,emp_num,designation',
             'employee.user:id,name',
@@ -64,9 +185,56 @@ class RewardController extends Controller
             },
             'approvalStatuses.doneByUser:id,name',
         ])
-            ->where('submitted_by', $employee->id)
-            ->orderByDesc('id')
-            ->paginate(15);
+            ->where('submitted_by', $employee->id);
+
+        // Filter by Status (e.g. ?status=approved, paid, pending)
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $query->where('status', $request->input('status'));
+        }
+
+        // Filter by Category (e.g. ?category_id=2)
+        if ($request->filled('category_id') && $request->input('category_id') !== 'all') {
+            $query->where('category_id', (int) $request->input('category_id'));
+        }
+
+        // Filter by Year (e.g. ?year=2026)
+        if ($request->filled('year')) {
+            $year = (int) $request->input('year');
+            $query->whereYear('submitted_date', $year);
+        }
+
+        // Filter by Month (e.g. ?month=11)
+        if ($request->filled('month')) {
+            $month = (int) $request->input('month');
+            $query->whereMonth('submitted_date', $month);
+        }
+
+        // Filter by Date keyword (today, this_month, last_month)
+        if ($request->filled('date_filter') && $request->input('date_filter') !== 'all') {
+            $dateFilter = strtolower(trim((string) $request->input('date_filter')));
+            if ($dateFilter === 'today') {
+                $query->whereDate('submitted_date', now()->toDateString());
+            } elseif ($dateFilter === 'this_month') {
+                $query->whereBetween('submitted_date', [now()->startOfMonth(), now()->endOfMonth()]);
+            } elseif ($dateFilter === 'last_month') {
+                $query->whereBetween('submitted_date', [now()->subMonth()->startOfMonth(), now()->subMonth()->endOfMonth()]);
+            }
+        }
+
+        // Search in claim number or description
+        if ($request->filled('search')) {
+            $search = trim((string) $request->input('search'));
+            $query->where(function (Builder $q) use ($search): void {
+                $q->where('claim_no', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('category', function (Builder $catQ) use ($search): void {
+                        $catQ->where('reward_name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $perPage = max(1, min(100, (int) $request->input('per_page', 15)));
+        $rewards = $query->orderByDesc('id')->paginate($perPage);
 
         return $this->successResponse($rewards, 'Rewards fetched successfully.');
     }
