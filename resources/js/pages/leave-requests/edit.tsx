@@ -19,7 +19,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
 import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
-import { filterEligibleLeaveTypes } from '@/lib/leave-type-eligibility';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -53,6 +52,7 @@ interface EmployeeOption {
 
 interface LeaveTypeOption {
     id: number;
+    eligible_employee_ids: number[];
     leave_name: string;
     code: string;
     is_paid: boolean;
@@ -117,6 +117,7 @@ interface LeaveRequestItem {
     child_birth_date?: string | null;
     due_date?: string | null;
     festival_id?: string | null;
+    family_relationship?: string | null;
 }
 
 interface Props {
@@ -126,6 +127,7 @@ interface Props {
     leaveBalances: LeaveBalanceItem[];
     activeLeaves?: ActiveLeaveItem[];
     festivals?: FestivalOption[];
+    compassionateRelationships: Record<string, { label: string; group: string; max_days: number }>;
 }
 
 export default function LeaveRequestsEdit({
@@ -135,6 +137,7 @@ export default function LeaveRequestsEdit({
     leaveBalances = [],
     activeLeaves = [],
     festivals = [],
+    compassionateRelationships,
 }: Props) {
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
@@ -169,6 +172,7 @@ export default function LeaveRequestsEdit({
         child_birth_date: leaveRequest.child_birth_date ?? '',
         due_date: leaveRequest.due_date ?? '',
         festival_id: leaveRequest.festival_id ?? '',
+        family_relationship: leaveRequest.family_relationship ?? '',
     });
 
     // Calculate days between start and end date when dates change
@@ -210,11 +214,7 @@ export default function LeaveRequestsEdit({
             return leaveTypes;
         }
 
-        return filterEligibleLeaveTypes(
-            leaveTypes,
-            selectedEmployee.gender || selectedEmployee.profile?.gender,
-            selectedEmployee.religion || selectedEmployee.profile?.religion,
-        );
+        return leaveTypes.filter((type) => type.eligible_employee_ids.includes(selectedEmployee.id));
     }, [selectedEmployee, leaveTypes]);
 
     const selectedLeaveType = useMemo(() => {
@@ -247,6 +247,7 @@ export default function LeaveRequestsEdit({
 
     const isParentalLeave = selectedLeaveType?.code === 'PARENTAL';
     const isMaternityLeave = selectedLeaveType?.code === 'MATERNITY';
+    const isCompassionateLeave = selectedLeaveType?.code === 'COMPASSIONATE';
     const requiresChildBirthDate = ['PARENTAL', 'PATERNITY'].includes(selectedLeaveType?.code ?? '');
     const isFestivalLeave = selectedLeaveType?.code === 'FESTIVAL'
         || selectedLeaveType?.leave_name.toLowerCase().includes('festival') === true;
@@ -277,10 +278,12 @@ export default function LeaveRequestsEdit({
         handover_person_id: data.handover_person_id || null,
         handover_description: data.handover_description || null,
         festival_id: data.festival_id || null,
+        family_relationship: data.family_relationship || null,
         ignore_leave_request_id: leaveRequest.id,
     }), [
         data.child_birth_date,
         data.festival_id,
+        data.family_relationship,
         data.due_date,
         data.employee_id,
         data.end_date,
@@ -688,6 +691,29 @@ export default function LeaveRequestsEdit({
                                             <p className="mt-1 text-xs text-destructive">{errors.request_type}</p>
                                         )}
                                     </div>
+
+                                    {isCompassionateLeave && (
+                                        <div>
+                                            <Label htmlFor="family_relationship">Family Relationship</Label>
+                                            <select
+                                                id="family_relationship"
+                                                value={data.family_relationship}
+                                                onChange={(event) => {
+                                                    setData('family_relationship', event.target.value);
+                                                    clearErrors('family_relationship', 'total_days');
+                                                }}
+                                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs"
+                                                required={isActiveRequest}
+                                            >
+                                                <option value="">-- Choose Relationship --</option>
+                                                {Object.entries(compassionateRelationships).map(([key, option]) => (
+                                                    <option key={key} value={key}>{option.label} - maximum {option.max_days} days</option>
+                                                ))}
+                                            </select>
+                                            <p className="mt-1 text-xs text-muted-foreground">Limits apply per request using the leave days calculated from your dates.</p>
+                                            {errors.family_relationship && <p className="mt-1 text-xs text-destructive">{errors.family_relationship}</p>}
+                                        </div>
+                                    )}
 
                                     {isFestivalLeave && (
                                         <div>

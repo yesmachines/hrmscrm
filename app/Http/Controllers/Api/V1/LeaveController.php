@@ -16,6 +16,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
@@ -28,7 +29,8 @@ class LeaveController extends Controller
      */
     #[OA\Get(
         path: '/api/v1/leaves/meta',
-        summary: 'Get leave metadata (types, balances, policies)',
+        summary: 'Get profile-eligible leave types, balances, policies and required detail fields',
+        description: 'Filters active leave types by gender, religion and marital status. Date-dependent eligibility, service tenure, usage limits and balance checks run during validation and submission. Probation remains configuration-only.',
         security: [['sanctum' => []]],
         tags: ['Leave Management'],
         responses: [
@@ -37,7 +39,7 @@ class LeaveController extends Controller
             new OA\Response(response: 404, description: 'Employee not found'),
         ]
     )]
-    public function meta(Request $request, LeaveTypeEligibilityService $eligibilityService)
+    public function meta(Request $request, LeaveTypeEligibilityService $eligibilityService, LeaveValidationService $validationService)
     {
         $user = $request->user();
         if (! $user) {
@@ -51,7 +53,6 @@ class LeaveController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        // Fetch active leave types filtered by employee gender
         $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
         $rawEmployeeReligion = $profile?->religion;
@@ -59,22 +60,25 @@ class LeaveController extends Controller
             LeaveType::query()
                 ->with([
                     'policies' => fn ($query) => $query
-                        ->where('organisation_id', $employee->organisation_id),
+                        ->where('organisation_id', $employee->organisation_id)->with('tiers'),
                 ])
                 ->where('status', 1)
                 ->get(),
             $rawEmployeeGender,
             $rawEmployeeReligion,
+            $profile?->marital_status,
         );
 
-        $typesData = $leaveTypes->map(function ($type) use ($employee) {
-            $policy = $type->policyForOrganisation($employee->organisation_id);
+        $balances = LeaveBalance::query()
+            ->where('employee_id', $employee->id)
+            ->where('year', now()->year)
+            ->whereIn('leave_type_id', $leaveTypes->modelKeys())
+            ->get()
+            ->keyBy('leave_type_id');
 
-            // Get current year balance
-            $balance = LeaveBalance::where('leave_type_id', $type->id)
-                ->where('employee_id', $employee->id)
-                ->where('year', date('Y'))
-                ->first();
+        $typesData = $leaveTypes->map(function (LeaveType $type) use ($employee, $validationService, $balances): array {
+            $policy = $type->policyForOrganisation($employee->organisation_id);
+            $balance = $balances->get($type->id);
 
             return [
                 'id' => $type->id,
@@ -82,12 +86,11 @@ class LeaveController extends Controller
                 'code' => $type->code,
                 'is_paid' => (bool) $type->is_paid,
                 'requires_approval' => (bool) $type->requires_approval,
-                'detail_fields' => match ($type->code) {
-                    'MATERNITY' => ['due_date'],
-                    'PARENTAL', 'PATERNITY' => ['child_birth_date'],
-                    default => [],
-                },
+                'detail_fields' => $validationService->detailFields($type),
                 'annual_limit' => $policy?->annual_limit,
+                'family_relationship_options' => $type->code === 'COMPASSIONATE'
+                    ? config('params.leave_type.compassionate_relationships')
+                    : null,
                 'gender' => $type->gender,
                 'religion' => $type->religion,
                 'allow_once' => (bool) ($policy?->allow_once ?? false),
@@ -100,6 +103,10 @@ class LeaveController extends Controller
                 ],
                 'policy' => $policy ? [
                     'id' => $policy->id,
+                    'organisation_id' => $policy->organisation_id,
+                    'annual_limit' => $policy->annual_limit,
+                    'allow_once' => (bool) $policy->allow_once,
+                    'allow_balance' => (bool) $policy->allow_balance,
                     'requires_document_after_days' => $policy->requires_document_after_days,
                     'requires_weekend_document' => (bool) $policy->requires_weekend_document,
                     'requires_attachment' => (bool) $policy->requires_attachment,
@@ -107,6 +114,9 @@ class LeaveController extends Controller
                     'encashment' => (bool) $policy->encashment,
                     'probation_applicable' => (bool) $policy->probation_applicable,
                     'minimum_service_months' => $policy->minimum_service_months,
+                    'carry_forward_weeks' => $policy->carry_forward_weeks,
+                    'exclude_rules' => $policy->exclude_rules,
+                    'tiers' => $policy->tiers,
                     'remarks' => $policy->remarks,
                 ] : null,
             ];
@@ -157,6 +167,7 @@ class LeaveController extends Controller
             'request_type' => ['nullable', 'in:fullday,firsthalf,secondhalf'],
             'due_date' => ['nullable', 'date'],
             'child_birth_date' => ['nullable', 'date'],
+            'family_relationship' => ['nullable', 'string'],
             'festival_id' => ['nullable', 'integer', 'exists:festivals,id'],
             'handover_person_id' => ['nullable', 'exists:salescrm.employees,id'],
             'handover_description' => ['nullable', 'string'],
@@ -164,19 +175,36 @@ class LeaveController extends Controller
             'travel_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
             'traveling_outside_country' => ['nullable', 'boolean'],
             'destination' => ['nullable', 'string'],
+            'remarks' => ['nullable', 'string'],
+            'certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:10240'],
+            'ignore_leave_request_id' => ['nullable', 'integer', Rule::exists('leave_requests', 'id')->where('employee_id', $employee->id)->where('status', 'applied')],
         ]);
-        $ignoreLeaveRequestId = $request->input('ignore_leave_request_id');
-        if ($ignoreLeaveRequestId !== null) {
-            $request->validate([
-                'ignore_leave_request_id' => ['integer', 'exists:leave_requests,id'],
-            ]);
+        $ignoreLeaveRequestId = $validated['ignore_leave_request_id'] ?? null;
+        $existing = $ignoreLeaveRequestId === null ? null : LeaveRequest::query()->with('details')->findOrFail($ignoreLeaveRequestId);
+        if ($existing !== null) {
+            if ((int) $validated['leave_type_id'] !== (int) $existing->leave_type_id) {
+                throw ValidationException::withMessages([
+                    'leave_type_id' => ['Leave type cannot be changed after the request is created.'],
+                ]);
+            }
+
+            $validated += [
+                'request_type' => $existing->request_type ?? 'fullday',
+                'remarks' => $existing->remarks,
+            ];
+            foreach (['due_date', 'child_birth_date', 'family_relationship', 'festival_id', 'handover_person_id', 'handover_description', 'emergency_contact_no', 'travel_contact_no', 'destination'] as $field) {
+                if (! array_key_exists($field, $validated)) {
+                    $validated[$field] = $existing->details->firstWhere('field_key', $field)?->field_value;
+                }
+            }
+            $validated += ['traveling_outside_country' => $existing->details->firstWhere('field_key', 'traveling_outside_country')?->field_value === 'Yes'];
         }
 
         try {
             $validation = $validationService->validateApplication(
                 $employee,
-                array_merge($request->all(), $validated),
-                $request->hasFile('certificate'),
+                $validated,
+                $request->hasFile('certificate') || ($existing?->files()->exists() ?? false),
                 $ignoreLeaveRequestId === null ? null : (int) $ignoreLeaveRequestId,
             );
         } catch (ValidationException $exception) {
@@ -191,6 +219,7 @@ class LeaveController extends Controller
             'attachment_required' => $validation['attachment_required'],
             'handover_required' => $validation['policy']?->requiresHandoverForDuration($validation['total_days']) ?? false,
             'annual_limit' => $validation['policy']?->annual_limit,
+            'detail_fields' => $validationService->detailFields($validation['leave_type']),
             'remarks' => $validation['remarks'],
         ], 'Leave request details are valid.');
     }
@@ -298,6 +327,7 @@ class LeaveController extends Controller
                         new OA\Property(property: 'request_type', type: 'string', enum: ['fullday', 'firsthalf', 'secondhalf']),
                         new OA\Property(property: 'reason', type: 'string'),
                         new OA\Property(property: 'due_date', type: 'string', format: 'date', description: 'Required for Maternity Leave.'),
+                        new OA\Property(property: 'family_relationship', type: 'string', description: 'Required for Compassionate Leave. Use a key from family_relationship_options in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.'),
                         new OA\Property(property: 'child_birth_date', type: 'string', format: 'date', description: "Required for Parental and Paternity Leave. For Parental Leave, the leave start date must be within six months of the child's birth."),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),
@@ -327,16 +357,27 @@ class LeaveController extends Controller
         }
 
         $validated = $request->validate([
+            'leave_type_id' => ['required', 'integer', 'exists:leave_types,id'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'request_type' => ['nullable', 'in:fullday,firsthalf,secondhalf'],
+            'remarks' => ['nullable', 'string'],
+            'handover_person_id' => ['nullable', 'exists:salescrm.employees,id'],
+            'handover_description' => ['nullable', 'string'],
+            'traveling_outside_country' => ['nullable', 'boolean'],
+            'destination' => ['nullable', 'string'],
+            'certificate' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx', 'max:10240'],
             'emergency_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
             'travel_contact_no' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/'],
             'due_date' => ['nullable', 'date'],
             'child_birth_date' => ['nullable', 'date'],
+            'family_relationship' => ['nullable', 'string'],
             'festival_id' => ['nullable', 'integer', 'exists:festivals,id'],
         ]);
         try {
             $validation = $validationService->validateApplication(
                 $employee,
-                array_merge($request->all(), $validated),
+                $validated,
                 $request->hasFile('certificate')
             );
         } catch (ValidationException $e) {
@@ -436,7 +477,11 @@ class LeaveController extends Controller
         }
 
         foreach ($validationService->leaveTypeDetailValues($leaveType, $validated) as $fieldKey => $fieldValue) {
-            $fieldName = $fieldKey === 'due_date' ? 'Expected Due Date' : 'Child Birth Date';
+            $fieldName = match ($fieldKey) {
+                'due_date' => 'Expected Due Date',
+                'family_relationship' => 'Family Relationship',
+                default => 'Child Birth Date',
+            };
             $leaveRequest->details()->create([
                 'field_name' => $fieldName,
                 'field_key' => $fieldKey,
@@ -536,6 +581,7 @@ class LeaveController extends Controller
             'destination' => ['sometimes', 'nullable', 'string'],
             'due_date' => ['sometimes', 'nullable', 'date'],
             'child_birth_date' => ['sometimes', 'nullable', 'date'],
+            'family_relationship' => ['sometimes', 'nullable', 'string'],
             'festival_id' => ['sometimes', 'nullable', 'integer', 'exists:festivals,id'],
             'declaration' => ['sometimes', 'nullable', 'string'],
         ]);
@@ -570,6 +616,7 @@ class LeaveController extends Controller
             'destination' => $detailValue('destination'),
             'due_date' => $detailValue('due_date'),
             'child_birth_date' => $detailValue('child_birth_date'),
+            'family_relationship' => $detailValue('family_relationship'),
             'festival_id' => $detailValue('festival_id'),
         ], $validated);
 
@@ -675,7 +722,11 @@ class LeaveController extends Controller
             }
 
             foreach ($validationService->leaveTypeDetailValues($leaveType, $validationData) as $fieldKey => $fieldValue) {
-                $fieldName = $fieldKey === 'due_date' ? 'Expected Due Date' : 'Child Birth Date';
+                $fieldName = match ($fieldKey) {
+                    'due_date' => 'Expected Due Date',
+                    'family_relationship' => 'Family Relationship',
+                    default => 'Child Birth Date',
+                };
                 $this->updateLeaveRequestDetail($leaveRequest, $fieldKey, $fieldName, $fieldValue);
             }
             $this->festivalLeaveService->syncSelection($leaveRequest, $leaveType, $validationData['festival_id'] ?? null);

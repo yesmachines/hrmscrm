@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\EmployeeProfile;
 use App\Models\LeaveType;
+use App\Models\SalesCrm\Employee;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Validation\ValidationException;
 
 class LeaveTypeEligibilityService
@@ -16,9 +19,18 @@ class LeaveTypeEligibilityService
         Collection $leaveTypes,
         ?string $employeeGender,
         ?string $employeeReligion,
+        ?string $employeeMaritalStatus = null,
     ): Collection {
         return $leaveTypes
-            ->filter(fn (LeaveType $leaveType): bool => $this->isEligible($leaveType, $employeeGender, $employeeReligion))
+            ->filter(function (LeaveType $leaveType) use ($employeeGender, $employeeReligion, $employeeMaritalStatus): bool {
+                try {
+                    $this->assertEligible($leaveType, $employeeGender, $employeeReligion, $employeeMaritalStatus);
+                } catch (ValidationException) {
+                    return false;
+                }
+
+                return true;
+            })
             ->values();
     }
 
@@ -29,7 +41,14 @@ class LeaveTypeEligibilityService
         LeaveType $leaveType,
         ?string $employeeGender,
         ?string $employeeReligion,
+        ?string $employeeMaritalStatus = null,
     ): void {
+        if ($leaveType->status !== 1) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => ["The selected leave type ({$leaveType->leave_name}) is currently inactive."],
+            ]);
+        }
+
         $normalizedEmployeeGender = LeaveType::normalizeGender($employeeGender);
         $requiredGender = $this->requiredGender($leaveType);
 
@@ -50,21 +69,40 @@ class LeaveTypeEligibilityService
                 'leave_type_id' => ["{$leaveType->leave_name} is only applicable for {$religionLabel} employees."],
             ]);
         }
+
+        $this->assertMaritalStatusEligible($leaveType, $employeeMaritalStatus);
     }
 
-    private function isEligible(
-        LeaveType $leaveType,
-        ?string $employeeGender,
-        ?string $employeeReligion,
-    ): bool {
-        $requiredGender = $this->requiredGender($leaveType);
-        if ($requiredGender !== null && LeaveType::normalizeGender($employeeGender) !== $requiredGender) {
-            return false;
+    public function assertMaritalStatusEligible(LeaveType $leaveType, ?string $maritalStatus): void
+    {
+        if (in_array($leaveType->code, ['MATERNITY', 'PARENTAL'], true)
+            && strtolower(trim($maritalStatus ?? '')) !== 'married') {
+            throw ValidationException::withMessages([
+                'leave_type_id' => ["{$leaveType->leave_name} is only available to employees whose marital status is married."],
+            ]);
         }
+    }
 
-        $requiredReligion = $this->requiredReligion($leaveType);
+    /**
+     * @param  Collection<int, Employee>  $employees
+     * @param  SupportCollection<int, EmployeeProfile>  $profiles
+     * @return list<int>
+     */
+    public function eligibleEmployeeIds(
+        LeaveType $leaveType,
+        Collection $employees,
+        SupportCollection $profiles,
+    ): array {
+        return array_values($employees->filter(function (Employee $employee) use ($leaveType, $profiles): bool {
+            $profile = $profiles->get($employee->id);
+            try {
+                $this->assertEligible($leaveType, $profile?->gender, $profile?->religion, $profile?->marital_status);
+            } catch (ValidationException) {
+                return false;
+            }
 
-        return $requiredReligion === null || LeaveType::religionsMatch($employeeReligion, $requiredReligion);
+            return true;
+        })->map(fn (Employee $employee): int => (int) $employee->id)->all());
     }
 
     private function requiredGender(LeaveType $leaveType): ?string

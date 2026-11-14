@@ -14,6 +14,16 @@ return [
         'total_experience',
     ],
     'leave_type' => [
+        'compassionate_relationships' => [
+            'spouse' => ['label' => 'Spouse', 'group' => 'A', 'max_days' => 5],
+            'child' => ['label' => 'Child', 'group' => 'A', 'max_days' => 5],
+            'mother' => ['label' => 'Mother', 'group' => 'A', 'max_days' => 5],
+            'father' => ['label' => 'Father', 'group' => 'A', 'max_days' => 5],
+            'sibling' => ['label' => 'Sibling', 'group' => 'A', 'max_days' => 5],
+            'grandparent' => ['label' => 'Grandparent', 'group' => 'B', 'max_days' => 3],
+            'grandchild' => ['label' => 'Grandchild', 'group' => 'B', 'max_days' => 3],
+            'in_laws' => ['label' => 'In-laws', 'group' => 'B', 'max_days' => 3],
+        ],
         'gender_options' => [
             'male' => 'Male',
             'female' => 'Female',

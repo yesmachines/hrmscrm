@@ -68,21 +68,16 @@ class LeaveValidationService
 
         if ($policy?->minimum_service_months !== null && $policy->minimum_service_months > 0) {
             $joiningDate = $employee->joining_date ?? $employee->created_at;
-            if ($joiningDate) {
-                $serviceMonths = Carbon::parse($joiningDate)->diffInMonths($startDate);
-                if ($serviceMonths < $policy->minimum_service_months) {
-                    throw ValidationException::withMessages([
-                        'leave_type_id' => ["A minimum of {$policy->minimum_service_months} months of service is required to apply for {$leaveType->leave_name}. Your current tenure is {$serviceMonths} months."],
-                    ]);
-                }
-            }
-        }
-
-        if ($policy && ! $policy->probation_applicable) {
-            $employmentStatus = strtolower($employee->employment_status ?? '');
-            if (str_contains($employmentStatus, 'probation')) {
+            if ($joiningDate === null) {
                 throw ValidationException::withMessages([
-                    'leave_type_id' => ["{$leaveType->leave_name} is not available during probation period as per company leave policy."],
+                    'leave_type_id' => ['Employment start date is required to verify minimum service eligibility. Please contact HR.'],
+                ]);
+            }
+
+            $eligibleFrom = Carbon::parse($joiningDate)->startOfDay()->addMonthsNoOverflow($policy->minimum_service_months);
+            if ($startDate->lt($eligibleFrom)) {
+                throw ValidationException::withMessages([
+                    'leave_type_id' => ["A minimum of {$policy->minimum_service_months} months of service is required to apply for {$leaveType->leave_name}. You are eligible from {$eligibleFrom->toDateString()}."],
                 ]);
             }
         }
@@ -114,26 +109,38 @@ class LeaveValidationService
     }
 
     /**
-     * Validate the date inputs required by a specific leave type.
+     * Validate the additional inputs required by a specific leave type.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
      * @throws ValidationException
      */
-    public function validateLeaveTypeDetails(LeaveType $leaveType, array $data, Carbon $leaveStartDate): array
+    public function validateLeaveTypeDetails(LeaveType $leaveType, array $data, Carbon $leaveStartDate, float $totalDays): array
     {
         $profile = $data['employee_profile'] ?? null;
 
-        if (
-            in_array($leaveType->code, ['MATERNITY', 'PARENTAL'], true)
-            && (! $profile instanceof EmployeeProfile
-                || strtolower(trim((string) $profile->marital_status)) !== 'married')
-        ) {
-            throw ValidationException::withMessages([
-                'leave_type_id' => ["{$leaveType->leave_name} is only available to employees whose marital status is married."],
-            ]);
+        if ($leaveType->code === 'COMPASSIONATE') {
+            $relationships = config('params.leave_type.compassionate_relationships');
+            $relationship = $data['family_relationship'] ?? null;
+            if (! is_string($relationship) || ! array_key_exists($relationship, $relationships)) {
+                throw ValidationException::withMessages([
+                    'family_relationship' => ['Please select a valid family relationship for Compassionate Leave.'],
+                ]);
+            }
+
+            $rule = $relationships[$relationship];
+            if ($totalDays > $rule['max_days']) {
+                throw ValidationException::withMessages([
+                    'total_days' => ["Compassionate Leave for {$rule['label']} cannot exceed {$rule['max_days']} days per request."],
+                ]);
+            }
         }
+
+        $this->leaveTypeEligibilityService->assertMaritalStatusEligible(
+            $leaveType,
+            $profile instanceof EmployeeProfile ? $profile->marital_status : null,
+        );
 
         if ($leaveType->code === 'MATERNITY') {
             if (! is_string($data['due_date'] ?? null) || trim($data['due_date']) === '') {
@@ -155,7 +162,7 @@ class LeaveValidationService
     }
 
     /**
-     * Return the special date fields applicable to a leave type.
+     * Return the additional detail fields applicable to a leave type.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, string>
@@ -165,6 +172,7 @@ class LeaveValidationService
         $fields = match ($leaveType->code) {
             'MATERNITY' => ['due_date' => 'Expected Due Date'],
             'PARENTAL', 'PATERNITY' => ['child_birth_date' => 'Child Birth Date'],
+            'COMPASSIONATE' => ['family_relationship' => 'Family Relationship'],
             default => [],
         };
 
@@ -177,6 +185,23 @@ class LeaveValidationService
         }
 
         return $values;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function detailFields(LeaveType $leaveType): array
+    {
+        if ($this->festivalLeaveService->isFestivalLeave($leaveType)) {
+            return ['festival_id'];
+        }
+
+        return match ($leaveType->code) {
+            'MATERNITY' => ['due_date'],
+            'PARENTAL', 'PATERNITY' => ['child_birth_date'],
+            'COMPASSIONATE' => ['family_relationship'],
+            default => [],
+        };
     }
 
     /**
@@ -300,11 +325,11 @@ class LeaveValidationService
 
         $profile = EmployeeProfile::where('employee_id', $employee->id)->first();
         $rawEmployeeGender = $profile?->gender ?? $employee->gender ?? null;
-        $this->leaveTypeEligibilityService->assertEligible($leaveType, $rawEmployeeGender, $profile?->religion);
+        $this->leaveTypeEligibilityService->assertEligible($leaveType, $rawEmployeeGender, $profile?->religion, $profile?->marital_status);
         $this->validateLeaveTypeDetails($leaveType, [
             ...$data,
             'employee_profile' => $profile,
-        ], $startDate);
+        ], $startDate, $totalDays);
 
         $this->validatePolicyEligibility(
             $employee,
@@ -374,20 +399,20 @@ class LeaveValidationService
                     'handover_description' => ['Handover description / responsibilities are required.'],
                 ]);
             }
+        }
 
-            if (! empty($data['traveling_outside_country'])) {
-                $isTraveling = filter_var($data['traveling_outside_country'], FILTER_VALIDATE_BOOLEAN);
-                if ($isTraveling) {
-                    if (empty($data['destination'])) {
-                        throw ValidationException::withMessages([
-                            'destination' => ['Travel destination is required when traveling outside the country.'],
-                        ]);
-                    }
-                    if (empty($data['travel_contact_no'])) {
-                        throw ValidationException::withMessages([
-                            'travel_contact_no' => ['Travel contact number is required.'],
-                        ]);
-                    }
+        if (! empty($data['traveling_outside_country'])) {
+            $isTraveling = filter_var($data['traveling_outside_country'], FILTER_VALIDATE_BOOLEAN);
+            if ($isTraveling) {
+                if (empty($data['destination'])) {
+                    throw ValidationException::withMessages([
+                        'destination' => ['Travel destination is required when traveling outside the country.'],
+                    ]);
+                }
+                if (empty($data['travel_contact_no'])) {
+                    throw ValidationException::withMessages([
+                        'travel_contact_no' => ['Travel contact number is required.'],
+                    ]);
                 }
             }
         }
@@ -395,25 +420,13 @@ class LeaveValidationService
         $attachmentRequired = $policy?->requiresAttachmentForDuration($totalDays) ?? false;
         $attachmentMessage = $attachmentRequired
             ? ($policy?->requires_document_after_days !== null
-                ? "A supporting document is required for leaves exceeding {$policy->requires_document_after_days} days."
+                ? "A supporting document is required for leaves of {$policy->requires_document_after_days} days or more."
                 : "Company policy requires a supporting document for {$leaveType->leave_name}.")
             : null;
 
-        if ($policy?->requires_weekend_document) {
-            $hasWeekend = false;
-            $cursor = $startDate->copy();
-            while ($cursor->lte($endDate)) {
-                if ($cursor->isWeekend()) {
-                    $hasWeekend = true;
-                    break;
-                }
-                $cursor->addDay();
-            }
-
-            if ($hasWeekend) {
-                $attachmentRequired = true;
-                $attachmentMessage ??= 'A supporting document is required for leaves spanning across weekends.';
-            }
+        if ($policy?->requiresWeekendAttachment($startDate, $endDate)) {
+            $attachmentRequired = true;
+            $attachmentMessage ??= 'A supporting document is required for leaves spanning across weekends.';
         }
 
         if ($attachmentRequired && ! $hasFile) {

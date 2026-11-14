@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -60,6 +61,21 @@ class LeavePolicy extends Model
     {
         return $this->requires_handover
             && ($this->requires_document_after_days === null || $totalDays >= $this->requires_document_after_days);
+    }
+
+    public function requiresWeekendAttachment(Carbon $startDate, Carbon $endDate): bool
+    {
+        if (! $this->requires_weekend_document) {
+            return false;
+        }
+
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            if ($date->isWeekend()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function leaveType(): BelongsTo

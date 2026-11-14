@@ -1467,6 +1467,7 @@ test('leaves meta hides maternity leave for male employees and shows it for fema
     EmployeeProfile::query()->create([
         'employee_id' => $femaleEmployee->id,
         'gender' => 'F',
+        'marital_status' => 'married',
     ]);
 
     $annualLeave = LeaveType::query()->create([
