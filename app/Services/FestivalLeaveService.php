@@ -15,9 +15,11 @@ use Illuminate\Validation\ValidationException;
 
 class FestivalLeaveService
 {
+    public function __construct(private readonly LeaveTypeRules $leaveTypeRules) {}
+
     public function isFestivalLeave(LeaveType $leaveType): bool
     {
-        return $leaveType->code === 'FESTIVAL' || stripos($leaveType->leave_name, 'Festival') !== false;
+        return $this->leaveTypeRules->isFestivalLeave($leaveType);
     }
 
     public function validate(
@@ -52,8 +54,11 @@ class FestivalLeaveService
         }
 
         if (empty($festivalId)) {
+            if (! config('params.leave_type.detail_fields.festival_id.required')) {
+                return null;
+            }
             throw ValidationException::withMessages([
-                'festival_id' => ['Festival selection is required for Festival Leave.'],
+                'festival_id' => [config('params.leave_type.detail_fields.festival_id.required_message')],
             ]);
         }
 
@@ -110,9 +115,9 @@ class FestivalLeaveService
             ->where('employee_id', $employeeId)
             ->where('leave_type_id', $leaveTypeId)
             ->whereYear('start_date', $year)
-            ->whereIn('status', ['applied', 'approved'])
+            ->whereIn('status', config('params.leave_request.active_statuses'))
             ->when($ignoreLeaveRequestId !== null, fn ($query) => $query->where('id', '!=', $ignoreLeaveRequestId))
-            ->exists();
+            ->count() >= config('params.leave_type.special_rules.FESTIVAL.annual_request_limit');
     }
 
     public function syncSelection(LeaveRequest $leaveRequest, LeaveType $leaveType, mixed $festivalId): void
@@ -120,7 +125,7 @@ class FestivalLeaveService
         if ($this->isFestivalLeave($leaveType) && ! empty($festivalId)) {
             $leaveRequest->details()->updateOrCreate(
                 ['field_key' => 'festival_id'],
-                ['field_name' => 'Festival ID', 'field_value' => (string) $festivalId],
+                ['field_name' => config('params.leave_type.detail_fields.festival_id.storage_label'), 'field_value' => (string) $festivalId],
             );
         } else {
             $leaveRequest->details()->where('field_key', 'festival_id')->delete();

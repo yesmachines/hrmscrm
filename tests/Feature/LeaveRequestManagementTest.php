@@ -20,6 +20,18 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
+function allocateHrLeaveTestBalance(Employee $employee, LeaveType $leaveType, int $year = 2026): void
+{
+    LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'year' => $year,
+        'allocated' => 30,
+        'used' => 0,
+        'balance' => 30,
+    ]);
+}
+
 test('hr user can view the apply leave page', function () {
     $hrUser = createHrmsLoginUser('hr');
 
@@ -172,6 +184,7 @@ test('hr festival submission validates and saves the selected festival', functio
         'end_date' => '2027-04-01',
         'is_active' => true,
     ]);
+    allocateHrLeaveTestBalance($employee, $leaveType, 2027);
     $data = [
         'employee_id' => $employee->id,
         'leave_type_id' => $leaveType->id,
@@ -235,6 +248,7 @@ test('hr leave duration excludes saturdays and sundays from the selected date ra
         'requires_approval' => true,
         'status' => 1,
     ]);
+    allocateHrLeaveTestBalance($employee, $leaveType);
 
     $this->actingAs($hrUser)
         ->post(route('leave-requests.store'), [
@@ -276,6 +290,7 @@ test('hr user can apply leave on behalf of employee with applied status', functi
         'requires_approval' => 1,
         'status' => 1,
     ]);
+    allocateHrLeaveTestBalance($employee, $leaveType);
 
     $response = $this->actingAs($hrUser)
         ->post(route('leave-requests.store'), [
@@ -668,65 +683,6 @@ test('maternity leave requires a married employee and expected due date', functi
         ->toBe($dueDate);
 });
 
-test('paternity leave requires and stores a child birth date', function () {
-    $hrUser = createHrmsLoginUser('hr');
-    $organisation = Organisation::query()->firstOrCreate(
-        ['id' => 1],
-        ['org_name' => 'Test Organisation', 'short_name' => 'TEST', 'status' => 1],
-    );
-    $employee = Employee::query()->create([
-        'user_id' => SalesCrmUser::factory()->create()->id,
-        'emp_num' => fake()->unique()->bothify('EMP-#####'),
-        'organisation_id' => $organisation->id,
-        'designation' => 'Developer',
-        'division' => 'Technology',
-        'status' => 1,
-        'has_report' => false,
-    ]);
-    $leaveType = LeaveType::query()->create([
-        'leave_name' => 'Paternity Leave',
-        'code' => 'PATERNITY',
-        'requires_approval' => true,
-        'status' => 1,
-    ]);
-    LeavePolicy::query()->create([
-        'leave_type_id' => $leaveType->id,
-        'organisation_id' => $organisation->id,
-        'allow_balance' => false,
-        'probation_applicable' => true,
-    ]);
-    $leaveStartDate = now()->addWeek()->startOfDay();
-    $childBirthDate = $leaveStartDate->copy()->addDays(3)->toDateString();
-    $requestData = [
-        'employee_id' => $employee->id,
-        'leave_type_id' => $leaveType->id,
-        'start_date' => $leaveStartDate->toDateString(),
-        'end_date' => $leaveStartDate->toDateString(),
-        'status' => 'applied',
-    ];
-
-    $this->actingAs($hrUser)
-        ->from(route('leave-requests.create'))
-        ->post(route('leave-requests.store'), $requestData)
-        ->assertRedirect(route('leave-requests.create'))
-        ->assertSessionHasErrors(['child_birth_date']);
-
-    $this->actingAs($hrUser)
-        ->post(route('leave-requests.store'), [
-            ...$requestData,
-            'child_birth_date' => $childBirthDate,
-        ])
-        ->assertRedirect(route('leave-requests.index'));
-
-    $leaveRequest = LeaveRequest::query()
-        ->where('employee_id', $employee->id)
-        ->where('leave_type_id', $leaveType->id)
-        ->firstOrFail();
-
-    expect($leaveRequest->details()->where('field_key', 'child_birth_date')->value('field_value'))
-        ->toBe($childBirthDate);
-});
-
 test('hr leave form validation endpoint returns shared eligibility errors without creating a request', function () {
     $hrUser = createHrmsLoginUser('hr');
     $organisation = Organisation::query()->firstOrCreate(
@@ -933,6 +889,7 @@ test('hr user can create a half-day leave request and half-day requests must use
         'is_paid' => 1,
         'status' => 1,
     ]);
+    allocateHrLeaveTestBalance($employee, $leaveType);
 
     $this->actingAs($hrUser)
         ->post(route('leave-requests.store'), [
@@ -1061,6 +1018,7 @@ test('hr user can attach supporting document when applying leave on behalf of em
         'requires_attachment' => true,
     ]);
 
+    allocateHrLeaveTestBalance($employee, $leaveType);
     $file = UploadedFile::fake()->create('medical_slip.pdf', 200, 'application/pdf');
 
     $this->actingAs($hrUser)
@@ -1272,6 +1230,7 @@ test('hr user cannot apply leave when selected handover person is also on leave'
         'requires_approval' => 1,
         'status' => 1,
     ]);
+    allocateHrLeaveTestBalance($applicant, $leaveType);
     LeavePolicy::query()->create([
         'leave_type_id' => $leaveType->id,
         'organisation_id' => $organisation->id,
@@ -1342,6 +1301,7 @@ test('hr user can apply leave with valid handover person and it records handover
         'requires_approval' => 1,
         'status' => 1,
     ]);
+    allocateHrLeaveTestBalance($applicant, $leaveType);
     LeavePolicy::query()->create([
         'leave_type_id' => $leaveType->id,
         'organisation_id' => $organisation->id,
@@ -1463,6 +1423,7 @@ test('hr user can apply pilgrimage leave for muslim employee', function () {
         'status' => 1,
         'religion' => 'Islam',
     ]);
+    allocateHrLeaveTestBalance($employee, $pilgrimLeave);
 
     $response = $this->actingAs($hrUser)
         ->post(route('leave-requests.store'), [

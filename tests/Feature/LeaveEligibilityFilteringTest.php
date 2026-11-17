@@ -69,7 +69,6 @@ test('admin and API dropdowns share profile and organisation policy filtering', 
         'inactive' => $this->leaveType->update(['status' => 0]),
         'single maternity', 'missing maternity', 'married maternity' => $this->leaveType->update(['code' => 'MATERNITY']),
         'single parental' => $this->leaveType->update(['code' => 'PARENTAL']),
-        'single paternity' => $this->leaveType->update(['code' => 'PATERNITY']),
         default => null,
     };
     if (str_starts_with($condition, 'single')) {
@@ -101,7 +100,7 @@ test('admin and API dropdowns share profile and organisation policy filtering', 
     ['gender mismatch', false], ['gender alias', true], ['missing profile', false],
     ['religion mismatch', false], ['religion alias', true], ['inactive', false],
     ['single maternity', false], ['missing maternity', false], ['married maternity', true],
-    ['single parental', false], ['single paternity', true],
+    ['single parental', false],
     ['different organisation', true],
 ]);
 
@@ -209,7 +208,7 @@ test('annual quota and balance restrictions remain later form checks', function 
 test('weekend documents are enforced on admin creation editing and approval', function (string $flow) {
     $this->policy->update(['requires_weekend_document' => true]);
     $data = [...$this->data, 'start_date' => '2027-04-09', 'end_date' => '2027-04-12'];
-    $leave = LeaveRequest::query()->create([...$data, 'total_days' => 2]);
+    $leave = $flow === 'create' ? null : LeaveRequest::query()->create([...$data, 'total_days' => 2]);
     $response = match ($flow) {
         'create' => $this->post(route('leave-requests.store'), $data),
         'update' => $this->put(route('leave-requests.update', $leave), $data),

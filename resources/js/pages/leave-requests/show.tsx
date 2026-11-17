@@ -4,6 +4,7 @@ import { index, update } from '@/actions/App/Http/Controllers/Leave/LeaveRequest
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { formatDate, formatDateTime } from '@/lib/date-format';
+import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { dashboard } from '@/routes';
 
 type LeaveRequestDetail = {
@@ -62,9 +63,11 @@ type HandoverEmployee = {
 export default function LeaveRequestShow({
     leave_request,
     handoverEmployee,
+    fieldDefinitions = [],
 }: {
     leave_request: LeaveRequestDetail;
     handoverEmployee?: HandoverEmployee;
+    fieldDefinitions?: LeaveFieldDefinition[];
 }) {
     const handleStatusUpdate = (status: string) => {
         router.put(update.url(leave_request.id), { status }, {
@@ -74,6 +77,7 @@ export default function LeaveRequestShow({
 
     const handleCancel = () => {
         const reason = prompt('Optional cancellation remarks / reason:');
+
         if (reason !== null) {
             router.post(`/leave-requests/${leave_request.id}/cancel`, {
                 remarks: reason || null,
@@ -184,6 +188,33 @@ export default function LeaveRequestShow({
                                     <p className="text-sm text-muted-foreground">Is Paid</p>
                                     <p className="font-medium text-foreground">{leave_request.leave_type?.is_paid ? 'Yes' : 'No'}</p>
                                 </div>
+                                {fieldDefinitions.map((field) => {
+                                    const detail = leave_request.details.find(
+                                        (item) => item.field_key === field.key,
+                                    );
+
+                                    if (!detail) {
+                                        return null;
+                                    }
+
+                                    const value =
+                                        field.type === 'date'
+                                            ? formatDate(detail.field_value)
+                                            : (field.options[detail.field_value]
+                                                  ?.label ??
+                                              detail.field_value);
+
+                                    return (
+                                        <div key={field.key}>
+                                            <p className="text-sm text-muted-foreground">
+                                                {field.label}
+                                            </p>
+                                            <p className="font-medium text-foreground">
+                                                {value}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
                             </div>
                             
                             {leave_request.remarks && (

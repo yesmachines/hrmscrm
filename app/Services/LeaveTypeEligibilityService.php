@@ -11,6 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 class LeaveTypeEligibilityService
 {
+    public function __construct(private readonly LeaveTypeRules $leaveTypeRules) {}
+
     /**
      * @param  Collection<int, LeaveType>  $leaveTypes
      * @return Collection<int, LeaveType>
@@ -75,10 +77,11 @@ class LeaveTypeEligibilityService
 
     public function assertMaritalStatusEligible(LeaveType $leaveType, ?string $maritalStatus): void
     {
-        if (in_array($leaveType->code, ['MATERNITY', 'PARENTAL'], true)
-            && strtolower(trim($maritalStatus ?? '')) !== 'married') {
+        $requiredStatus = $this->leaveTypeRules->definition($leaveType)['marital_status'] ?? null;
+        if ($requiredStatus !== null
+            && strtolower(trim($maritalStatus ?? '')) !== strtolower($requiredStatus)) {
             throw ValidationException::withMessages([
-                'leave_type_id' => ["{$leaveType->leave_name} is only available to employees whose marital status is married."],
+                'leave_type_id' => ["{$leaveType->leave_name} is only available to employees whose marital status is {$requiredStatus}."],
             ]);
         }
     }

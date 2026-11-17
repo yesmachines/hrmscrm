@@ -13,10 +13,13 @@ import {
 import { useState, useId, useMemo, useEffect } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import Heading from '@/components/heading';
+import LeaveTypeFields from '@/components/leave-type-fields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { leaveValidationFormData } from '@/lib/leave-application';
+import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
 import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
 import { dashboard } from '@/routes';
@@ -55,6 +58,7 @@ interface LeaveTypeOption {
     eligible_employee_ids: number[];
     leave_name: string;
     code: string;
+    field_definitions: LeaveFieldDefinition[];
     is_paid: boolean;
     policy?: LeavePolicyOption | null;
     policies?: LeavePolicyOption[];
@@ -137,15 +141,12 @@ export default function LeaveRequestsEdit({
     leaveBalances = [],
     activeLeaves = [],
     festivals = [],
-    compassionateRelationships,
 }: Props) {
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
     const requestTypeSelectId = useId();
-    const dueDateId = useId();
     const startDateId = useId();
     const endDateId = useId();
-    const childBirthDateId = useId();
     const totalDaysId = useId();
     const statusSelectId = useId();
     const remarksId = useId();
@@ -245,12 +246,7 @@ export default function LeaveRequestsEdit({
             : null;
     }, [leaveRequest.employee_id, leaveRequest.leave_type_id, selectedEmployee, selectedLeaveType]);
 
-    const isParentalLeave = selectedLeaveType?.code === 'PARENTAL';
-    const isMaternityLeave = selectedLeaveType?.code === 'MATERNITY';
-    const isCompassionateLeave = selectedLeaveType?.code === 'COMPASSIONATE';
-    const requiresChildBirthDate = ['PARENTAL', 'PATERNITY'].includes(selectedLeaveType?.code ?? '');
-    const isFestivalLeave = selectedLeaveType?.code === 'FESTIVAL'
-        || selectedLeaveType?.leave_name.toLowerCase().includes('festival') === true;
+    const detailFields = selectedLeaveType?.field_definitions ?? [];
     const eligibleFestivals = useMemo(() => {
         if (!selectedEmployee) {
             return [];
@@ -260,12 +256,16 @@ export default function LeaveRequestsEdit({
     }, [festivals, selectedEmployee]);
     const isActiveRequest = ['applied', 'approved'].includes(data.status);
 
-    const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
+    const policyRequirements = getLeavePolicyRequirements(
         selectedPolicy,
         Number(data.total_days || 0),
         data.start_date,
         data.end_date,
     );
+    const requiresAttachment =
+        isActiveRequest && policyRequirements.requiresAttachment;
+    const requiresHandover =
+        isActiveRequest && policyRequirements.requiresHandover;
     const eligibilityPayload = useMemo(() => ({
         employee_id: Number(data.employee_id),
         leave_type_id: Number(data.leave_type_id),
@@ -279,9 +279,12 @@ export default function LeaveRequestsEdit({
         handover_description: data.handover_description || null,
         festival_id: data.festival_id || null,
         family_relationship: data.family_relationship || null,
+        status: data.status,
+        certificate: data.certificate,
         ignore_leave_request_id: leaveRequest.id,
     }), [
         data.child_birth_date,
+        data.certificate,
         data.festival_id,
         data.family_relationship,
         data.due_date,
@@ -292,6 +295,7 @@ export default function LeaveRequestsEdit({
         data.leave_type_id,
         data.request_type,
         data.start_date,
+        data.status,
         data.total_days,
         leaveRequest.id,
     ]);
@@ -306,14 +310,13 @@ export default function LeaveRequestsEdit({
                 method: 'POST',
                 signal: controller.signal,
                 headers: {
-                    'Content-Type': 'application/json',
                     Accept: 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
                     'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
                 },
-                body: JSON.stringify(eligibilityPayload),
+                body: leaveValidationFormData(eligibilityPayload),
             }).then(async (response) => {
-                if (!response.ok) {
+                if (!response.ok && response.status !== 422) {
                     throw new Error('Unable to validate the leave request.');
                 }
 
@@ -413,43 +416,33 @@ export default function LeaveRequestsEdit({
             return;
         }
 
-        if (requiresChildBirthDate && isActiveRequest && !data.child_birth_date) {
-            setError('child_birth_date', "The child's date of birth is required for this leave type.");
+        for (const field of detailFields) {
+            if (isActiveRequest && field.required && !data[field.key]) {
+                setError(field.key, `${field.label} is required.`);
 
-            return;
+                return;
+            }
         }
 
-        if (isMaternityLeave && isActiveRequest && !data.due_date) {
-            setError('due_date', 'An expected due date is required for Maternity Leave.');
-
-            return;
-        }
-
-        if (isFestivalLeave && isActiveRequest && !data.festival_id) {
-            setError('festival_id', 'Please select a festival.');
-
-            return;
-        }
-
-        if (requiresHandover && !data.handover_person_id) {
+        if (isActiveRequest && requiresHandover && !data.handover_person_id) {
             setError('handover_person_id', 'A handover colleague is required by this leave policy.');
 
             return;
         }
 
-        if (requiresHandover && !data.handover_description.trim()) {
+        if (isActiveRequest && requiresHandover && !data.handover_description.trim()) {
             setError('handover_description', 'A handover description is required by this leave policy.');
 
             return;
         }
 
-        if (requiresHandover && isHandoverPersonConflicted) {
+        if (isActiveRequest && requiresHandover && isHandoverPersonConflicted) {
             setError('handover_person_id', 'The selected handover colleague is on leave during these dates.');
 
             return;
         }
 
-        if (requiresAttachment && !hasExistingAttachment && !data.certificate) {
+        if (isActiveRequest && requiresAttachment && !hasExistingAttachment && !data.certificate) {
             setError('certificate', 'A supporting document is required by this leave policy.');
 
             return;
@@ -579,52 +572,23 @@ export default function LeaveRequestsEdit({
                                         )}
                                     </div>
 
-                                    {isMaternityLeave && (
-                                        <div>
-                                            <Label htmlFor={dueDateId}>
-                                                Expected Due Date
-                                                {isActiveRequest && <span className="text-destructive"> *</span>}
-                                            </Label>
-                                            <FormattedDatePicker
-                                                id={dueDateId}
-                                                value={data.due_date}
-                                                onChange={(value) => {
-                                                    setData('due_date', value);
-                                                    clearErrors('due_date');
-                                                }}
-                                                className="mt-1.5"
-                                                required={isActiveRequest}
-                                            />
-                                            {errors.due_date && <p className="mt-1 text-xs text-destructive">{errors.due_date}</p>}
-                                        </div>
-                                    )}
-
-                                    {requiresChildBirthDate && (
-                                        <div>
-                                            <Label htmlFor={childBirthDateId}>
-                                                Child&apos;s Date of Birth
-                                                {isActiveRequest && <span className="text-destructive"> *</span>}
-                                            </Label>
-                                            <FormattedDatePicker
-                                                id={childBirthDateId}
-                                                value={data.child_birth_date}
-                                                onChange={(value) => {
-                                                    setData('child_birth_date', value);
-                                                    clearErrors('child_birth_date');
-                                                }}
-                                                className="mt-1.5"
-                                                required={isActiveRequest}
-                                            />
-                                            {isParentalLeave && (
-                                                <p className="mt-1 text-xs text-muted-foreground">
-                                                    The leave start date must be within six months of the child&apos;s birth.
-                                                </p>
-                                            )}
-                                            {errors.child_birth_date && (
-                                                <p className="mt-1 text-xs text-destructive">{errors.child_birth_date}</p>
-                                            )}
-                                        </div>
-                                    )}
+                                    <LeaveTypeFields
+                                        fields={detailFields.filter(
+                                            (field) => field.type === 'date',
+                                        )}
+                                        values={data}
+                                        errors={errors}
+                                        active={isActiveRequest}
+                                        festivals={eligibleFestivals}
+                                        onChange={(key, value) => {
+                                            setData(key, value);
+                                            clearErrors(key);
+                                        }}
+                                        onFestivalDatesChange={(startDate, endDate) => {
+                                            setData('start_date', startDate);
+                                            setData('end_date', endDate);
+                                        }}
+                                    />
 
                                     <div>
                                         <Label htmlFor={statusSelectId}>Request Status</Label>
@@ -692,57 +656,24 @@ export default function LeaveRequestsEdit({
                                         )}
                                     </div>
 
-                                    {isCompassionateLeave && (
-                                        <div>
-                                            <Label htmlFor="family_relationship">Family Relationship</Label>
-                                            <select
-                                                id="family_relationship"
-                                                value={data.family_relationship}
-                                                onChange={(event) => {
-                                                    setData('family_relationship', event.target.value);
-                                                    clearErrors('family_relationship', 'total_days');
-                                                }}
-                                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs"
-                                                required={isActiveRequest}
-                                            >
-                                                <option value="">-- Choose Relationship --</option>
-                                                {Object.entries(compassionateRelationships).map(([key, option]) => (
-                                                    <option key={key} value={key}>{option.label} - maximum {option.max_days} days</option>
-                                                ))}
-                                            </select>
-                                            <p className="mt-1 text-xs text-muted-foreground">Limits apply per request using the leave days calculated from your dates.</p>
-                                            {errors.family_relationship && <p className="mt-1 text-xs text-destructive">{errors.family_relationship}</p>}
-                                        </div>
-                                    )}
-
-                                    {isFestivalLeave && (
-                                        <div>
-                                            <Label htmlFor="festival_id">Festival</Label>
-                                            <select
-                                                id="festival_id"
-                                                value={data.festival_id}
-                                                onChange={(event) => {
-                                                    const festival = eligibleFestivals.find((item) => String(item.id) === event.target.value);
-                                                    setData('festival_id', event.target.value);
-
-                                                    if (festival?.start_date) {
-                                                        setData('start_date', festival.start_date);
-                                                        setData('end_date', festival.end_date || festival.start_date);
-                                                    }
-
-                                                    clearErrors('festival_id', 'start_date', 'end_date');
-                                                }}
-                                                className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs"
-                                                required={isActiveRequest}
-                                            >
-                                                <option value="">-- Choose Festival --</option>
-                                                {eligibleFestivals.map((festival) => (
-                                                    <option key={festival.id} value={festival.id}>{festival.name}</option>
-                                                ))}
-                                            </select>
-                                            {errors.festival_id && <p className="mt-1 text-xs text-destructive">{errors.festival_id}</p>}
-                                        </div>
-                                    )}
+                                    <LeaveTypeFields
+                                        fields={detailFields.filter(
+                                            (field) => field.type !== 'date',
+                                        )}
+                                        values={data}
+                                        errors={errors}
+                                        active={isActiveRequest}
+                                        festivals={eligibleFestivals}
+                                        onChange={(key, value) => {
+                                            setData(key, value);
+                                            clearErrors(key, 'total_days');
+                                        }}
+                                        onFestivalDatesChange={(startDate, endDate) => {
+                                            setData('start_date', startDate);
+                                            setData('end_date', endDate);
+                                            clearErrors('start_date', 'end_date');
+                                        }}
+                                    />
 
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                         <div>
