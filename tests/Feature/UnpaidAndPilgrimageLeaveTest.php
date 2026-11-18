@@ -379,14 +379,13 @@ test('unpaid never mutates an existing balance on create edit approval or cancel
 
 test('unpaid ceiling stays out of API metadata and both preview responses', function () {
     $this->policy->update(['annual_limit' => 90]);
-    $response = $this->getJson('/api/v1/leaves/meta')->assertOk();
-    foreach (['leave_types', 'types'] as $key) {
-        $response->assertJsonPath("data.{$key}.0.annual_limit", null)
-            ->assertJsonPath("data.{$key}.0.policy.annual_limit", null)
-            ->assertJsonPath("data.{$key}.0.allow_balance", false)
-            ->assertJsonPath("data.{$key}.0.application_requirements.handover_after_days", 3)
-            ->assertJsonPath("data.{$key}.0.application_requirements.reason_required", true);
-    }
+    $response = $this->getJson('/api/v1/leaves/meta')->assertOk()
+        ->assertJsonMissingPath('data.types')
+        ->assertJsonPath('data.leave_types.0.annual_limit', null)
+        ->assertJsonPath('data.leave_types.0.policy.annual_limit', null)
+        ->assertJsonPath('data.leave_types.0.allow_balance', false)
+        ->assertJsonPath('data.leave_types.0.application_requirements.handover_after_days', 3)
+        ->assertJsonPath('data.leave_types.0.application_requirements.reason_required', true);
     expect($response->json('data.leave_types.0'))->not->toHaveKey('internal_annual_limit');
     $this->postJson('/api/v1/leaves/validate', $this->data)->assertOk()->assertJsonPath('data.annual_limit', null);
     $this->postJson(route('leave-requests.validate'), $this->data)->assertOk()->assertJsonPath('annual_limit', null);

@@ -136,7 +136,6 @@ class LeaveController extends Controller
                 'image_url' => $employee->image_url,
             ],
             'leave_types' => $typesData,
-            'types' => $typesData,
         ]);
     }
 
