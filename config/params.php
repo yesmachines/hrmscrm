@@ -46,7 +46,7 @@ return [
                 'allow_balance' => false,
                 // Internal safeguard only; never expose this value in response metadata or errors.
                 'internal_annual_limit' => 90,
-                'reason_required' => true,
+                'remarks_required' => true,
                 'handover_after_days' => 3,
             ],
         ],

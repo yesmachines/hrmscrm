@@ -232,7 +232,7 @@ test('special rule configuration drives both validation and all field metadata',
     expect($expected[0]['label'])->toBe('Baby Birth Date')
         ->and($expected[0]['help'])->toContain('4 months');
     $meta = collect($this->getJson('/api/v1/leaves/meta')->assertOk()->json('data.leave_types'))->firstWhere('id', $this->leaveType->id);
-    expect($meta['detail_fields'])->toBe(['child_birth_date'])
+    expect($meta)->not->toHaveKey('detail_fields')
         ->and($meta['field_definitions'])->toBe($expected);
     $existing = LeaveRequest::query()->create([...$this->data, 'total_days' => 1]);
     foreach ([route('leave-requests.create'), route('leave-requests.edit', $existing)] as $url) {

@@ -1,5 +1,5 @@
 export interface LeaveApplicationRequirements {
-    reason_required: boolean;
+    remarks_required: boolean;
     handover_after_days: number | null;
 }
 

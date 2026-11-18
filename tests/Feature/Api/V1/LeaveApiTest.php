@@ -504,9 +504,12 @@ test('leave application enforces annual and one-time limits from leave policy', 
     $token = $user->createToken('test')->plainTextToken;
     $this->withToken($token)->getJson('/api/v1/leaves/meta')
         ->assertOk()
-        ->assertJsonPath('data.leave_types.0.annual_limit', null)
-        ->assertJsonPath('data.leave_types.0.allow_once', true)
-        ->assertJsonPath('data.leave_types.0.allow_balance', false);
+        ->assertJsonMissingPath('data.leave_types.0.annual_limit')
+        ->assertJsonMissingPath('data.leave_types.0.allow_once')
+        ->assertJsonMissingPath('data.leave_types.0.allow_balance')
+        ->assertJsonPath('data.leave_types.0.policy.annual_limit', null)
+        ->assertJsonMissingPath('data.leave_types.0.policy.allow_once')
+        ->assertJsonPath('data.leave_types.0.policy.allow_balance', false);
 
     $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $onceLeaveType->id,
@@ -743,7 +746,11 @@ test('leave meta returns policy-owned document and handover requirements', funct
         ->assertJsonPath('data.leave_types.0.id', $leaveType->id)
         ->assertJsonPath('data.leave_types.0.policy.requires_attachment', true)
         ->assertJsonPath('data.leave_types.0.policy.requires_handover', true)
-        ->assertJsonPath('data.leave_types.0.policy.requires_document_after_days', 2)
+        ->assertJsonPath('data.leave_types.0.policy.requires_attachment_after_days', 2)
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover_after_days', 2)
+        ->assertJsonPath('data.leave_types.0.policy.remarks_required', false)
+        ->assertJsonMissingPath('data.leave_types.0.policy.requires_document_after_days')
+        ->assertJsonMissingPath('data.leave_types.0.application_requirements')
         ->assertJsonMissingPath('data.leave_types.0.policy.full_pay_days')
         ->assertJsonMissingPath('data.leave_types.0.policy.carry_forward')
         ->assertJsonMissingPath('data.leave_types.0.requires_attachment')
@@ -837,8 +844,8 @@ test('leave metadata and validation use only the employee organisation policy', 
         ->getJson('/api/v1/leaves/meta')
         ->assertOk()
         ->assertJsonPath('data.employee.id', $firstEmployee->id)
-        ->assertJsonPath('data.leave_types.0.annual_limit', 5)
-        ->assertJsonPath('data.leave_types.0.allow_once', true)
+        ->assertJsonPath('data.leave_types.0.policy.annual_limit', 5)
+        ->assertJsonMissingPath('data.leave_types.0.policy.allow_once')
         ->assertJsonPath('data.leave_types.0.policy.requires_attachment', true);
 
     Auth::forgetGuards();
@@ -847,8 +854,8 @@ test('leave metadata and validation use only the employee organisation policy', 
         ->getJson('/api/v1/leaves/meta')
         ->assertOk()
         ->assertJsonPath('data.employee.id', $secondEmployee->id)
-        ->assertJsonPath('data.leave_types.0.annual_limit', 8)
-        ->assertJsonPath('data.leave_types.0.allow_once', false)
+        ->assertJsonPath('data.leave_types.0.policy.annual_limit', 8)
+        ->assertJsonMissingPath('data.leave_types.0.policy.allow_once')
         ->assertJsonPath('data.leave_types.0.policy.requires_attachment', false);
 
     Auth::forgetGuards();
@@ -858,10 +865,19 @@ test('leave metadata and validation use only the employee organisation policy', 
         ->assertOk()
         ->assertJsonPath('data.employee.id', $unconfiguredEmployee->id)
         ->assertJsonPath('data.leave_types.0.id', $leaveType->id)
-        ->assertJsonPath('data.leave_types.0.annual_limit', null)
-        ->assertJsonPath('data.leave_types.0.allow_once', false)
-        ->assertJsonPath('data.leave_types.0.allow_balance', true)
-        ->assertJsonPath('data.leave_types.0.policy', null);
+        ->assertJsonMissingPath('data.leave_types.0.annual_limit')
+        ->assertJsonMissingPath('data.leave_types.0.allow_once')
+        ->assertJsonMissingPath('data.leave_types.0.allow_balance')
+        ->assertJsonPath('data.leave_types.0.policy', [
+            'annual_limit' => null,
+            'allow_balance' => true,
+            'remarks_required' => false,
+            'requires_attachment_after_days' => null,
+            'requires_handover_after_days' => null,
+            'requires_weekend_document' => false,
+            'requires_attachment' => false,
+            'requires_handover' => false,
+        ]);
 
     LeaveBalance::query()->create([
         'employee_id' => $unconfiguredEmployee->id,
@@ -1899,7 +1915,7 @@ test('applying pilgrimage leave succeeds for muslim employee', function () {
     ]);
 });
 
-test('leave meta returns religion and filters leave types by religion', function () {
+test('leave meta filters leave types by religion without returning eligibility fields', function () {
     $christianUser = SalesCrmUser::query()->create([
         'name' => 'John Christian',
         'email' => 'john.christian@example.com',
@@ -1957,5 +1973,5 @@ test('leave meta returns religion and filters leave types by religion', function
         ->and($leaveTypeCodes)->not->toContain('ISLAM_PILGRIM');
 
     $chrRetreat = collect($response->json('data.leave_types'))->firstWhere('code', 'CHR_RETREAT');
-    expect($chrRetreat['religion'])->toBe('Christian');
+    expect($chrRetreat)->not->toHaveKeys(['religion', 'gender']);
 });

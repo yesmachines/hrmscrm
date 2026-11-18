@@ -168,23 +168,51 @@ test('minimum service stays visible initially and is enforced against selected d
     ['2027-07-05', '2027-04-05', false],
 ]);
 
-test('metadata exposes festival details and every configured policy setting', function () {
+test('metadata exposes festival fields and only app input policy settings', function () {
     $this->leaveType->update(['code' => 'FESTIVAL']);
     $this->policy->update(['annual_limit' => 5, 'allow_once' => true, 'carry_forward_weeks' => 4, 'exclude_rules' => ['custom' => true]]);
     $this->policy->tiers()->create(['from_day' => 1, 'to_day' => 5, 'pay_percentage' => 100]);
     $type = collect($this->getJson('/api/v1/leaves/meta')->assertOk()->json('data.leave_types'))->firstWhere('id', $this->leaveType->id);
-    expect($type['detail_fields'])->toBe(['festival_id'])
-        ->and($type['policy']['annual_limit'])->toBe(5)
-        ->and($type['policy']['allow_once'])->toBeTrue()
-        ->and($type['policy']['carry_forward_weeks'])->toBe(4)
-        ->and($type['policy']['exclude_rules'])->toBe(['custom' => true])
-        ->and($type['policy']['tiers'][0]['from_day'])->toBe(1);
+    expect($type)->not->toHaveKey('detail_fields')
+        ->and(array_column($type['field_definitions'], 'key'))->toBe(['festival_id'])
+        ->and($type['policy'])->toBe([
+            'annual_limit' => 5,
+            'allow_balance' => false,
+            'remarks_required' => false,
+            'requires_attachment_after_days' => null,
+            'requires_handover_after_days' => null,
+            'requires_weekend_document' => false,
+            'requires_attachment' => false,
+            'requires_handover' => false,
+        ]);
 });
 
-test('probation remains metadata only and does not restrict eligibility', function () {
+test('metadata returns default app input settings and balances without a policy', function () {
+    $this->policy->delete();
+
+    $type = collect($this->getJson('/api/v1/leaves/meta')->assertOk()->json('data.leave_types'))->firstWhere('id', $this->leaveType->id);
+
+    expect($type['policy'])->toBe([
+        'annual_limit' => null,
+        'allow_balance' => true,
+        'remarks_required' => false,
+        'requires_attachment_after_days' => null,
+        'requires_handover_after_days' => null,
+        'requires_weekend_document' => false,
+        'requires_attachment' => false,
+        'requires_handover' => false,
+    ])->and($type['balance'])->toMatchArray([
+        'total' => 0,
+        'used' => 0,
+        'balance' => 0,
+        'pending' => 0,
+    ]);
+});
+
+test('probation is omitted from metadata and does not restrict eligibility', function () {
     $this->policy->update(['probation_applicable' => false]);
     $type = collect($this->getJson('/api/v1/leaves/meta')->assertOk()->json('data.leave_types'))->firstWhere('id', $this->leaveType->id);
-    expect($type['policy']['probation_applicable'])->toBeFalse();
+    expect($type['policy'])->not->toHaveKey('probation_applicable');
     $this->employee->setAttribute('employment_status', 'probation');
     app(LeaveValidationService::class)->validatePolicyEligibility(
         $this->employee,
@@ -225,7 +253,9 @@ test('edit preview preserves owned attachments and omitted special details', fun
     $leave->files()->create(['file_path' => 'leave-certificates/existing.pdf', 'uploaded_by' => $this->user->id, 'uploaded_date' => now()]);
     $data = collect($this->data)->except('due_date')->all();
     $this->postJson('/api/v1/leaves/validate', [...$data, 'ignore_leave_request_id' => $leave->id])
-        ->assertOk()->assertJsonPath('data.attachment_required', true)->assertJsonPath('data.detail_fields', ['due_date']);
+        ->assertOk()->assertJsonPath('data.attachment_required', true)
+        ->assertJsonMissingPath('data.detail_fields')
+        ->assertJsonPath('data.field_definitions.0.key', 'due_date');
     $this->postJson(route('leave-requests.validate'), [...$data, 'ignore_leave_request_id' => $leave->id])
         ->assertOk()->assertJsonPath('valid', true)->assertJsonPath('attachment_required', true);
 });

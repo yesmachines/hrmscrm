@@ -146,8 +146,12 @@ test('compassionate options and saved relationship are available to admin and ap
         ->assertInertia(fn (Assert $page) => $page->component('leave-requests/edit')
             ->where('compassionateRelationships', $options)
             ->where('leaveRequest.family_relationship', 'spouse'));
-    $this->getJson('/api/v1/leaves/meta')
-        ->assertOk()->assertJsonFragment(['family_relationship_options' => $options]);
+    $types = $this->getJson('/api/v1/leaves/meta')
+        ->assertOk()->json('data.leave_types');
+    $type = collect($types)->firstWhere('id', $this->leaveType->id);
+    expect($type)->not->toHaveKey('family_relationship_options');
+    $field = collect($type['field_definitions'])->firstWhere('key', 'family_relationship');
+    expect($field['options'])->toBe($options);
     $this->getJson('/api/v1/leaves/'.$leave->id)->assertOk()
         ->assertJsonFragment(['field_key' => 'family_relationship', 'field_value' => 'spouse']);
 });

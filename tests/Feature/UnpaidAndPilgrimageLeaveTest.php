@@ -186,6 +186,11 @@ test('unpaid requests at three days need neither balance nor handover in every f
 
 test('handover uses a strict configurable threshold independent of documents', function (float $days, bool $required) {
     $this->policy->update(['requires_handover' => false, 'requires_document_after_days' => 10, 'requires_attachment' => true]);
+    $this->getJson('/api/v1/leaves/meta')->assertOk()
+        ->assertJsonPath('data.leave_types.0.policy.requires_attachment_after_days', 10)
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover_after_days', 3)
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover', true)
+        ->assertJsonPath('data.leave_types.0.policy.remarks_required', true);
     expect($this->service->requiresHandover($this->leaveType, $this->policy, $days))->toBe($required)
         ->and($this->policy->requiresAttachmentForDuration($days))->toBeFalse();
 })->with([[0.5, false], [3.0, false], [3.5, true], [4.0, true]]);
@@ -194,8 +199,11 @@ test('unpaid constants can be changed without touching the service or frontend',
     config([
         'params.leave_type.special_rules.UNPAID.internal_annual_limit' => 2,
         'params.leave_type.special_rules.UNPAID.handover_after_days' => 1,
-        'params.leave_type.special_rules.UNPAID.reason_required' => false,
+        'params.leave_type.special_rules.UNPAID.remarks_required' => false,
     ]);
+    $this->getJson('/api/v1/leaves/meta')->assertOk()
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover_after_days', 1)
+        ->assertJsonPath('data.leave_types.0.policy.remarks_required', false);
     expect($this->service->requiresHandover($this->leaveType, null, 1))->toBeFalse()
         ->and($this->service->requiresHandover($this->leaveType, null, 1.5))->toBeTrue();
     $this->service->validateApplication($this->employee, [...$this->data, 'remarks' => null]);
@@ -234,6 +242,13 @@ test('unpaid safeguard counts only active same-year usage and allows the exact c
 
 test('unpaid rules also apply without an organisation policy', function () {
     $this->policy->delete();
+    $this->getJson('/api/v1/leaves/meta')->assertOk()
+        ->assertJsonPath('data.leave_types.0.policy.allow_balance', false)
+        ->assertJsonPath('data.leave_types.0.policy.requires_attachment', false)
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover_after_days', 3)
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover', true)
+        ->assertJsonPath('data.leave_types.0.policy.remarks_required', true)
+        ->assertJsonMissingPath('data.leave_types.0.application_requirements');
     $this->service->validateApplication($this->employee, $this->data);
     expect(fn () => $this->service->validateApplication($this->employee, [...$this->data, 'remarks' => null]))
         ->toThrow(ValidationException::class, 'reason is required');
@@ -381,13 +396,21 @@ test('unpaid ceiling stays out of API metadata and both preview responses', func
     $this->policy->update(['annual_limit' => 90]);
     $response = $this->getJson('/api/v1/leaves/meta')->assertOk()
         ->assertJsonMissingPath('data.types')
-        ->assertJsonPath('data.leave_types.0.annual_limit', null)
+        ->assertJsonMissingPath('data.leave_types.0.annual_limit')
+        ->assertJsonMissingPath('data.leave_types.0.allow_once')
+        ->assertJsonMissingPath('data.leave_types.0.allow_balance')
         ->assertJsonPath('data.leave_types.0.policy.annual_limit', null)
-        ->assertJsonPath('data.leave_types.0.allow_balance', false)
-        ->assertJsonPath('data.leave_types.0.application_requirements.handover_after_days', 3)
-        ->assertJsonPath('data.leave_types.0.application_requirements.reason_required', true);
+        ->assertJsonPath('data.leave_types.0.policy.allow_balance', false)
+        ->assertJsonPath('data.leave_types.0.policy.requires_handover_after_days', 3)
+        ->assertJsonPath('data.leave_types.0.policy.remarks_required', true)
+        ->assertJsonMissingPath('data.leave_types.0.application_requirements');
     expect($response->json('data.leave_types.0'))->not->toHaveKey('internal_annual_limit');
-    $this->postJson('/api/v1/leaves/validate', $this->data)->assertOk()->assertJsonPath('data.annual_limit', null);
+    $this->postJson('/api/v1/leaves/validate', $this->data)->assertOk()
+        ->assertJsonPath('data.policy.annual_limit', null)
+        ->assertJsonPath('data.policy.remarks_required', true)
+        ->assertJsonPath('data.policy.requires_handover_after_days', 3)
+        ->assertJsonMissingPath('data.application_requirements')
+        ->assertJsonMissingPath('data.annual_limit');
     $this->postJson(route('leave-requests.validate'), $this->data)->assertOk()->assertJsonPath('annual_limit', null);
 });
 

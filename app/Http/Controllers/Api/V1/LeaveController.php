@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\LeaveApplicationRequest;
 use App\Models\EmployeeProfile;
 use App\Models\LeaveBalance;
+use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestFile;
 use App\Models\LeaveType;
@@ -34,8 +35,8 @@ class LeaveController extends Controller
      */
     #[OA\Get(
         path: '/api/v1/leaves/meta',
-        summary: 'Get profile-eligible leave types, balances, policies and required detail fields',
-        description: 'Filters active leave types by gender, religion and marital status. Date-dependent eligibility, joining-date-based service tenure, policy-enabled department overlap, usage limits and balance checks run during validation and submission. application_requirements describes required reasons and the independent strict handover_after_days threshold. Internal unpaid safeguards are not exposed as annual limits. Probation remains configuration-only.',
+        summary: 'Get profile-eligible leave types, balances and application input requirements',
+        description: 'Returns active leave types already filtered by employee gender, religion and marital status. policy contains the displayable annual limit, effective balance tracking, remarks_required and separate requires_attachment_after_days and requires_handover_after_days settings, with defaults when no organisation policy exists. Regular policy thresholds are inclusive; configured special handover thresholds are strict (unpaid requires more than 3 days by default). Special handover settings override the stored policy threshold and flag. Internal unpaid ceilings are never exposed. field_definitions describes additional inputs and their options. Other backend-only policy configuration is omitted. Eligibility, usage limits and balance checks still run during validation and submission.',
         security: [['sanctum' => []]],
         tags: ['Leave Management'],
         responses: [
@@ -44,7 +45,7 @@ class LeaveController extends Controller
             new OA\Response(response: 404, description: 'Employee not found'),
         ]
     )]
-    public function meta(Request $request, LeaveTypeEligibilityService $eligibilityService, LeaveValidationService $validationService): JsonResponse
+    public function meta(Request $request, LeaveTypeEligibilityService $eligibilityService): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -65,7 +66,7 @@ class LeaveController extends Controller
             LeaveType::query()
                 ->with([
                     'policies' => fn ($query) => $query
-                        ->where('organisation_id', $employee->organisation_id)->with('tiers'),
+                        ->where('organisation_id', $employee->organisation_id),
                 ])
                 ->where('status', 1)
                 ->get(),
@@ -81,7 +82,7 @@ class LeaveController extends Controller
             ->get()
             ->keyBy('leave_type_id');
 
-        $typesData = $leaveTypes->map(function (LeaveType $type) use ($employee, $validationService, $balances): array {
+        $typesData = $leaveTypes->map(function (LeaveType $type) use ($employee, $balances): array {
             $policy = $type->policyForOrganisation($employee->organisation_id);
             $balance = $balances->get($type->id);
 
@@ -91,41 +92,14 @@ class LeaveController extends Controller
                 'code' => $type->code,
                 'is_paid' => (bool) $type->is_paid,
                 'requires_approval' => (bool) $type->requires_approval,
-                'detail_fields' => $validationService->detailFields($type),
                 'field_definitions' => $this->leaveTypeRules->fieldDefinitions($type),
-                'application_requirements' => $this->leaveTypeRules->applicationRequirements($type),
-                'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($type, $policy),
-                'family_relationship_options' => array_key_exists('family_relationship', $this->leaveTypeRules->fields($type))
-                    ? config('params.leave_type.compassionate_relationships')
-                    : null,
-                'gender' => $type->gender,
-                'religion' => $type->religion,
-                'allow_once' => (bool) ($policy?->allow_once ?? false),
-                'allow_balance' => $this->leaveTypeRules->allowsBalance($type, $policy),
                 'balance' => [
                     'total' => $balance ? (float) $balance->allocated : 0,
                     'used' => $balance ? (float) $balance->used : 0,
                     'balance' => $balance ? (float) $balance->balance : 0,
                     'pending' => $balance ? (float) $balance->pending : 0,
                 ],
-                'policy' => $policy ? [
-                    'id' => $policy->id,
-                    'organisation_id' => $policy->organisation_id,
-                    'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($type, $policy),
-                    'allow_once' => (bool) $policy->allow_once,
-                    'allow_balance' => $this->leaveTypeRules->allowsBalance($type, $policy),
-                    'requires_document_after_days' => $policy->requires_document_after_days,
-                    'requires_weekend_document' => (bool) $policy->requires_weekend_document,
-                    'requires_attachment' => (bool) $policy->requires_attachment,
-                    'requires_handover' => (bool) $policy->requires_handover,
-                    'encashment' => (bool) $policy->encashment,
-                    'probation_applicable' => (bool) $policy->probation_applicable,
-                    'minimum_service_months' => $policy->minimum_service_months,
-                    'carry_forward_weeks' => $policy->carry_forward_weeks,
-                    'exclude_rules' => $policy->exclude_rules,
-                    'tiers' => $policy->tiers,
-                    'remarks' => $policy->remarks,
-                ] : null,
+                'policy' => $this->policyInputSettings($type, $policy),
             ];
         });
 
@@ -191,12 +165,30 @@ class LeaveController extends Controller
             'total_days' => $validation['total_days'],
             'attachment_required' => $validation['attachment_required'],
             'handover_required' => $validationService->requiresHandover($validation['leave_type'], $validation['policy'], $validation['total_days']),
-            'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($validation['leave_type'], $validation['policy']),
-            'application_requirements' => $this->leaveTypeRules->applicationRequirements($validation['leave_type']),
-            'detail_fields' => $validationService->detailFields($validation['leave_type']),
+            'policy' => $this->policyInputSettings($validation['leave_type'], $validation['policy']),
             'field_definitions' => $this->leaveTypeRules->fieldDefinitions($validation['leave_type']),
             'remarks' => $validation['remarks'],
         ], 'Leave request details are valid.');
+    }
+
+    /**
+     * @return array{annual_limit: int|null, allow_balance: bool, remarks_required: bool, requires_attachment_after_days: int|null, requires_handover_after_days: int|null, requires_weekend_document: bool, requires_attachment: bool, requires_handover: bool}
+     */
+    private function policyInputSettings(LeaveType $leaveType, ?LeavePolicy $policy): array
+    {
+        $requirements = $this->leaveTypeRules->applicationRequirements($leaveType);
+        $handoverThreshold = $requirements['handover_after_days'];
+
+        return [
+            'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($leaveType, $policy),
+            'allow_balance' => $this->leaveTypeRules->allowsBalance($leaveType, $policy),
+            'remarks_required' => $requirements['remarks_required'],
+            'requires_attachment_after_days' => $policy?->requires_document_after_days,
+            'requires_handover_after_days' => $handoverThreshold ?? $policy?->requires_document_after_days,
+            'requires_weekend_document' => (bool) ($policy?->requires_weekend_document ?? false),
+            'requires_attachment' => (bool) ($policy?->requires_attachment ?? false),
+            'requires_handover' => $handoverThreshold !== null || (bool) ($policy?->requires_handover ?? false),
+        ];
     }
 
     /**
@@ -302,7 +294,7 @@ class LeaveController extends Controller
                         new OA\Property(property: 'request_type', type: 'string', enum: ['fullday', 'firsthalf', 'secondhalf']),
                         new OA\Property(property: 'reason', type: 'string'),
                         new OA\Property(property: 'due_date', type: 'string', format: 'date', description: 'Required for Maternity Leave.'),
-                        new OA\Property(property: 'family_relationship', type: 'string', description: 'Required for Compassionate Leave. Use a key from family_relationship_options in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.'),
+                        new OA\Property(property: 'family_relationship', type: 'string', description: 'Required for Compassionate Leave. Use an option key from the family_relationship entry in field_definitions in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.'),
                         new OA\Property(property: 'child_birth_date', type: 'string', format: 'date', description: "Required for Parental Leave. The leave start date must be within six months of the child's birth."),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),

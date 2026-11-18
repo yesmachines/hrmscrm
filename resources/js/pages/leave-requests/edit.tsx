@@ -732,11 +732,11 @@ export default function LeaveRequestsEdit({
                                     </div>
 
                                     <div>
-                                        <Label htmlFor={remarksId}>HR Remarks / Reason{isActiveRequest && selectedLeaveType?.application_requirements.reason_required ? ' *' : ''}</Label>
+                                        <Label htmlFor={remarksId}>HR Remarks / Reason{isActiveRequest && selectedLeaveType?.application_requirements.remarks_required ? ' *' : ''}</Label>
                                         <Textarea
                                             id={remarksId}
                                             value={data.remarks}
-                                            required={isActiveRequest && selectedLeaveType?.application_requirements.reason_required}
+                                            required={isActiveRequest && selectedLeaveType?.application_requirements.remarks_required}
                                             onChange={(e) => setData('remarks', e.target.value)}
                                             placeholder="Provide reason for editing or remarks..."
                                             className="mt-1.5 min-h-[80px]"

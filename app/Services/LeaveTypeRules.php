@@ -8,7 +8,7 @@ use App\Models\LeaveType;
 class LeaveTypeRules
 {
     /**
-     * @return array{validator?: string, fields?: list<string>, marital_status?: string, annual_request_limit?: int, requires_holiday_document?: bool, allow_balance?: bool, internal_annual_limit?: int, reason_required?: bool, handover_after_days?: int}
+     * @return array{validator?: string, fields?: list<string>, marital_status?: string, annual_request_limit?: int, requires_holiday_document?: bool, allow_balance?: bool, internal_annual_limit?: int, remarks_required?: bool, handover_after_days?: int}
      */
     public function definition(LeaveType $leaveType): array
     {
@@ -27,13 +27,13 @@ class LeaveTypeRules
             : $policy?->annual_limit;
     }
 
-    /** @return array{reason_required: bool, handover_after_days: int|null} */
+    /** @return array{remarks_required: bool, handover_after_days: int|null} */
     public function applicationRequirements(LeaveType $leaveType): array
     {
         $definition = $this->definition($leaveType);
 
         return [
-            'reason_required' => $definition['reason_required'] ?? false,
+            'remarks_required' => $definition['remarks_required'] ?? false,
             'handover_after_days' => $definition['handover_after_days'] ?? null,
         ];
     }

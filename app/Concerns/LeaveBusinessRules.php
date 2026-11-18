@@ -15,7 +15,7 @@ trait LeaveBusinessRules
     /** @param array<string, mixed> $data */
     private function validateUnpaidLeave(LeaveType $leaveType, array $data): void
     {
-        if (($this->leaveTypeRules->definition($leaveType)['reason_required'] ?? false)
+        if (($this->leaveTypeRules->definition($leaveType)['remarks_required'] ?? false)
             && (! is_string($data['remarks'] ?? null) || trim($data['remarks']) === '')) {
             throw ValidationException::withMessages([
                 'remarks' => ['A reason is required for this leave type.'],

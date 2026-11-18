@@ -930,13 +930,13 @@ export default function LeaveRequestsCreate({
 
                             {/* Remarks / Reason */}
                             <div className="space-y-2">
-                                <Label htmlFor={remarksId}>Reason / Remarks{selectedLeaveType?.application_requirements.reason_required ? ' *' : ''}</Label>
+                                <Label htmlFor={remarksId}>Reason / Remarks{selectedLeaveType?.application_requirements.remarks_required ? ' *' : ''}</Label>
                                 <Textarea
                                     id={remarksId}
                                     rows={3}
                                     placeholder="Provide reason for leave, special authorization notes, or handover notes..."
                                     value={data.remarks}
-                                    required={selectedLeaveType?.application_requirements.reason_required}
+                                    required={selectedLeaveType?.application_requirements.remarks_required}
                                     onChange={(e) => setData('remarks', e.target.value)}
                                 />
                                 {errors.remarks && (
