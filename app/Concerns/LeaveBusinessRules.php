@@ -3,12 +3,72 @@
 namespace App\Concerns;
 
 use App\Models\Festival;
+use App\Models\LeavePolicy;
+use App\Models\LeaveRequest;
 use App\Models\LeaveType;
+use App\Models\SalesCrm\Employee;
 use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
 
 trait LeaveBusinessRules
 {
+    /** @param array<string, mixed> $data */
+    private function validateUnpaidLeave(LeaveType $leaveType, array $data): void
+    {
+        if (($this->leaveTypeRules->definition($leaveType)['reason_required'] ?? false)
+            && (! is_string($data['remarks'] ?? null) || trim($data['remarks']) === '')) {
+            throw ValidationException::withMessages([
+                'remarks' => ['A reason is required for this leave type.'],
+            ]);
+        }
+    }
+
+    public function requiresHandover(LeaveType $leaveType, ?LeavePolicy $policy, float $totalDays): bool
+    {
+        $threshold = $this->leaveTypeRules->definition($leaveType)['handover_after_days'] ?? null;
+
+        return $threshold !== null
+            ? $totalDays > $threshold
+            : ($policy?->requiresHandoverForDuration($totalDays) ?? false);
+    }
+
+    private function validateDepartmentOverlap(
+        Employee $employee,
+        LeaveType $leaveType,
+        ?LeavePolicy $policy,
+        Carbon $startDate,
+        Carbon $endDate,
+        ?int $ignoreLeaveRequestId,
+    ): void {
+        if (! ($policy?->preventsDepartmentOverlap() ?? false)) {
+            return;
+        }
+        if ($employee->department_id === null) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => ['A department is required to verify leave eligibility. Please ask HR to assign your department.'],
+            ]);
+        }
+
+        $departmentEmployeeIds = Employee::query()
+            ->where('organisation_id', $employee->organisation_id)
+            ->where('department_id', $employee->department_id)
+            ->where('id', '!=', $employee->id)
+            ->pluck('id');
+
+        if (LeaveRequest::query()
+            ->whereIn('employee_id', $departmentEmployeeIds)
+            ->where('leave_type_id', $leaveType->id)
+            ->whereIn('status', config('params.leave_request.active_statuses'))
+            ->whereDate('start_date', '<=', $endDate->toDateString())
+            ->whereDate('end_date', '>=', $startDate->toDateString())
+            ->when($ignoreLeaveRequestId !== null, fn ($query) => $query->where('id', '!=', $ignoreLeaveRequestId))
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'start_date' => ['Another employee in this department has an active request for the same leave type during the selected dates.'],
+            ]);
+        }
+    }
+
     /** @param array<string, mixed> $data */
     private function validateMaternityLeave(array $data): void
     {

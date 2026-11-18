@@ -2,16 +2,56 @@
 
 namespace App\Services;
 
+use App\Models\LeavePolicy;
 use App\Models\LeaveType;
 
 class LeaveTypeRules
 {
     /**
-     * @return array{validator?: string, fields?: list<string>, marital_status?: string, annual_request_limit?: int, requires_holiday_document?: bool}
+     * @return array{validator?: string, fields?: list<string>, marital_status?: string, annual_request_limit?: int, requires_holiday_document?: bool, allow_balance?: bool, internal_annual_limit?: int, reason_required?: bool, handover_after_days?: int}
      */
     public function definition(LeaveType $leaveType): array
     {
         return config('params.leave_type.special_rules.'.$leaveType->code, []);
+    }
+
+    public function allowsBalance(LeaveType $leaveType, ?LeavePolicy $policy): bool
+    {
+        return $this->definition($leaveType)['allow_balance'] ?? $policy?->allow_balance ?? true;
+    }
+
+    public function visibleAnnualLimit(?LeaveType $leaveType, ?LeavePolicy $policy): ?int
+    {
+        return $leaveType !== null && isset($this->definition($leaveType)['internal_annual_limit'])
+            ? null
+            : $policy?->annual_limit;
+    }
+
+    /** @return array{reason_required: bool, handover_after_days: int|null} */
+    public function applicationRequirements(LeaveType $leaveType): array
+    {
+        $definition = $this->definition($leaveType);
+
+        return [
+            'reason_required' => $definition['reason_required'] ?? false,
+            'handover_after_days' => $definition['handover_after_days'] ?? null,
+        ];
+    }
+
+    public function prepareForDisplay(LeaveType $leaveType): void
+    {
+        $leaveType->setAttribute('field_definitions', $this->fieldDefinitions($leaveType));
+        $leaveType->setAttribute('application_requirements', $this->applicationRequirements($leaveType));
+
+        if ($leaveType->relationLoaded('policies')) {
+            foreach ($leaveType->policies as $policy) {
+                $policy->setAttribute('annual_limit', $this->visibleAnnualLimit($leaveType, $policy));
+            }
+        }
+        if ($leaveType->relationLoaded('policy') && $leaveType->getRelation('policy') instanceof LeavePolicy) {
+            $policy = $leaveType->getRelation('policy');
+            $policy->setAttribute('annual_limit', $this->visibleAnnualLimit($leaveType, $policy));
+        }
     }
 
     public function isFestivalLeave(LeaveType $leaveType): bool

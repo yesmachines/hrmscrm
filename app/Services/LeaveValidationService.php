@@ -25,7 +25,7 @@ class LeaveValidationService
 
     /**
      * Shared order for every active admin/API submission, edit, preview and approval:
-     * type, dates/duration, overlap, profile, special details, policy limits,
+     * type, dates/duration, overlap, profile, special details, policy limits/department overlap,
      * balance availability, handover, travel, documents, festival eligibility/usage.
      * Rejected/cancelled edits validate dates without reapplying eligibility.
      * Per-type checks live in LeaveBusinessRules; configurable values remain in params.leave_type.
@@ -69,8 +69,9 @@ class LeaveValidationService
             );
             $this->validateLeaveTypeDetails($leaveType, [...$data, 'employee_profile' => $profile], $startDate, $totalDays);
             $this->validatePolicyEligibility($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
+            $this->validateDepartmentOverlap($employee, $leaveType, $policy, $startDate, $endDate, $ignoreLeaveRequestId);
             $this->validateBalance($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
-            $this->validateHandover($employee, $policy, $data, $startDate, $endDate, $totalDays);
+            $this->validateHandover($employee, $leaveType, $policy, $data, $startDate, $endDate, $totalDays);
             $this->validateTravel($data);
             $attachmentRequired = $this->validateAttachment($leaveType, $policy, $startDate, $endDate, $totalDays, $hasFile);
             $festival = $this->festivalLeaveService->validate(
@@ -140,10 +141,16 @@ class LeaveValidationService
             ]);
         }
 
-        $annualLimit = $policy?->annual_limit;
+        $internalLimit = $this->leaveTypeRules->definition($leaveType)['internal_annual_limit'] ?? null;
+        $annualLimit = $internalLimit ?? $policy?->annual_limit;
         if ($annualLimit !== null) {
             $usedDays = (float) (clone $usage)->whereYear('start_date', $startDate->year)->sum('total_days');
             if (($usedDays + $totalDays) > $annualLimit) {
+                if ($internalLimit !== null) {
+                    throw ValidationException::withMessages([
+                        'total_days' => ['This leave request exceeds the permitted allowance. Please contact HR.'],
+                    ]);
+                }
                 $remaining = max(0, $annualLimit - $usedDays);
                 throw ValidationException::withMessages([
                     'total_days' => ["This request exceeds your annual limit of {$annualLimit} days for {$leaveType->leave_name}. You have {$remaining} days remaining this year."],
@@ -152,10 +159,10 @@ class LeaveValidationService
         }
 
         if ($policy?->minimum_service_months !== null && $policy->minimum_service_months > 0) {
-            $joiningDate = $employee->joining_date ?? $employee->created_at;
+            $joiningDate = $employee->joining_date;
             if ($joiningDate === null) {
                 throw ValidationException::withMessages([
-                    'leave_type_id' => ['Employment start date is required to verify minimum service eligibility. Please contact HR.'],
+                    'leave_type_id' => ['Joining date is required to verify minimum service eligibility. Please ask HR to complete your joining date.'],
                 ]);
             }
             $eligibleFrom = Carbon::parse($joiningDate)->startOfDay()->addMonthsNoOverflow($policy->minimum_service_months);
@@ -181,6 +188,7 @@ class LeaveValidationService
 
         $validator = $this->leaveTypeRules->definition($leaveType)['validator'] ?? null;
         match ($validator) {
+            'unpaid' => $this->validateUnpaidLeave($leaveType, $data),
             'compassionate' => $this->validateCompassionateLeave($data, $totalDays),
             'maternity' => $this->validateMaternityLeave($data),
             'parental' => $this->validateParentalLeave($leaveType, $data['child_birth_date'] ?? null, $leaveStartDate),
@@ -300,7 +308,7 @@ class LeaveValidationService
 
     private function validateBalance(Employee $employee, LeaveType $leaveType, ?LeavePolicy $policy, Carbon $startDate, float $totalDays, ?int $ignoreLeaveRequestId): void
     {
-        if ($policy !== null && ! $policy->allow_balance) {
+        if (! $this->leaveTypeRules->allowsBalance($leaveType, $policy)) {
             return;
         }
         $balance = LeaveBalance::query()
@@ -327,10 +335,10 @@ class LeaveValidationService
     }
 
     /** @param array<string, mixed> $data */
-    private function validateHandover(Employee $employee, ?LeavePolicy $policy, array $data, Carbon $startDate, Carbon $endDate, float $totalDays): void
+    private function validateHandover(Employee $employee, LeaveType $leaveType, ?LeavePolicy $policy, array $data, Carbon $startDate, Carbon $endDate, float $totalDays): void
     {
         $handoverId = $data['handover_person_id'] ?? null;
-        $required = $policy?->requiresHandoverForDuration($totalDays) ?? false;
+        $required = $this->requiresHandover($leaveType, $policy, $totalDays);
         if ($required && empty($handoverId)) {
             throw ValidationException::withMessages(['handover_person_id' => ['A handover person is required for this leave type.']]);
         }

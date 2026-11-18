@@ -9,6 +9,7 @@ use App\Models\LeavePolicy;
 use App\Models\LeavePolicyTier;
 use App\Models\LeaveType;
 use App\Models\Organisation;
+use App\Services\LeaveTypeRules;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -16,6 +17,8 @@ use Inertia\Response;
 
 class LeavePolicyController extends Controller
 {
+    public function __construct(private readonly LeaveTypeRules $leaveTypeRules) {}
+
     public function index(): Response
     {
         $leavePolicies = LeavePolicy::query()
@@ -170,7 +173,7 @@ class LeavePolicyController extends Controller
             'id' => $policy->id,
             'leave_type_id' => $policy->leave_type_id,
             'organisation_id' => $policy->organisation_id,
-            'annual_limit' => $policy->annual_limit,
+            'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($policy->leaveType, $policy),
             'allow_once' => (int) $policy->allow_once,
             'allow_balance' => (int) $policy->allow_balance,
             'requires_document_after_days' => $policy->requires_document_after_days,

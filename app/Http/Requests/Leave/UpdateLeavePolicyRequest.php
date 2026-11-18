@@ -88,6 +88,7 @@ class UpdateLeavePolicyRequest extends FormRequest
             'probation_applicable' => ['nullable', 'boolean'],
             'minimum_service_months' => ['nullable', 'integer', 'min:0'],
             'exclude_rules' => ['nullable', 'array'],
+            'exclude_rules.*' => Rule::forEach(fn (mixed $value, string $attribute): array => $attribute === 'exclude_rules.department_overlap' ? ['boolean'] : ['nullable']),
             'tiers' => ['sometimes', 'array'],
             'tiers.*' => ['required', 'array:from_day,to_day,pay_percentage'],
             'tiers.*.from_day' => ['required', 'integer', 'min:1'],
@@ -113,6 +114,9 @@ class UpdateLeavePolicyRequest extends FormRequest
     public function payload(): array
     {
         $validated = $this->validated();
+        if (isset($validated['exclude_rules']['department_overlap'])) {
+            $validated['exclude_rules']['department_overlap'] = (bool) $validated['exclude_rules']['department_overlap'];
+        }
 
         $payload = [
             'leave_type_id' => $validated['leave_type_id'],

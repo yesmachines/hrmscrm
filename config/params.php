@@ -41,6 +41,14 @@ return [
                 'fields' => ['festival_id'],
                 'annual_request_limit' => 1,
             ],
+            'UNPAID' => [
+                'validator' => 'unpaid',
+                'allow_balance' => false,
+                // Internal safeguard only; never expose this value in response metadata or errors.
+                'internal_annual_limit' => 90,
+                'reason_required' => true,
+                'handover_after_days' => 3,
+            ],
         ],
         'detail_fields' => [
             'due_date' => [
@@ -110,6 +118,11 @@ return [
         'certificate_max_kb' => 10240,
         'signature_mimes' => ['jpg', 'jpeg', 'png', 'webp'],
         'signature_max_kb' => 5120,
+    ],
+    'leave_policy' => [
+        'exclusion_rules' => [
+            'department_overlap' => 'When true, blocks overlapping applied or approved requests of the same leave type by another employee in the same organisation and department. Requires the applicant to have a department.',
+        ],
     ],
     'letter_request' => [
         'status' => [

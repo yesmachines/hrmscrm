@@ -1,3 +1,8 @@
+export interface LeaveApplicationRequirements {
+    reason_required: boolean;
+    handover_after_days: number | null;
+}
+
 interface LeavePolicyRequirements {
     requires_attachment: boolean;
     requires_handover: boolean;
@@ -50,6 +55,7 @@ export function getLeavePolicyRequirements(
     totalDays: number,
     startDate?: string | null,
     endDate?: string | null,
+    applicationRequirements?: LeaveApplicationRequirements,
 ): { requiresAttachment: boolean; requiresHandover: boolean } {
     const threshold = policy?.requires_document_after_days;
     const durationApplies = threshold == null || totalDays >= threshold;
@@ -61,6 +67,8 @@ export function getLeavePolicyRequirements(
         requiresAttachment:
             (Boolean(policy?.requires_attachment) && durationApplies) ||
             requiresWeekendAttachment,
-        requiresHandover: Boolean(policy?.requires_handover) && durationApplies,
+        requiresHandover: applicationRequirements?.handover_after_days != null
+            ? totalDays > applicationRequirements.handover_after_days
+            : Boolean(policy?.requires_handover) && durationApplies,
     };
 }

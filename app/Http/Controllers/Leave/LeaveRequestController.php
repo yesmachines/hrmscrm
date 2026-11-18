@@ -77,7 +77,7 @@ class LeaveRequestController extends Controller
 
         $leaveTypes->each(function (LeaveType $type) use ($eligibilityService, $employees, $profiles): void {
             $type->setAttribute('eligible_employee_ids', $eligibilityService->eligibleEmployeeIds($type, $employees, $profiles));
-            $type->setAttribute('field_definitions', $this->leaveTypeRules->fieldDefinitions($type));
+            $this->leaveTypeRules->prepareForDisplay($type);
         });
 
         $currentYear = (int) date('Y');
@@ -135,9 +135,10 @@ class LeaveRequestController extends Controller
         return response()->json([
             'valid' => true,
             'total_days' => $validation['total_days'],
-            'annual_limit' => $validation['policy']?->annual_limit,
+            'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($leaveType, $validation['policy']),
             'attachment_required' => $validation['attachment_required'],
-            'handover_required' => $validation['policy']?->requiresHandoverForDuration($validation['total_days']) ?? false,
+            'handover_required' => $leaveValidationService->requiresHandover($leaveType, $validation['policy'], $validation['total_days']),
+            'application_requirements' => $this->leaveTypeRules->applicationRequirements($leaveType),
             'required_fields' => $leaveValidationService->detailFields($leaveType),
             'field_definitions' => $this->leaveTypeRules->fieldDefinitions($leaveType),
         ]);
@@ -229,7 +230,7 @@ class LeaveRequestController extends Controller
                 ->where('year', $currentYear)
                 ->first();
 
-            if ($balance) {
+            if ($balance && $this->leaveTypeRules->allowsBalance($leaveType, null)) {
                 $balance->used += $totalDays;
                 $balance->balance = max(0, $balance->balance - $totalDays);
                 $balance->save();
@@ -285,11 +286,11 @@ class LeaveRequestController extends Controller
         ]);
 
         if ($leave_request->leaveType) {
-            $leave_request->leaveType->setAttribute('field_definitions', $this->leaveTypeRules->fieldDefinitions($leave_request->leaveType));
             $leave_request->leaveType->setRelation(
                 'policy',
                 $leave_request->leaveType->policyForOrganisation($leave_request->employee?->organisation_id),
             );
+            $this->leaveTypeRules->prepareForDisplay($leave_request->leaveType);
         }
 
         $employees = Employee::query()
@@ -325,7 +326,7 @@ class LeaveRequestController extends Controller
 
         $leaveTypes->each(function (LeaveType $type) use ($eligibilityService, $employees, $profiles): void {
             $type->setAttribute('eligible_employee_ids', $eligibilityService->eligibleEmployeeIds($type, $employees, $profiles));
-            $type->setAttribute('field_definitions', $this->leaveTypeRules->fieldDefinitions($type));
+            $this->leaveTypeRules->prepareForDisplay($type);
         });
 
         $festivals = $this->festivalLeaveService->optionsForEmployees($employees, $profiles, $countryIdsByEmployee);
@@ -651,6 +652,11 @@ class LeaveRequestController extends Controller
             return;
         }
 
+        $leaveType = LeaveType::query()->find($leaveTypeId);
+        if ($leaveType !== null && ! $this->leaveTypeRules->allowsBalance($leaveType, null)) {
+            return;
+        }
+
         $balance = LeaveBalance::where('employee_id', $employeeId)
             ->where('leave_type_id', $leaveTypeId)
             ->where('year', $year)
@@ -666,6 +672,11 @@ class LeaveRequestController extends Controller
     protected function refundDaysToBalance(int $employeeId, int $leaveTypeId, int $year, float $days): void
     {
         if ($days <= 0) {
+            return;
+        }
+
+        $leaveType = LeaveType::query()->find($leaveTypeId);
+        if ($leaveType !== null && ! $this->leaveTypeRules->allowsBalance($leaveType, null)) {
             return;
         }
 

@@ -63,6 +63,15 @@ class LeavePolicy extends Model
             && ($this->requires_document_after_days === null || $totalDays >= $this->requires_document_after_days);
     }
 
+    /**
+     * Blocks same-type, overlapping applied/approved leave for department colleagues.
+     * The rule is opt-in per organisation policy; see params.leave_policy.exclusion_rules.
+     */
+    public function preventsDepartmentOverlap(): bool
+    {
+        return ($this->exclude_rules['department_overlap'] ?? false) === true;
+    }
+
     public function requiresWeekendAttachment(Carbon $startDate, Carbon $endDate): bool
     {
         if (! $this->requires_weekend_document) {

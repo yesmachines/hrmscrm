@@ -23,7 +23,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { leaveValidationFormData } from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
-import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
+import { getLeavePolicyRequirements  } from '@/lib/leave-policy-requirements';
+import type {LeaveApplicationRequirements} from '@/lib/leave-policy-requirements';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -61,6 +62,7 @@ interface LeaveTypeOption {
     leave_name: string;
     code: string;
     field_definitions: LeaveFieldDefinition[];
+    application_requirements: LeaveApplicationRequirements;
     is_paid: boolean;
     requires_approval: boolean;
     policy?: LeavePolicyOption | null;
@@ -301,6 +303,7 @@ export default function LeaveRequestsCreate({
         Number(data.total_days || 0),
         data.start_date,
         data.end_date,
+        selectedLeaveType?.application_requirements,
     );
     const eligibilityPayload = useMemo(() => {
         if (!selectedEmployee || !selectedLeaveType || !data.start_date || !data.end_date) {
@@ -314,6 +317,7 @@ export default function LeaveRequestsCreate({
             start_date: data.start_date,
             end_date: data.end_date,
             total_days: data.total_days,
+            remarks: data.remarks,
             child_birth_date: data.child_birth_date || null,
             due_date: data.due_date || null,
             festival_id: data.festival_id || null,
@@ -332,6 +336,7 @@ export default function LeaveRequestsCreate({
         data.handover_description,
         data.handover_person_id,
         data.request_type,
+        data.remarks,
         data.start_date,
         data.total_days,
         selectedEmployee,
@@ -536,7 +541,7 @@ export default function LeaveRequestsCreate({
             return;
         }
 
-        const policyRequirements = getLeavePolicyRequirements(selectedPolicy, totalDays, startDate, endDate);
+        const policyRequirements = getLeavePolicyRequirements(selectedPolicy, totalDays, startDate, endDate, selectedLeaveType?.application_requirements);
 
         if (policyRequirements.requiresHandover && !data.handover_person_id) {
             setError('handover_person_id', 'A handover colleague is required by this leave policy.');
@@ -752,6 +757,7 @@ export default function LeaveRequestsCreate({
                                             Number(data.total_days || 0),
                                             data.start_date,
                                             data.end_date,
+                                            type.application_requirements,
                                         );
 
                                         return (
@@ -924,12 +930,13 @@ export default function LeaveRequestsCreate({
 
                             {/* Remarks / Reason */}
                             <div className="space-y-2">
-                                <Label htmlFor={remarksId}>Reason / Remarks</Label>
+                                <Label htmlFor={remarksId}>Reason / Remarks{selectedLeaveType?.application_requirements.reason_required ? ' *' : ''}</Label>
                                 <Textarea
                                     id={remarksId}
                                     rows={3}
                                     placeholder="Provide reason for leave, special authorization notes, or handover notes..."
                                     value={data.remarks}
+                                    required={selectedLeaveType?.application_requirements.reason_required}
                                     onChange={(e) => setData('remarks', e.target.value)}
                                 />
                                 {errors.remarks && (

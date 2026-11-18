@@ -35,7 +35,7 @@ class LeaveController extends Controller
     #[OA\Get(
         path: '/api/v1/leaves/meta',
         summary: 'Get profile-eligible leave types, balances, policies and required detail fields',
-        description: 'Filters active leave types by gender, religion and marital status. Date-dependent eligibility, service tenure, usage limits and balance checks run during validation and submission. Probation remains configuration-only.',
+        description: 'Filters active leave types by gender, religion and marital status. Date-dependent eligibility, joining-date-based service tenure, policy-enabled department overlap, usage limits and balance checks run during validation and submission. application_requirements describes required reasons and the independent strict handover_after_days threshold. Internal unpaid safeguards are not exposed as annual limits. Probation remains configuration-only.',
         security: [['sanctum' => []]],
         tags: ['Leave Management'],
         responses: [
@@ -93,14 +93,15 @@ class LeaveController extends Controller
                 'requires_approval' => (bool) $type->requires_approval,
                 'detail_fields' => $validationService->detailFields($type),
                 'field_definitions' => $this->leaveTypeRules->fieldDefinitions($type),
-                'annual_limit' => $policy?->annual_limit,
+                'application_requirements' => $this->leaveTypeRules->applicationRequirements($type),
+                'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($type, $policy),
                 'family_relationship_options' => array_key_exists('family_relationship', $this->leaveTypeRules->fields($type))
                     ? config('params.leave_type.compassionate_relationships')
                     : null,
                 'gender' => $type->gender,
                 'religion' => $type->religion,
                 'allow_once' => (bool) ($policy?->allow_once ?? false),
-                'allow_balance' => (bool) ($policy?->allow_balance ?? true),
+                'allow_balance' => $this->leaveTypeRules->allowsBalance($type, $policy),
                 'balance' => [
                     'total' => $balance ? (float) $balance->allocated : 0,
                     'used' => $balance ? (float) $balance->used : 0,
@@ -110,9 +111,9 @@ class LeaveController extends Controller
                 'policy' => $policy ? [
                     'id' => $policy->id,
                     'organisation_id' => $policy->organisation_id,
-                    'annual_limit' => $policy->annual_limit,
+                    'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($type, $policy),
                     'allow_once' => (bool) $policy->allow_once,
-                    'allow_balance' => (bool) $policy->allow_balance,
+                    'allow_balance' => $this->leaveTypeRules->allowsBalance($type, $policy),
                     'requires_document_after_days' => $policy->requires_document_after_days,
                     'requires_weekend_document' => (bool) $policy->requires_weekend_document,
                     'requires_attachment' => (bool) $policy->requires_attachment,
@@ -190,8 +191,9 @@ class LeaveController extends Controller
             'leave_type_code' => $validation['leave_type']->code,
             'total_days' => $validation['total_days'],
             'attachment_required' => $validation['attachment_required'],
-            'handover_required' => $validation['policy']?->requiresHandoverForDuration($validation['total_days']) ?? false,
-            'annual_limit' => $validation['policy']?->annual_limit,
+            'handover_required' => $validationService->requiresHandover($validation['leave_type'], $validation['policy'], $validation['total_days']),
+            'annual_limit' => $this->leaveTypeRules->visibleAnnualLimit($validation['leave_type'], $validation['policy']),
+            'application_requirements' => $this->leaveTypeRules->applicationRequirements($validation['leave_type']),
             'detail_fields' => $validationService->detailFields($validation['leave_type']),
             'field_definitions' => $this->leaveTypeRules->fieldDefinitions($validation['leave_type']),
             'remarks' => $validation['remarks'],
@@ -407,7 +409,7 @@ class LeaveController extends Controller
         }
 
         // Store handover details if required
-        if ($policy?->requiresHandoverForDuration($totalDays)) {
+        if ($validationService->requiresHandover($leaveType, $policy, $totalDays)) {
             $details = [
                 ['field_name' => 'Handover Person ID', 'field_key' => 'handover_person_id', 'field_value' => (string) $request->input('handover_person_id')],
                 ['field_name' => 'Handover Description', 'field_key' => 'handover_description', 'field_value' => (string) $request->input('handover_description')],
@@ -433,7 +435,7 @@ class LeaveController extends Controller
         $validationService->syncLeaveTypeDetails($leaveRequest, $leaveType, $validated);
 
         // Update pending balance if balance tracking enabled
-        if ($policy?->allow_balance ?? true) {
+        if ($this->leaveTypeRules->allowsBalance($leaveType, $policy)) {
             $currentYear = $startDate->year;
             $balance = LeaveBalance::where('leave_type_id', $leaveType->id)
                 ->where('employee_id', $employee->id)
@@ -539,7 +541,7 @@ class LeaveController extends Controller
         $oldYear = $leaveRequest->start_date->year;
         $newYear = $validation['start_date']->year;
         $oldTotalDays = (float) $leaveRequest->total_days;
-        $balanceTrackingEnabled = $validation['policy']?->allow_balance ?? true;
+        $balanceTrackingEnabled = $this->leaveTypeRules->allowsBalance($leaveType, $validation['policy']);
 
         DB::transaction(function () use (
             $request,
@@ -585,7 +587,7 @@ class LeaveController extends Controller
                 }
             }
 
-            if ($validation['policy']?->requiresHandoverForDuration($validation['total_days'])) {
+            if ($validationService->requiresHandover($leaveType, $validation['policy'], $validation['total_days'])) {
                 $this->updateLeaveRequestDetail(
                     $leaveRequest,
                     'handover_person_id',

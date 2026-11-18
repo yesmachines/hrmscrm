@@ -245,7 +245,7 @@ test('special rule configuration drives both validation and all field metadata',
 
 test('only supported special leave types have configured rules', function () {
     expect(array_keys(config('params.leave_type.special_rules')))
-        ->toBe(['SICK', 'MATERNITY', 'PARENTAL', 'COMPASSIONATE', 'FESTIVAL']);
+        ->toBe(['SICK', 'MATERNITY', 'PARENTAL', 'COMPASSIONATE', 'FESTIVAL', 'UNPAID']);
 });
 
 test('configured marital restrictions apply consistently to admin and API previews', function () {

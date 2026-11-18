@@ -356,6 +356,10 @@ export default function LeavePolicyFormFields({
                             className="text-xs text-muted-foreground"
                         >
                             Leave empty if there are no exclusion rules.
+                            {' '}Use {'{"department_overlap": true}'} to prevent overlapping
+                            applied or approved requests of this leave type by colleagues in
+                            the same organisation and department. False or omitted disables
+                            this check.
                         </p>
                     </Field>
                 </div>

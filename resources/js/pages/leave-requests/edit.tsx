@@ -21,7 +21,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { leaveValidationFormData } from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
-import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
+import { getLeavePolicyRequirements  } from '@/lib/leave-policy-requirements';
+import type {LeaveApplicationRequirements} from '@/lib/leave-policy-requirements';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -59,6 +60,7 @@ interface LeaveTypeOption {
     leave_name: string;
     code: string;
     field_definitions: LeaveFieldDefinition[];
+    application_requirements: LeaveApplicationRequirements;
     is_paid: boolean;
     policy?: LeavePolicyOption | null;
     policies?: LeavePolicyOption[];
@@ -261,6 +263,7 @@ export default function LeaveRequestsEdit({
         Number(data.total_days || 0),
         data.start_date,
         data.end_date,
+        selectedLeaveType?.application_requirements,
     );
     const requiresAttachment =
         isActiveRequest && policyRequirements.requiresAttachment;
@@ -273,6 +276,7 @@ export default function LeaveRequestsEdit({
         start_date: data.start_date,
         end_date: data.end_date,
         total_days: data.total_days,
+        remarks: data.remarks,
         due_date: data.due_date || null,
         child_birth_date: data.child_birth_date || null,
         handover_person_id: data.handover_person_id || null,
@@ -294,6 +298,7 @@ export default function LeaveRequestsEdit({
         data.handover_person_id,
         data.leave_type_id,
         data.request_type,
+        data.remarks,
         data.start_date,
         data.status,
         data.total_days,
@@ -727,10 +732,11 @@ export default function LeaveRequestsEdit({
                                     </div>
 
                                     <div>
-                                        <Label htmlFor={remarksId}>HR Remarks / Reason</Label>
+                                        <Label htmlFor={remarksId}>HR Remarks / Reason{isActiveRequest && selectedLeaveType?.application_requirements.reason_required ? ' *' : ''}</Label>
                                         <Textarea
                                             id={remarksId}
                                             value={data.remarks}
+                                            required={isActiveRequest && selectedLeaveType?.application_requirements.reason_required}
                                             onChange={(e) => setData('remarks', e.target.value)}
                                             placeholder="Provide reason for editing or remarks..."
                                             className="mt-1.5 min-h-[80px]"
