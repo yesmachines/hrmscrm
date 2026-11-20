@@ -1439,8 +1439,8 @@
                 "tags": [
                     "Leave Management"
                 ],
-                "summary": "Get leave metadata (types, balances, policies)",
-                "description": "Get the metadata for the leave application screen.",
+                "summary": "Get profile-eligible leave types, balances and application input requirements",
+                "description": "Returns active leave types already filtered by employee gender, religion and marital status. policy contains the displayable annual limit, effective balance tracking, remarks_required and separate requires_attachment_after_days and requires_handover_after_days settings, with defaults when no organisation policy exists. Regular policy thresholds are inclusive; configured special handover thresholds are strict (unpaid requires more than 3 days by default). Special handover settings override the stored policy threshold and flag. Internal unpaid ceilings are never exposed. Each entry in field_definitions has an options array of selectable objects with a key, followed by a festival array. Only the festival_id field lists eligible festivals from the separate festivals endpoint; empty lists are returned as []. Other backend-only policy configuration is omitted. Eligibility, usage limits and balance checks still run during validation and submission.",
                 "operationId": "93d84abf31d19719395029d6428d8117",
                 "responses": {
                     "200": {
@@ -1451,6 +1451,35 @@
                     },
                     "404": {
                         "description": "Employee not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/leaves/validate": {
+            "post": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Validate leave request details",
+                "description": "Returns field_definitions in the same format as leave metadata.",
+                "operationId": "7f9ea232eb81abdec5aaab0c97e99686",
+                "responses": {
+                    "200": {
+                        "description": "Leave request is valid"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "404": {
+                        "description": "Employee record not found"
+                    },
+                    "422": {
+                        "description": "Validation errors"
                     }
                 },
                 "security": [
@@ -1519,6 +1548,10 @@
                                     "leave_type_id": {
                                         "type": "integer"
                                     },
+                                    "festival_id": {
+                                        "description": "Required for Festival Leave. Must identify an eligible active festival whose date range contains the requested leave dates.",
+                                        "type": "integer"
+                                    },
                                     "start_date": {
                                         "type": "string",
                                         "format": "date"
@@ -1538,6 +1571,20 @@
                                     "reason": {
                                         "type": "string"
                                     },
+                                    "due_date": {
+                                        "description": "Required for Maternity Leave.",
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "family_relationship": {
+                                        "description": "Required for Compassionate Leave. Use the key property of an option from the family_relationship field definition in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.",
+                                        "type": "string"
+                                    },
+                                    "child_birth_date": {
+                                        "description": "Required for Parental Leave. The leave start date must be within six months of the child's birth.",
+                                        "type": "string",
+                                        "format": "date"
+                                    },
                                     "handover_person_id": {
                                         "type": "integer"
                                     },
@@ -1551,6 +1598,11 @@
                                     "travel_contact_no": {
                                         "description": "Digits only, with an optional leading +.",
                                         "type": "string"
+                                    },
+                                    "certificate": {
+                                        "description": "Supporting document required by the leave policy. Sick Leave also requires it when an active holiday falls within the leave range or on the immediately preceding or following calendar day.",
+                                        "type": "string",
+                                        "format": "binary"
                                     },
                                     "files": {
                                         "type": "array",
@@ -2765,9 +2817,414 @@
                     }
                 ]
             }
+        },
+        "/api/v1/hr/wfh/requests": {
+            "get": {
+                "tags": [
+                    "Work From Home"
+                ],
+                "summary": "List all employee WFH requests (HR/Admin)",
+                "description": "NOT YET IMPLEMENTED - planned contract. Lists WFH requests (Work From Home leave type) of all employees. Today HR manages these requests in the CRM Leave module.",
+                "operationId": "09c45ad4a1bc19d85fd80ad2eadc427a",
+                "parameters": [
+                    {
+                        "name": "employee_id",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "applied",
+                                "approved",
+                                "rejected",
+                                "cancelled"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "start_date",
+                        "in": "query",
+                        "description": "Requests ending on or after this date",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end_date",
+                        "in": "query",
+                        "description": "Requests starting on or before this date",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated WFH requests",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "requests": {
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/WfhRequest"
+                                                    }
+                                                },
+                                                "current_page": {
+                                                    "type": "integer"
+                                                },
+                                                "last_page": {
+                                                    "type": "integer"
+                                                },
+                                                "per_page": {
+                                                    "type": "integer"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Only HR and Admin users can access this resource"
+                    },
+                    "422": {
+                        "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/wfh/requests/{id}": {
+            "get": {
+                "tags": [
+                    "Work From Home"
+                ],
+                "summary": "Get a WFH request with its history (HR/Admin)",
+                "description": "NOT YET IMPLEMENTED - planned contract. Returns the request with its approval and history entries from the Leave module history tables.",
+                "operationId": "41b86ff9409e7130434c140b45ee14cb",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "WFH request details",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "request": {
+                                            "$ref": "#/components/schemas/WfhRequest"
+                                        },
+                                        "histories": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "action_type": {
+                                                        "type": "string"
+                                                    },
+                                                    "remarks": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "action_on": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Only HR and Admin users can access this resource"
+                    },
+                    "404": {
+                        "description": "WFH request not found"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/wfh/requests/{id}/approve": {
+            "post": {
+                "tags": [
+                    "Work From Home"
+                ],
+                "summary": "Approve a WFH request (HR/Admin)",
+                "description": "NOT YET IMPLEMENTED - planned contract. Approves an applied request. Pending days move to used days against the schedule allowance. Fails if the schedule is inactive.",
+                "operationId": "82be7d0bdbe8bd5024c97df5ca08fb83",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "remarks": {
+                                        "type": "string",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "WFH request approved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "WFH request approved successfully."
+                                        },
+                                        "request": {
+                                            "$ref": "#/components/schemas/WfhRequest"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Only HR and Admin users can access this resource"
+                    },
+                    "404": {
+                        "description": "WFH request not found"
+                    },
+                    "422": {
+                        "description": "Request is not in applied status or its schedule is inactive"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/wfh/requests/{id}/reject": {
+            "post": {
+                "tags": [
+                    "Work From Home"
+                ],
+                "summary": "Reject a WFH request (HR/Admin)",
+                "description": "NOT YET IMPLEMENTED - planned contract. Rejects an applied request. Its pending days are released back to the schedule.",
+                "operationId": "972573ef940ebec82a012ccad975224c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "remarks"
+                                ],
+                                "properties": {
+                                    "remarks": {
+                                        "type": "string",
+                                        "example": "Team coverage not available on these dates."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "WFH request rejected",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "WFH request rejected successfully."
+                                        },
+                                        "request": {
+                                            "$ref": "#/components/schemas/WfhRequest"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "Only HR and Admin users can access this resource"
+                    },
+                    "404": {
+                        "description": "WFH request not found"
+                    },
+                    "422": {
+                        "description": "Remarks are required, or the request is not in applied status"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
         }
     },
     "components": {
+        "schemas": {
+            "WfhRequest": {
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "employee_id": {
+                        "type": "integer"
+                    },
+                    "employee_name": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "wfh_schedule_id": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "request_type": {
+                        "type": "string",
+                        "enum": [
+                            "fullday",
+                            "firsthalf",
+                            "secondhalf"
+                        ]
+                    },
+                    "total_days": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 2
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "applied",
+                            "approved",
+                            "rejected",
+                            "cancelled"
+                        ]
+                    },
+                    "remarks": {
+                        "type": "string",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            }
+        },
         "securitySchemes": {
             "sanctum": {
                 "type": "http",
@@ -2829,6 +3286,10 @@
         {
             "name": "Visits",
             "description": "Visits"
+        },
+        {
+            "name": "Work From Home",
+            "description": "Work From Home"
         }
     ]
 }
