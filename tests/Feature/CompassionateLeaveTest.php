@@ -146,12 +146,15 @@ test('compassionate options and saved relationship are available to admin and ap
         ->assertInertia(fn (Assert $page) => $page->component('leave-requests/edit')
             ->where('compassionateRelationships', $options)
             ->where('leaveRequest.family_relationship', 'spouse'));
-    $types = $this->getJson('/api/v1/leaves/meta')
-        ->assertOk()->json('data.leave_types');
+    $meta = $this->getJson('/api/v1/leaves/meta')->assertOk();
+    $types = json_decode($meta->getContent(), flags: JSON_THROW_ON_ERROR)->data->leave_types;
     $type = collect($types)->firstWhere('id', $this->leaveType->id);
-    expect($type)->not->toHaveKey('family_relationship_options');
-    $field = collect($type['field_definitions'])->firstWhere('key', 'family_relationship');
-    expect($field['options'])->toBe($options);
+    expect($type)->not->toHaveProperty('family_relationship_options');
+    $field = collect($type->field_definitions)->firstWhere('key', 'family_relationship');
+    expect($field->options)->toBeArray()
+        ->and(array_column($field->options, 'key'))->toBe(array_keys($options))
+        ->and(get_object_vars($field->options[0]))->toBe(['key' => 'spouse', ...$options['spouse']])
+        ->and($field->festival)->toBe([]);
     $this->getJson('/api/v1/leaves/'.$leave->id)->assertOk()
         ->assertJsonFragment(['field_key' => 'family_relationship', 'field_value' => 'spouse']);
 });

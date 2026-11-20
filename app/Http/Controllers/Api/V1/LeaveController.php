@@ -36,7 +36,7 @@ class LeaveController extends Controller
     #[OA\Get(
         path: '/api/v1/leaves/meta',
         summary: 'Get profile-eligible leave types, balances and application input requirements',
-        description: 'Returns active leave types already filtered by employee gender, religion and marital status. policy contains the displayable annual limit, effective balance tracking, remarks_required and separate requires_attachment_after_days and requires_handover_after_days settings, with defaults when no organisation policy exists. Regular policy thresholds are inclusive; configured special handover thresholds are strict (unpaid requires more than 3 days by default). Special handover settings override the stored policy threshold and flag. Internal unpaid ceilings are never exposed. field_definitions describes additional inputs and their options. Other backend-only policy configuration is omitted. Eligibility, usage limits and balance checks still run during validation and submission.',
+        description: 'Returns active leave types already filtered by employee gender, religion and marital status. policy contains the displayable annual limit, effective balance tracking, remarks_required and separate requires_attachment_after_days and requires_handover_after_days settings, with defaults when no organisation policy exists. Regular policy thresholds are inclusive; configured special handover thresholds are strict (unpaid requires more than 3 days by default). Special handover settings override the stored policy threshold and flag. Internal unpaid ceilings are never exposed. Each entry in field_definitions has an options array of selectable objects with a key, followed by a festival array. Only the festival_id field lists eligible festivals from the separate festivals endpoint; empty lists are returned as []. Other backend-only policy configuration is omitted. Eligibility, usage limits and balance checks still run during validation and submission.',
         security: [['sanctum' => []]],
         tags: ['Leave Management'],
         responses: [
@@ -82,7 +82,11 @@ class LeaveController extends Controller
             ->get()
             ->keyBy('leave_type_id');
 
-        $typesData = $leaveTypes->map(function (LeaveType $type) use ($employee, $balances): array {
+        $festivals = $leaveTypes->contains(fn (LeaveType $type): bool => $this->leaveTypeRules->isFestivalLeave($type))
+            ? $this->getFestivalsAndHolidaysForEmployee($employee)['festivals']->all()
+            : [];
+
+        $typesData = $leaveTypes->map(function (LeaveType $type) use ($employee, $balances, $festivals): array {
             $policy = $type->policyForOrganisation($employee->organisation_id);
             $balance = $balances->get($type->id);
 
@@ -92,7 +96,7 @@ class LeaveController extends Controller
                 'code' => $type->code,
                 'is_paid' => (bool) $type->is_paid,
                 'requires_approval' => (bool) $type->requires_approval,
-                'field_definitions' => $this->leaveTypeRules->fieldDefinitions($type),
+                'field_definitions' => $this->appFieldDefinitions($type, $festivals),
                 'balance' => [
                     'total' => $balance ? (float) $balance->allocated : 0,
                     'used' => $balance ? (float) $balance->used : 0,
@@ -119,6 +123,7 @@ class LeaveController extends Controller
     #[OA\Post(
         path: '/api/v1/leaves/validate',
         summary: 'Validate leave request details',
+        description: 'Returns field_definitions in the same format as leave metadata.',
         security: [['sanctum' => []]],
         tags: ['Leave Management'],
         responses: [
@@ -158,17 +163,42 @@ class LeaveController extends Controller
             return $this->errorResponse($exception->getMessage(), 422, $exception->errors());
         }
 
+        $leaveType = $validation['leave_type'];
+        $festivals = $this->leaveTypeRules->isFestivalLeave($leaveType)
+            ? $this->getFestivalsAndHolidaysForEmployee($employee)['festivals']->all()
+            : [];
+
         return $this->successResponse([
             'eligible' => true,
-            'leave_type_id' => $validation['leave_type']->id,
-            'leave_type_code' => $validation['leave_type']->code,
+            'leave_type_id' => $leaveType->id,
+            'leave_type_code' => $leaveType->code,
             'total_days' => $validation['total_days'],
             'attachment_required' => $validation['attachment_required'],
-            'handover_required' => $validationService->requiresHandover($validation['leave_type'], $validation['policy'], $validation['total_days']),
-            'policy' => $this->policyInputSettings($validation['leave_type'], $validation['policy']),
-            'field_definitions' => $this->leaveTypeRules->fieldDefinitions($validation['leave_type']),
+            'handover_required' => $validationService->requiresHandover($leaveType, $validation['policy'], $validation['total_days']),
+            'policy' => $this->policyInputSettings($leaveType, $validation['policy']),
+            'field_definitions' => $this->appFieldDefinitions($leaveType, $festivals),
             'remarks' => $validation['remarks'],
         ], 'Leave request details are valid.');
+    }
+
+    /**
+     * @param  list<object>  $festivals
+     * @return list<array{key: string, label: string, type: string, required: bool, help: string|null, options: list<array{key: string, label: string, group: string, max_days: int}>, festival: list<object>}>
+     */
+    private function appFieldDefinitions(LeaveType $leaveType, array $festivals): array
+    {
+        return array_map(function (array $field) use ($festivals): array {
+            $options = [];
+            foreach ($field['options'] as $key => $option) {
+                $options[] = ['key' => $key, ...$option];
+            }
+
+            return [
+                ...$field,
+                'options' => $options,
+                'festival' => $field['key'] === 'festival_id' ? $festivals : [],
+            ];
+        }, $this->leaveTypeRules->fieldDefinitions($leaveType));
     }
 
     /**
@@ -294,7 +324,7 @@ class LeaveController extends Controller
                         new OA\Property(property: 'request_type', type: 'string', enum: ['fullday', 'firsthalf', 'secondhalf']),
                         new OA\Property(property: 'reason', type: 'string'),
                         new OA\Property(property: 'due_date', type: 'string', format: 'date', description: 'Required for Maternity Leave.'),
-                        new OA\Property(property: 'family_relationship', type: 'string', description: 'Required for Compassionate Leave. Use an option key from the family_relationship entry in field_definitions in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.'),
+                        new OA\Property(property: 'family_relationship', type: 'string', description: 'Required for Compassionate Leave. Use the key property of an option from the family_relationship field definition in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.'),
                         new OA\Property(property: 'child_birth_date', type: 'string', format: 'date', description: "Required for Parental Leave. The leave start date must be within six months of the child's birth."),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
                         new OA\Property(property: 'handover_description', type: 'string'),

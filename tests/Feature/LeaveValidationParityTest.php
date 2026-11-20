@@ -225,7 +225,7 @@ test('special rule configuration drives both validation and all field metadata',
     $this->postJson(route('leave-requests.validate'), $data)->assertOk()->assertJsonPath('valid', false)
         ->assertJsonPath('errors.child_birth_date.0', "Parental Leave must start within 2 months of the child's birth.");
     config(['params.leave_type.parental_birth_window_months' => 4]);
-    $this->postJson('/api/v1/leaves/validate', $data)->assertOk();
+    $validation = $this->postJson('/api/v1/leaves/validate', $data)->assertOk();
     $this->postJson(route('leave-requests.validate'), $data)->assertOk()->assertJsonPath('valid', true);
 
     $expected = app(LeaveTypeRules::class)->fieldDefinitions($this->leaveType);
@@ -233,7 +233,8 @@ test('special rule configuration drives both validation and all field metadata',
         ->and($expected[0]['help'])->toContain('4 months');
     $meta = collect($this->getJson('/api/v1/leaves/meta')->assertOk()->json('data.leave_types'))->firstWhere('id', $this->leaveType->id);
     expect($meta)->not->toHaveKey('detail_fields')
-        ->and($meta['field_definitions'])->toBe($expected);
+        ->and($meta['field_definitions'])->toBe([[...$expected[0], 'festival' => []]])
+        ->and($validation->json('data.field_definitions'))->toBe($meta['field_definitions']);
     $existing = LeaveRequest::query()->create([...$this->data, 'total_days' => 1]);
     foreach ([route('leave-requests.create'), route('leave-requests.edit', $existing)] as $url) {
         $this->withoutVite()->get($url)->assertInertia(fn (Assert $page) => $page

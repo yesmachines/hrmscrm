@@ -369,7 +369,7 @@ test('leaves holidays endpoint with month parameter returns holidays and employe
         ->assertJsonPath('data.leaves.0.id', $augustLeave->id);
 });
 
-test('leaves festivals endpoint filters festivals based on employee religion', function () {
+test('leave metadata lists the same eligible festivals as the festivals endpoint only for festival leave', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Muslim User',
         'email' => 'muslim.fest@example.com',
@@ -439,6 +439,17 @@ test('leaves festivals endpoint filters festivals based on employee religion', f
         'country_id' => $countryId,
     ]);
 
+    $festivalLeaveType = LeaveType::query()->create([
+        'leave_name' => 'Festival Leave',
+        'code' => 'FESTIVAL',
+        'status' => 1,
+    ]);
+    $annualLeaveType = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'status' => 1,
+    ]);
+
     $token = $user->createToken('test')->plainTextToken;
     $response = $this->withToken($token)->getJson('/api/v1/leaves/festivals');
 
@@ -449,4 +460,17 @@ test('leaves festivals endpoint filters festivals based on employee religion', f
     expect($festivalNames)->toContain('Eid al-Fitr')
         ->and($festivalNames)->not->toContain('Diwali')
         ->and($holidayNames)->toContain('New Year Day');
+
+    $meta = $this->withToken($token)->getJson('/api/v1/leaves/meta')->assertOk();
+    $types = collect(json_decode($meta->getContent(), flags: JSON_THROW_ON_ERROR)->data->leave_types)->keyBy('id');
+    $festivalType = $types[$festivalLeaveType->id];
+    $field = $festivalType->field_definitions[0];
+
+    expect($festivalType)->not->toHaveProperty('festival')
+        ->and($field->key)->toBe('festival_id')
+        ->and(array_slice(array_keys(get_object_vars($field)), -2))->toBe(['options', 'festival'])
+        ->and($field->options)->toBe([])
+        ->and($field->festival)->toBeArray()
+        ->and(array_map(get_object_vars(...), $field->festival))->toBe($response->json('data.festivals'))
+        ->and($types[$annualLeaveType->id]->field_definitions)->toBe([]);
 });
