@@ -22,6 +22,7 @@ use App\Http\Controllers\Leave\LeaveHistoryController;
 use App\Http\Controllers\Leave\LeavePolicyController;
 use App\Http\Controllers\Leave\LeaveRequestController;
 use App\Http\Controllers\Leave\LeaveTypeController;
+use App\Http\Controllers\Leave\WorkFromHomeController;
 use App\Http\Controllers\Organisation\DepartmentController;
 use App\Http\Controllers\Organisation\OfficeLocationController;
 use App\Http\Controllers\Organisation\OrganisationController;
@@ -87,6 +88,13 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::post('leave-requests/validate', [LeaveRequestController::class, 'validateForm'])->name('leave-requests.validate');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'show', 'edit', 'update', 'create', 'store']);
     Route::post('leave-requests/{leave_request}/cancel', [LeaveRequestController::class, 'cancel'])->name('leave-requests.cancel');
+    Route::middleware('role:hr,admin')->group(function () {
+        Route::get('wfh-schedules', [WorkFromHomeController::class, 'index'])->name('wfh-schedules.index');
+        Route::get('wfh-schedules/create', [WorkFromHomeController::class, 'create'])->name('wfh-schedules.create');
+        Route::post('wfh-schedules', [WorkFromHomeController::class, 'store'])->name('wfh-schedules.store');
+        Route::patch('wfh-schedules/{schedule}/status', [WorkFromHomeController::class, 'updateStatus'])
+            ->name('wfh-schedules.update-status');
+    });
     Route::resource('leave-balances', LeaveBalanceController::class);
     Route::resource('leave-histories', LeaveHistoryController::class);
 

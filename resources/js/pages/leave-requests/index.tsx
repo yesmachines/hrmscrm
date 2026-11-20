@@ -1,8 +1,10 @@
 import { Head, Link, router } from '@inertiajs/react';
+import type { FormEvent } from 'react';
 import { Check, Plus, X, Edit2, Ban } from 'lucide-react';
 import { index, update, show } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
@@ -17,6 +19,7 @@ type LeaveRequestRow = {
         id: number;
         leave_name: string;
         is_paid: boolean;
+        code: string;
     };
     employee: {
         id: number;
@@ -31,10 +34,45 @@ type PaginatedRequests = {
     links: { url: string | null; label: string; active: boolean }[];
 };
 
-export default function LeaveRequestsIndex({ requests }: { requests: PaginatedRequests }) {
+type EmployeeOption = {
+    id: number;
+    employee_code: string | null;
+    user: { name: string } | null;
+};
+
+type Filters = {
+    employee_id: string;
+    status: string;
+    start_date: string;
+    end_date: string;
+};
+
+export default function LeaveRequestsIndex({
+    requests,
+    employees,
+    filters,
+}: {
+    requests: PaginatedRequests;
+    employees: EmployeeOption[];
+    filters: Filters;
+}) {
     const handleStatusUpdate = (id: number, status: string) => {
         router.put(update.url(id), { status }, {
             preserveScroll: true,
+        });
+    };
+
+    const submitFilters = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
+        router.get('/leave-requests', {
+            employee_id: formData.get('employee_id')?.toString() ?? '',
+            status: formData.get('status')?.toString() ?? '',
+            start_date: formData.get('start_date')?.toString() ?? '',
+            end_date: formData.get('end_date')?.toString() ?? '',
+        }, {
+            preserveState: true,
+            replace: true,
         });
     };
 
@@ -63,6 +101,53 @@ export default function LeaveRequestsIndex({ requests }: { requests: PaginatedRe
                         </Link>
                     </Button>
                 </div>
+
+                <form
+                    onSubmit={submitFilters}
+                    className="grid gap-3 rounded-2xl border border-border bg-white p-4 shadow-sm md:grid-cols-5"
+                >
+                    <select
+                        name="employee_id"
+                        defaultValue={filters.employee_id}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                        <option value="">All employees</option>
+                        {employees.map((employee) => (
+                            <option key={employee.id} value={employee.id}>
+                                {employee.user?.name ?? employee.employee_code ?? employee.id}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        name="status"
+                        defaultValue={filters.status}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                        <option value="">All statuses</option>
+                        <option value="applied">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <Input
+                        type="date"
+                        name="start_date"
+                        aria-label="Requests from date"
+                        defaultValue={filters.start_date}
+                    />
+                    <Input
+                        type="date"
+                        name="end_date"
+                        aria-label="Requests to date"
+                        defaultValue={filters.end_date}
+                    />
+                    <div className="flex gap-2">
+                        <Button type="submit">Filter</Button>
+                        <Button variant="outline" asChild>
+                            <Link href="/leave-requests">Clear</Link>
+                        </Button>
+                    </div>
+                </form>
 
                 <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
                     <table className="w-full text-left text-sm">

@@ -12,10 +12,13 @@ use App\Services\FestivalLeaveService;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveTypeRules;
 use App\Services\LeaveValidationService;
+use App\Services\WorkFromHomeService;
+use App\Support\SalesCrmRoles;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,24 +28,56 @@ class LeaveRequestController extends Controller
     public function __construct(
         private readonly FestivalLeaveService $festivalLeaveService,
         private readonly LeaveTypeRules $leaveTypeRules,
+        private readonly WorkFromHomeService $workFromHomeService,
     ) {}
 
     public function index(Request $request): Response
     {
+        $canManageWorkFromHome = $this->canManageWorkFromHome($request);
+        $filters = $request->validate([
+            'employee_id' => ['nullable', 'integer', 'exists:salescrm.employees,id'],
+            'status' => ['nullable', Rule::in(config('params.leave_request.statuses'))],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+        ]);
+
         $requests = LeaveRequest::with([
             'employee:id,user_id,employee_code,image_url',
             'employee.user:id,name',
-            'leaveType:id,leave_name,is_paid',
+            'leaveType:id,leave_name,is_paid,code',
         ])
+            ->when(! $canManageWorkFromHome, fn ($query) => $query->whereHas(
+                'leaveType',
+                fn ($leaveTypeQuery) => $leaveTypeQuery->where('code', '!=', WorkFromHomeService::LEAVE_TYPE_CODE),
+            ))
+            ->when(isset($filters['employee_id']), fn ($query) => $query->where('employee_id', $filters['employee_id']))
+            ->when(isset($filters['status']), fn ($query) => $query->where('status', $filters['status']))
+            ->when(isset($filters['start_date']), fn ($query) => $query->whereDate('end_date', '>=', $filters['start_date']))
+            ->when(isset($filters['end_date']), fn ($query) => $query->whereDate('start_date', '<=', $filters['end_date']))
             ->orderBy('created_at', 'desc')
-            ->paginate(15);
+            ->paginate(15)
+            ->withQueryString();
+
+        $employees = Employee::query()
+            ->with('user:id,name')
+            ->select('id', 'user_id', 'employee_code')
+            ->where('status', 1)
+            ->orderBy('id')
+            ->get();
 
         return Inertia::render('leave-requests/index', [
             'requests' => $requests,
+            'employees' => $employees,
+            'filters' => [
+                'employee_id' => $filters['employee_id'] ?? '',
+                'status' => $filters['status'] ?? '',
+                'start_date' => $filters['start_date'] ?? '',
+                'end_date' => $filters['end_date'] ?? '',
+            ],
         ]);
     }
 
-    public function create(LeaveTypeEligibilityService $eligibilityService): Response
+    public function create(Request $request, LeaveTypeEligibilityService $eligibilityService): Response
     {
         $employees = Employee::query()
             ->with([
@@ -70,6 +105,7 @@ class LeaveRequestController extends Controller
 
         $leaveTypes = LeaveType::query()
             ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover,requires_weekend_document')
+            ->when(! $this->canManageWorkFromHome($request), fn ($query) => $query->where('code', '!=', WorkFromHomeService::LEAVE_TYPE_CODE))
             ->select('id', 'leave_name', 'code', 'is_paid', 'requires_approval', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
@@ -123,6 +159,9 @@ class LeaveRequestController extends Controller
                 $request->hasFile('certificate') || ($existing?->files()->exists() ?? false),
                 $validated['ignore_leave_request_id'] ?? null,
                 in_array($validated['status'] ?? 'applied', config('params.leave_request.active_statuses'), true),
+                $existing === null
+                    || Carbon::parse($validated['start_date'])->toDateString() !== Carbon::parse($existing->start_date)->toDateString()
+                    || Carbon::parse($validated['end_date'])->toDateString() !== Carbon::parse($existing->end_date)->toDateString(),
             );
         } catch (ValidationException $exception) {
             return response()->json([
@@ -130,6 +169,7 @@ class LeaveRequestController extends Controller
                 'errors' => $exception->errors(),
             ]);
         }
+        $this->assertWorkFromHomeAccess($request, $validation['leave_type']);
         $leaveType = $validation['leave_type'];
 
         return response()->json([
@@ -153,6 +193,7 @@ class LeaveRequestController extends Controller
         $employee = Employee::query()->findOrFail($validated['employee_id']);
         $validation = $leaveValidationService->validateApplication($employee, $validated, $request->hasFile('certificate'));
         $leaveType = $validation['leave_type'];
+        $this->assertWorkFromHomeAccess($request, $leaveType);
         $requiresApproval = (bool) $leaveType->requires_approval;
         $status = $requiresApproval ? $validated['status'] : 'approved';
         $requestType = $validation['request_type'];
@@ -213,6 +254,19 @@ class LeaveRequestController extends Controller
         }
 
         $leaveValidationService->syncLeaveTypeDetails($leaveRequest, $leaveType, $validated);
+        $workFromHomeSchedule = $validation['wfh_schedule'];
+        if ($workFromHomeSchedule !== null) {
+            $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $workFromHomeSchedule);
+            $this->workFromHomeService->applyRequestBalanceTransition(
+                $leaveRequest,
+                '',
+                0,
+                null,
+                $status,
+                (float) $totalDays,
+                (int) $workFromHomeSchedule->id,
+            );
+        }
 
         if ($status === 'approved') {
             if ($requiresApproval) {
@@ -230,7 +284,7 @@ class LeaveRequestController extends Controller
                 ->where('year', $currentYear)
                 ->first();
 
-            if ($balance && $this->leaveTypeRules->allowsBalance($leaveType, null)) {
+            if ($workFromHomeSchedule === null && $balance && $this->leaveTypeRules->allowsBalance($leaveType, null)) {
                 $balance->used += $totalDays;
                 $balance->balance = max(0, $balance->balance - $totalDays);
                 $balance->save();
@@ -241,8 +295,10 @@ class LeaveRequestController extends Controller
             ->with('success', 'Leave request submitted successfully on behalf of employee.');
     }
 
-    public function show(LeaveRequest $leave_request): Response
+    public function show(Request $request, LeaveRequest $leave_request): Response
     {
+        $leave_request->loadMissing('leaveType');
+        $this->assertWorkFromHomeAccess($request, $leave_request->leaveType);
         $leave_request->load([
             'employee:id,user_id,employee_code,designation,department_id,image_url',
             'employee.user:id,name,email',
@@ -274,8 +330,13 @@ class LeaveRequestController extends Controller
         ]);
     }
 
-    public function edit(LeaveRequest $leave_request, LeaveTypeEligibilityService $eligibilityService): Response
-    {
+    public function edit(
+        Request $request,
+        LeaveRequest $leave_request,
+        LeaveTypeEligibilityService $eligibilityService,
+    ): Response {
+        $leave_request->loadMissing('leaveType');
+        $this->assertWorkFromHomeAccess($request, $leave_request->leaveType);
         $leave_request->load([
             'employee:id,user_id,emp_num,employee_code,designation,department_id,organisation_id',
             'employee.user:id,name',
@@ -319,6 +380,7 @@ class LeaveRequestController extends Controller
 
         $leaveTypes = LeaveType::query()
             ->with('policies:id,leave_type_id,organisation_id,annual_limit,requires_document_after_days,requires_attachment,requires_handover,requires_weekend_document')
+            ->when(! $this->canManageWorkFromHome($request), fn ($query) => $query->where('code', '!=', WorkFromHomeService::LEAVE_TYPE_CODE))
             ->select('id', 'leave_name', 'code', 'is_paid', 'status', 'gender', 'religion')
             ->orderByRaw('CASE WHEN status = 1 THEN 0 ELSE 1 END')
             ->orderBy('leave_name')
@@ -384,6 +446,9 @@ class LeaveRequestController extends Controller
         LeaveRequest $leave_request,
         LeaveValidationService $leaveValidationService,
     ): RedirectResponse {
+        $leave_request->loadMissing('leaveType');
+        $this->assertWorkFromHomeAccess($request, $leave_request->leaveType);
+
         // If full edit form submission (has start_date)
         if ($request->has('start_date')) {
             $validated = $leaveValidationService->dataForUpdate($leave_request, $request->validated());
@@ -396,8 +461,18 @@ class LeaveRequestController extends Controller
                 $request->hasFile('certificate') || $leave_request->files()->exists(),
                 (int) $leave_request->id,
                 in_array($validated['status'], config('params.leave_request.active_statuses'), true),
+                $validated['start_date'] !== Carbon::parse($leave_request->start_date)->toDateString()
+                    || $validated['end_date'] !== Carbon::parse($leave_request->end_date)->toDateString(),
             );
             $leaveType = $validation['leave_type'];
+            $wasWorkFromHome = $this->workFromHomeService->isWorkFromHomeType($leave_request->leaveType);
+            $isWorkFromHome = $this->workFromHomeService->isWorkFromHomeType($leaveType);
+            if ($wasWorkFromHome !== $isWorkFromHome
+                || ($isWorkFromHome && (int) $employeeId !== (int) $leave_request->employee_id)) {
+                throw ValidationException::withMessages([
+                    'leave_type_id' => ['A WFH request cannot be changed to another leave type or employee.'],
+                ]);
+            }
             $requestType = $validation['request_type'];
             $totalDays = $validation['total_days'];
             $handoverPersonId = $validated['handover_person_id'] ?? null;
@@ -418,8 +493,26 @@ class LeaveRequestController extends Controller
                 'start_date' => $validated['start_date'],
             ];
 
-            // Adjust leave balances according to the changes
-            $this->adjustLeaveBalances($leave_request, $oldState, $newState);
+            $oldScheduleId = $wasWorkFromHome
+                ? $this->workFromHomeService->scheduleIdForRequest($leave_request)
+                : null;
+            $workFromHomeSchedule = $validation['wfh_schedule'];
+            if ($wasWorkFromHome) {
+                if ($workFromHomeSchedule !== null) {
+                    $this->workFromHomeService->linkRequestToSchedule($leave_request, $workFromHomeSchedule);
+                }
+                $this->workFromHomeService->applyRequestBalanceTransition(
+                    $leave_request,
+                    $oldState['status'],
+                    $oldState['total_days'],
+                    $oldScheduleId,
+                    $newState['status'],
+                    $newState['total_days'],
+                    $workFromHomeSchedule?->id,
+                );
+            } else {
+                $this->adjustLeaveBalances($leave_request, $oldState, $newState);
+            }
 
             $leave_request->update([
                 'employee_id' => $employeeId,
@@ -500,13 +593,16 @@ class LeaveRequestController extends Controller
         $validated = $request->validated();
 
         $leaveType = $leave_request->leaveType;
+        $validation = null;
         if (in_array($validated['status'], config('params.leave_request.active_statuses'), true)) {
             $employee = Employee::query()->findOrFail($leave_request->employee_id);
-            $leaveValidationService->validateApplication(
+            $validation = $leaveValidationService->validateApplication(
                 $employee,
                 $leaveValidationService->dataForUpdate($leave_request, []),
                 $leave_request->files()->exists(),
                 (int) $leave_request->id,
+                true,
+                false,
             );
         }
 
@@ -526,7 +622,24 @@ class LeaveRequestController extends Controller
             'start_date' => $leave_request->start_date,
         ];
 
-        $this->adjustLeaveBalances($leave_request, $oldState, $newState);
+        if ($this->workFromHomeService->isWorkFromHomeType($leaveType)) {
+            $oldScheduleId = $this->workFromHomeService->scheduleIdForRequest($leave_request);
+            $workFromHomeSchedule = $validation['wfh_schedule'] ?? null;
+            if ($workFromHomeSchedule !== null) {
+                $this->workFromHomeService->linkRequestToSchedule($leave_request, $workFromHomeSchedule);
+            }
+            $this->workFromHomeService->applyRequestBalanceTransition(
+                $leave_request,
+                $oldState['status'],
+                $oldState['total_days'],
+                $oldScheduleId,
+                $newState['status'],
+                $newState['total_days'],
+                $workFromHomeSchedule?->id,
+            );
+        } else {
+            $this->adjustLeaveBalances($leave_request, $oldState, $newState);
+        }
 
         $leave_request->update([
             'status' => $validated['status'],
@@ -554,6 +667,9 @@ class LeaveRequestController extends Controller
 
     public function cancel(Request $request, LeaveRequest $leave_request): RedirectResponse
     {
+        $leave_request->loadMissing('leaveType');
+        $this->assertWorkFromHomeAccess($request, $leave_request->leaveType);
+
         $validated = $request->validate([
             'remarks' => 'nullable|string',
         ]);
@@ -578,7 +694,19 @@ class LeaveRequestController extends Controller
             'start_date' => $leave_request->start_date,
         ];
 
-        $this->adjustLeaveBalances($leave_request, $oldState, $newState);
+        if ($this->workFromHomeService->isWorkFromHomeType($leave_request->leaveType)) {
+            $this->workFromHomeService->applyRequestBalanceTransition(
+                $leave_request,
+                $oldState['status'],
+                $oldState['total_days'],
+                $this->workFromHomeService->scheduleIdForRequest($leave_request),
+                $newState['status'],
+                $newState['total_days'],
+                null,
+            );
+        } else {
+            $this->adjustLeaveBalances($leave_request, $oldState, $newState);
+        }
 
         $leave_request->update([
             'status' => 'cancelled',
@@ -638,6 +766,7 @@ class LeaveRequestController extends Controller
                         // Days decreased: refund the difference
                         $this->refundDaysToBalance($newEmpId, $newTypeId, $newYear, abs($diff));
                     }
+
                 }
             }
         } elseif ($newStatus === 'approved') {
@@ -689,6 +818,22 @@ class LeaveRequestController extends Controller
             $balance->used = max(0.0, (float) $balance->used - $days);
             $balance->balance = (float) $balance->balance + $days;
             $balance->save();
+        }
+    }
+
+    private function canManageWorkFromHome(Request $request): bool
+    {
+        return SalesCrmRoles::userHasAnyRole((int) $request->user()?->id, ['admin', 'hr']);
+    }
+
+    private function assertWorkFromHomeAccess(Request $request, ?LeaveType $leaveType): void
+    {
+        if (
+            $leaveType !== null
+            && $this->workFromHomeService->isWorkFromHomeType($leaveType)
+            && ! $this->canManageWorkFromHome($request)
+        ) {
+            abort(403);
         }
     }
 }

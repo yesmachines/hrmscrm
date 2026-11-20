@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\RewardController;
 use App\Http\Controllers\Api\V1\SocialController;
 use App\Http\Controllers\Api\V1\VisitController;
+use App\Http\Controllers\Api\V1\WorkFromHomeController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -45,6 +46,7 @@ Route::prefix('v1')->group(function () {
         Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.leaves.store');
         Route::match(['put', 'patch'], 'leaves/{id}', [LeaveController::class, 'update'])->name('api.v1.leaves.update');
         Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.leaves.show');
+        Route::get('wfh/schedules', [WorkFromHomeController::class, 'index'])->name('api.v1.wfh.schedules.index');
 
         // Documents Endpoints (Figma Mobile App)
         Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.documents.categories');
@@ -105,6 +107,13 @@ Route::prefix('v1')->group(function () {
         Route::post('socials/{post}/react', [SocialController::class, 'react'])->name('api.v1.socials.react');
         Route::delete('socials/{post}/react', [SocialController::class, 'unreact'])->name('api.v1.socials.react.destroy');
     });
+});
+
+Route::middleware(['auth:sanctum', 'role:hr,admin'])->prefix('v1/hr/wfh')->group(function () {
+    Route::get('schedules', [WorkFromHomeController::class, 'hrIndex'])->name('api.v1.hr.wfh.schedules.index');
+    Route::post('schedules', [WorkFromHomeController::class, 'store'])->name('api.v1.hr.wfh.schedules.store');
+    Route::patch('schedules/{schedule}/status', [WorkFromHomeController::class, 'updateStatus'])
+        ->name('api.v1.hr.wfh.schedules.update-status');
 });
 
 // HR APIs

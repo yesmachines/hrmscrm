@@ -49,6 +49,11 @@ return [
                 'remarks_required' => true,
                 'handover_after_days' => 3,
             ],
+            'WFH' => [
+                'validator' => 'work_from_home',
+                'allow_balance' => true,
+                'remarks_required' => true,
+            ],
         ],
         'detail_fields' => [
             'due_date' => [

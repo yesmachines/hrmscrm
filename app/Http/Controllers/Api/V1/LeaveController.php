@@ -15,6 +15,7 @@ use App\Services\FestivalLeaveService;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveTypeRules;
 use App\Services\LeaveValidationService;
+use App\Services\WorkFromHomeService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ class LeaveController extends Controller
     public function __construct(
         private readonly FestivalLeaveService $festivalLeaveService,
         private readonly LeaveTypeRules $leaveTypeRules,
+        private readonly WorkFromHomeService $workFromHomeService,
     ) {}
 
     /**
@@ -158,6 +160,10 @@ class LeaveController extends Controller
                 $validated,
                 $request->hasFile('certificate') || ($existing?->files()->exists() ?? false),
                 $ignoreLeaveRequestId === null ? null : (int) $ignoreLeaveRequestId,
+                true,
+                $existing === null
+                    || Carbon::parse($validated['start_date'])->toDateString() !== Carbon::parse($existing->start_date)->toDateString()
+                    || Carbon::parse($validated['end_date'])->toDateString() !== Carbon::parse($existing->end_date)->toDateString(),
             );
         } catch (ValidationException $exception) {
             return $this->errorResponse($exception->getMessage(), 422, $exception->errors());
@@ -455,8 +461,20 @@ class LeaveController extends Controller
 
         $validationService->syncLeaveTypeDetails($leaveRequest, $leaveType, $validated);
 
-        // Update pending balance if balance tracking enabled
-        if ($this->leaveTypeRules->allowsBalance($leaveType, $policy)) {
+        $workFromHomeSchedule = $validation['wfh_schedule'];
+        if ($workFromHomeSchedule !== null) {
+            $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $workFromHomeSchedule);
+            $this->workFromHomeService->applyRequestBalanceTransition(
+                $leaveRequest,
+                '',
+                0,
+                null,
+                $initialStatus,
+                $totalDays,
+                (int) $workFromHomeSchedule->id,
+            );
+        } elseif ($this->leaveTypeRules->allowsBalance($leaveType, $policy)) {
+            // Update pending balance if balance tracking enabled
             $currentYear = $startDate->year;
             $balance = LeaveBalance::where('leave_type_id', $leaveType->id)
                 ->where('employee_id', $employee->id)
@@ -549,6 +567,9 @@ class LeaveController extends Controller
                 $validationData,
                 $request->hasFile('certificate') || $leaveRequest->files()->exists(),
                 (int) $leaveRequest->id,
+                true,
+                Carbon::parse($validationData['start_date'])->toDateString() !== Carbon::parse($leaveRequest->start_date)->toDateString()
+                    || Carbon::parse($validationData['end_date'])->toDateString() !== Carbon::parse($leaveRequest->end_date)->toDateString(),
             );
         } catch (ValidationException $e) {
             return $this->errorResponse($e->getMessage(), 422, $e->errors());
@@ -563,6 +584,10 @@ class LeaveController extends Controller
         $newYear = $validation['start_date']->year;
         $oldTotalDays = (float) $leaveRequest->total_days;
         $balanceTrackingEnabled = $this->leaveTypeRules->allowsBalance($leaveType, $validation['policy']);
+        $oldScheduleId = $this->workFromHomeService->isWorkFromHomeType($leaveType)
+            ? $this->workFromHomeService->scheduleIdForRequest($leaveRequest)
+            : null;
+        $workFromHomeSchedule = $validation['wfh_schedule'];
 
         DB::transaction(function () use (
             $request,
@@ -576,6 +601,8 @@ class LeaveController extends Controller
             $oldYear,
             $newYear,
             $oldTotalDays,
+            $oldScheduleId,
+            $workFromHomeSchedule,
         ): void {
             $leaveRequest->update([
                 'start_date' => $validation['start_date']->toDateString(),
@@ -585,7 +612,18 @@ class LeaveController extends Controller
                 'remarks' => $validation['remarks'],
             ]);
 
-            if ($balanceTrackingEnabled) {
+            if ($workFromHomeSchedule !== null) {
+                $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $workFromHomeSchedule);
+                $this->workFromHomeService->applyRequestBalanceTransition(
+                    $leaveRequest,
+                    'applied',
+                    $oldTotalDays,
+                    $oldScheduleId,
+                    'applied',
+                    (float) $validation['total_days'],
+                    (int) $workFromHomeSchedule->id,
+                );
+            } elseif ($balanceTrackingEnabled) {
                 $pendingChanges = [$oldYear => -$oldTotalDays];
                 $pendingChanges[$newYear] = ($pendingChanges[$newYear] ?? 0.0) + $validation['total_days'];
 

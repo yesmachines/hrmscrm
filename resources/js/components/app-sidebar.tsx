@@ -165,6 +165,11 @@ const mainNavItems: NavItem[] = [
                 icon: CalendarDays,
             },
             {
+                title: 'WFH schedules',
+                href: '/wfh-schedules',
+                icon: CalendarDays,
+            },
+            {
                 title: 'Leave balances',
                 href: leaveBalancesIndex(),
                 icon: CalendarDays,

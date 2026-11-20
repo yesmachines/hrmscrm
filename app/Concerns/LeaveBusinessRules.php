@@ -23,6 +23,16 @@ trait LeaveBusinessRules
         }
     }
 
+    /** @param array<string, mixed> $data */
+    private function validateWorkFromHome(array $data): void
+    {
+        if (! is_string($data['remarks'] ?? null) || trim($data['remarks']) === '') {
+            throw ValidationException::withMessages([
+                'remarks' => ['A reason is required for a WFH request.'],
+            ]);
+        }
+    }
+
     public function requiresHandover(LeaveType $leaveType, ?LeavePolicy $policy, float $totalDays): bool
     {
         $threshold = $this->leaveTypeRules->definition($leaveType)['handover_after_days'] ?? null;

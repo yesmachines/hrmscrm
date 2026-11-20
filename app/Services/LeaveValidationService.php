@@ -9,6 +9,7 @@ use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
+use App\Models\WorkFromHomeSchedule;
 use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
 
@@ -21,6 +22,7 @@ class LeaveValidationService
         private readonly LeaveDurationCalculator $leaveDurationCalculator,
         private readonly FestivalLeaveService $festivalLeaveService,
         private readonly LeaveTypeRules $leaveTypeRules,
+        private readonly WorkFromHomeService $workFromHomeService,
     ) {}
 
     /**
@@ -31,7 +33,7 @@ class LeaveValidationService
      * Per-type checks live in LeaveBusinessRules; configurable values remain in params.leave_type.
      *
      * @param  array<string, mixed>  $data
-     * @return array{leave_type: LeaveType, policy: ?LeavePolicy, start_date: Carbon, end_date: Carbon, request_type: string, total_days: float, attachment_required: bool, remarks: ?string}
+     * @return array{leave_type: LeaveType, policy: ?LeavePolicy, start_date: Carbon, end_date: Carbon, request_type: string, total_days: float, attachment_required: bool, remarks: ?string, wfh_schedule: ?WorkFromHomeSchedule}
      */
     public function validateApplication(
         Employee $employee,
@@ -39,6 +41,7 @@ class LeaveValidationService
         bool $hasFile = false,
         ?int $ignoreLeaveRequestId = null,
         bool $isActiveRequest = true,
+        bool $enforceWfhNoticePeriod = true,
     ): array {
         $leaveType = LeaveType::query()->whereKey($data['leave_type_id'] ?? null)->first();
         if (! $leaveType) {
@@ -56,6 +59,7 @@ class LeaveValidationService
         [$startDate, $endDate, $requestType, $totalDays] = $this->validateDates($data);
         $attachmentRequired = false;
         $remarks = $data['remarks'] ?? null;
+        $workFromHomeSchedule = null;
 
         if ($isActiveRequest) {
             $this->validateOverlap($employee, $startDate, $endDate, $ignoreLeaveRequestId);
@@ -68,9 +72,20 @@ class LeaveValidationService
                 $profile?->marital_status,
             );
             $this->validateLeaveTypeDetails($leaveType, [...$data, 'employee_profile' => $profile], $startDate, $totalDays);
-            $this->validatePolicyEligibility($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
-            $this->validateDepartmentOverlap($employee, $leaveType, $policy, $startDate, $endDate, $ignoreLeaveRequestId);
-            $this->validateBalance($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
+            if ($this->workFromHomeService->isWorkFromHomeType($leaveType)) {
+                $workFromHomeSchedule = $this->workFromHomeService->validateRequest(
+                    $employee,
+                    $startDate,
+                    $endDate,
+                    $totalDays,
+                    $ignoreLeaveRequestId,
+                    $enforceWfhNoticePeriod,
+                );
+            } else {
+                $this->validatePolicyEligibility($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
+                $this->validateDepartmentOverlap($employee, $leaveType, $policy, $startDate, $endDate, $ignoreLeaveRequestId);
+                $this->validateBalance($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
+            }
             $this->validateHandover($employee, $leaveType, $policy, $data, $startDate, $endDate, $totalDays);
             $this->validateTravel($data);
             $attachmentRequired = $this->validateAttachment($leaveType, $policy, $startDate, $endDate, $totalDays, $hasFile);
@@ -92,6 +107,7 @@ class LeaveValidationService
             'total_days' => $totalDays,
             'attachment_required' => $attachmentRequired,
             'remarks' => $remarks,
+            'wfh_schedule' => $workFromHomeSchedule,
         ];
     }
 
@@ -192,6 +208,7 @@ class LeaveValidationService
             'compassionate' => $this->validateCompassionateLeave($data, $totalDays),
             'maternity' => $this->validateMaternityLeave($data),
             'parental' => $this->validateParentalLeave($leaveType, $data['child_birth_date'] ?? null, $leaveStartDate),
+            'work_from_home' => $this->validateWorkFromHome($data),
             null, 'festival' => null,
             default => throw new \LogicException("Unknown leave validator [{$validator}]. Check params.leave_type.special_rules."),
         };

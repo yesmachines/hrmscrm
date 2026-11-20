@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             SalesCrmRoleSeeder::class,
             OrganisationSeeder::class,
             EventSeeder::class,
+            WorkFromHomeSeeder::class,
         ]);
     }
 }
