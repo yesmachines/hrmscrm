@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Leave;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\LeaveApplicationRequest;
+use App\Http\Requests\Leave\PreviewLeaveTemplateRequest;
 use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
+use App\Models\LeaveTemplate;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Services\FestivalLeaveService;
+use App\Services\LeavePdfGenerationService;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveTypeRules;
 use App\Services\LeaveValidationService;
@@ -18,10 +21,12 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LeaveRequestController extends Controller
 {
@@ -29,6 +34,7 @@ class LeaveRequestController extends Controller
         private readonly FestivalLeaveService $festivalLeaveService,
         private readonly LeaveTypeRules $leaveTypeRules,
         private readonly WorkFromHomeService $workFromHomeService,
+        private readonly LeavePdfGenerationService $leavePdfGenerationService,
     ) {}
 
     public function index(Request $request): Response
@@ -135,6 +141,29 @@ class LeaveRequestController extends Controller
             'activeLeaves' => $activeLeaves,
             'compassionateRelationships' => config('params.leave_type.compassionate_relationships'),
             'festivals' => $this->festivalLeaveService->optionsForEmployees($employees, $profiles, $countryIdsByEmployee),
+            'leaveTemplates' => $this->activeTemplateOptions(),
+        ]);
+    }
+
+    public function templatePreview(PreviewLeaveTemplateRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $employee = Employee::query()->findOrFail($validated['employee_id']);
+        $leaveType = LeaveType::query()->findOrFail($validated['leave_type_id']);
+        $template = $this->leavePdfGenerationService->resolveTemplate($leaveType, $employee->organisation_id);
+
+        if ($template === null) {
+            return response()->json([
+                'message' => 'No active template is configured for this leave type and organisation.',
+            ], 404);
+        }
+
+        $values = $validated['values'] ?? [];
+        $values['leave_type_name'] = $leaveType->leave_name;
+
+        return response()->json([
+            'template_name' => $template->template_name,
+            'html' => $this->leavePdfGenerationService->render($template, $employee, $values),
         ]);
     }
 
@@ -289,6 +318,8 @@ class LeaveRequestController extends Controller
                 $balance->balance = max(0, $balance->balance - $totalDays);
                 $balance->save();
             }
+
+            $this->leavePdfGenerationService->generateIfAvailable($leaveRequest, $request->user()?->id);
         }
 
         return redirect()->route('leave-requests.index')
@@ -300,7 +331,7 @@ class LeaveRequestController extends Controller
         $leave_request->loadMissing('leaveType');
         $this->assertWorkFromHomeAccess($request, $leave_request->leaveType);
         $leave_request->load([
-            'employee:id,user_id,employee_code,designation,department_id,image_url',
+            'employee:id,user_id,employee_code,emp_num,phone,designation,department_id,organisation_id,image_url',
             'employee.user:id,name,email',
             'employee.department:id,name',
             'leaveType:id,leave_name,code,is_paid',
@@ -311,6 +342,11 @@ class LeaveRequestController extends Controller
             },
             'histories.doneBy:id,name',
         ]);
+        $generatedPdf = $leave_request->generatedFiles()->orderByDesc('id')->first();
+        if ($generatedPdf !== null && ! Storage::disk('public')->exists($generatedPdf->file_path)) {
+            $generatedPdf = null;
+        }
+        $templateAvailable = $leave_request->leaveType?->resolveTemplate($leave_request->employee?->organisation_id) !== null;
 
         $handoverDetail = $leave_request->details->firstWhere('field_key', 'handover_person_id');
         $handoverEmployee = null;
@@ -324,10 +360,34 @@ class LeaveRequestController extends Controller
         return Inertia::render('leave-requests/show', [
             'leave_request' => $leave_request,
             'handoverEmployee' => $handoverEmployee,
+            'generatedPdfUrl' => $generatedPdf
+                ? route('leave-requests.pdf', $leave_request)
+                : null,
+            'pdfNotice' => $leave_request->status === 'approved' && $generatedPdf === null
+                ? ($templateAvailable
+                    ? 'This approved request does not have a generated PDF yet. Edit and save it to generate one.'
+                    : 'No active leave template is configured for this leave type.')
+                : null,
             'fieldDefinitions' => $leave_request->leaveType
                 ? $this->leaveTypeRules->fieldDefinitions($leave_request->leaveType)
                 : [],
         ]);
+    }
+
+    public function downloadPdf(LeaveRequest $leave_request): StreamedResponse
+    {
+        abort_unless($leave_request->status === 'approved', 404);
+
+        $generatedPdf = $leave_request->generatedFiles()->orderByDesc('id')->first();
+        abort_unless(
+            $generatedPdf !== null && Storage::disk('public')->exists($generatedPdf->file_path),
+            404,
+        );
+
+        return Storage::disk('public')->download(
+            $generatedPdf->file_path,
+            "leave-request-{$leave_request->id}.pdf",
+        );
     }
 
     public function edit(
@@ -446,6 +506,7 @@ class LeaveRequestController extends Controller
             'activeLeaves' => $activeLeaves,
             'festivals' => $festivals,
             'compassionateRelationships' => config('params.leave_type.compassionate_relationships'),
+            'leaveTemplates' => $this->activeTemplateOptions(),
         ]);
     }
 
@@ -593,6 +654,10 @@ class LeaveRequestController extends Controller
                 ]);
             }
 
+            if ($newState['status'] === 'approved') {
+                $this->leavePdfGenerationService->generateIfAvailable($leave_request, $request->user()?->id);
+            }
+
             return redirect()->route('leave-requests.index')
                 ->with('success', 'Leave request updated successfully. Any affected leave balances were updated.');
         }
@@ -668,6 +733,10 @@ class LeaveRequestController extends Controller
                 'remarks' => $validated['remarks'] ?? null,
                 'approved_date' => now(),
             ]);
+        }
+
+        if ($oldState['status'] !== 'approved' && $newState['status'] === 'approved') {
+            $this->leavePdfGenerationService->generateIfAvailable($leave_request, $request->user()?->id);
         }
 
         return back()->with('success', 'Leave request status updated successfully.');
@@ -774,7 +843,6 @@ class LeaveRequestController extends Controller
                         // Days decreased: refund the difference
                         $this->refundDaysToBalance($newEmpId, $newTypeId, $newYear, abs($diff));
                     }
-
                 }
             }
         } elseif ($newStatus === 'approved') {
@@ -827,6 +895,21 @@ class LeaveRequestController extends Controller
             $balance->balance = (float) $balance->balance + $days;
             $balance->save();
         }
+    }
+
+    /**
+     * @return list<array{leave_type_id: int, organisation_id: int|null}>
+     */
+    private function activeTemplateOptions(): array
+    {
+        return LeaveTemplate::query()
+            ->active()
+            ->get(['leave_type_id', 'organisation_id'])
+            ->map(fn (LeaveTemplate $template): array => [
+                'leave_type_id' => $template->leave_type_id,
+                'organisation_id' => $template->organisation_id,
+            ])
+            ->all();
     }
 
     private function canManageWorkFromHome(Request $request): bool

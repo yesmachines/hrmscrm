@@ -12,6 +12,7 @@ use App\Models\LeaveRequestFile;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Services\FestivalLeaveService;
+use App\Services\LeavePdfGenerationService;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveTypeRules;
 use App\Services\LeaveValidationService;
@@ -30,6 +31,7 @@ class LeaveController extends Controller
         private readonly FestivalLeaveService $festivalLeaveService,
         private readonly LeaveTypeRules $leaveTypeRules,
         private readonly WorkFromHomeService $workFromHomeService,
+        private readonly LeavePdfGenerationService $leavePdfGenerationService,
     ) {}
 
     /**
@@ -345,6 +347,8 @@ class LeaveController extends Controller
                         new OA\Property(property: 'travel_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
                         new OA\Property(property: 'ticket_status', type: 'string', enum: ['ticket', 'no_ticket'], description: 'Required for Annual Leave.'),
                         new OA\Property(property: 'certificate', type: 'string', format: 'binary', description: 'Supporting document required by the leave policy. Sick Leave also requires it when an active holiday falls within the leave range or on the immediately preceding or following calendar day.'),
+                        new OA\Property(property: 'handover_giver_signature', type: 'string', format: 'binary', description: 'Optional signature image of the person handing over work.'),
+                        new OA\Property(property: 'handover_receiver_signature', type: 'string', format: 'binary', description: 'Optional signature image of the person receiving work.'),
                         new OA\Property(property: 'files', type: 'array', items: new OA\Items(type: 'string', format: 'binary')),
                     ]
                 )
@@ -433,6 +437,7 @@ class LeaveController extends Controller
                 'field_value' => $signaturePath,
             ]);
         }
+        $this->storeHandoverSignatures($leaveRequest, $request);
 
         // Store explicit declaration text or status if provided
         if ($request->filled('declaration')) {
@@ -503,11 +508,36 @@ class LeaveController extends Controller
             }
         }
 
+        if ($initialStatus === 'approved') {
+            $this->leavePdfGenerationService->generateIfAvailable($leaveRequest, (int) $user->id);
+        }
+
         return $this->successResponse(
             $leaveRequest->load(['files', 'details', 'leaveType']),
             'Leave request submitted successfully.',
             201
         );
+    }
+
+    private function storeHandoverSignatures(LeaveRequest $leaveRequest, Request $request): void
+    {
+        foreach ([
+            'handover_giver_signature' => [
+                'field_key' => 'handover_giver_signature_path',
+                'field_name' => 'Person Handing Over Signature',
+            ],
+            'handover_receiver_signature' => [
+                'field_key' => 'handover_receiver_signature_path',
+                'field_name' => 'Person Receiving Work Signature',
+            ],
+        ] as $input => $detail) {
+            if (! $request->hasFile($input)) {
+                continue;
+            }
+
+            $path = $request->file($input)->store('leave-signatures/handover', 'public');
+            $this->updateLeaveRequestDetail($leaveRequest, $detail['field_key'], $detail['field_name'], $path);
+        }
     }
 
     /**
@@ -716,6 +746,7 @@ class LeaveController extends Controller
                 $signaturePath = $request->file('signature')->store('leave-signatures', 'public');
                 $this->updateLeaveRequestDetail($leaveRequest, 'signature_path', 'Signature', $signaturePath);
             }
+            $this->storeHandoverSignatures($leaveRequest, $request);
 
             $leaveRequest->histories()->create([
                 'action_type' => 'applied',
@@ -885,7 +916,7 @@ class LeaveController extends Controller
                 'field_value' => $detail->field_value,
             ];
 
-            if ($detail->field_key === 'signature_path' && ! empty($detail->field_value)) {
+            if (str_ends_with($detail->field_key, 'signature_path') && ! empty($detail->field_value)) {
                 $item['file_url'] = asset('storage/'.$detail->field_value);
             }
 

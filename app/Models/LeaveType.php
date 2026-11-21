@@ -117,4 +117,30 @@ class LeaveType extends Model
     {
         return $this->hasMany(LeaveBalance::class);
     }
+
+    public function leaveTemplates(): HasMany
+    {
+        return $this->hasMany(LeaveTemplate::class);
+    }
+
+    public function resolveTemplate(?int $organisationId = null): ?LeaveTemplate
+    {
+        $query = $this->leaveTemplates()->active();
+
+        if ($organisationId !== null) {
+            $organisationTemplate = (clone $query)
+                ->where('organisation_id', $organisationId)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($organisationTemplate !== null) {
+                return $organisationTemplate;
+            }
+        }
+
+        return (clone $query)
+            ->whereNull('organisation_id')
+            ->orderByDesc('id')
+            ->first();
+    }
 }

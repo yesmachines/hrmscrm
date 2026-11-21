@@ -117,6 +117,7 @@ trait EmployeeValidationRules
             'image_url' => $this->hasFile('image_url')
                 ? ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120']
                 : ['nullable', 'string', 'max:255'],
+            'profile_signature' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
             'has_report' => ['nullable', 'boolean'],
             'department_id' => ['required', 'integer', Rule::exists(Department::class, 'id')],
@@ -234,6 +235,10 @@ trait EmployeeValidationRules
             'total_experience',
             'highest_education',
         ]));
+
+        if ($this->hasFile('profile_signature')) {
+            $profile['signature_path'] = $this->file('profile_signature')->store('employee-signatures', 'public');
+        }
 
         $roles = [];
 

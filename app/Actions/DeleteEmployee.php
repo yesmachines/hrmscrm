@@ -18,6 +18,9 @@ class DeleteEmployee
     {
         $sales = DB::connection('salescrm');
         $hrms = DB::connection();
+        $signaturePath = EmployeeProfile::query()
+            ->where('employee_id', $employee->id)
+            ->value('signature_path');
 
         $sales->beginTransaction();
         $hrms->beginTransaction();
@@ -44,6 +47,10 @@ class DeleteEmployee
 
             $sales->commit();
             $hrms->commit();
+
+            if ($signaturePath !== null) {
+                Storage::disk('public')->delete($signaturePath);
+            }
         } catch (Throwable $exception) {
             $sales->rollBack();
             $hrms->rollBack();

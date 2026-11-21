@@ -56,8 +56,9 @@ afterEach(function () {
         'delete.me@example.com',
         'upload.employee@example.com',
         'missing.department@example.com',
+        'signature.employee@example.com',
     ];
-    $testEmpNums = ['T-9001', 'T-9002', 'T-9003', 'T-9999', 'T-9010', 'T-9011'];
+    $testEmpNums = ['T-9001', 'T-9002', 'T-9003', 'T-9999', 'T-9010', 'T-9011', 'T-9016'];
 
     $userIds = $sales->table('users')->whereIn('email', $testEmails)->pluck('id');
     $employeeIds = $sales->table('employees')->whereIn('emp_num', $testEmpNums)->pluck('id');
@@ -252,6 +253,39 @@ test('employee profile photo larger than 5 MB returns a validation error', funct
         ->assertSessionHasErrors(['image_url']);
 
     expect(SalesCrmUser::query()->where('email', 'large.photo@example.com')->exists())->toBeFalse();
+});
+
+test('employee profile signature is optional and an uploaded signature is stored', function () {
+    Storage::fake('public');
+
+    $admin = createHrmsLoginUser('admin');
+    $signature = UploadedFile::fake()->image('signature.png', 240, 100);
+
+    $this->actingAs($admin)
+        ->post(route('employees.store'), [
+            'name' => 'Signature Employee',
+            'email' => 'signature.employee@example.com',
+            'password' => 'Password123!',
+            'roles' => 'salesmanager',
+            'emp_num' => 'T-9016',
+            'designation' => 'Engineer',
+            'department_id' => $this->departmentId,
+            'profile_signature' => $signature,
+        ])
+        ->assertSessionDoesntHaveErrors()
+        ->assertRedirect();
+
+    $employee = Employee::query()->where('emp_num', 'T-9016')->firstOrFail();
+    $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->firstOrFail();
+
+    expect($profile->signature_path)->not->toBeNull();
+    Storage::disk('public')->assertExists($profile->signature_path);
+
+    $this->actingAs($admin)
+        ->get(route('employees.edit', $employee))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('employee.profile.signature_url', asset('storage/'.$profile->signature_path)));
 });
 
 test('employee division is optional on create and edit', function () {

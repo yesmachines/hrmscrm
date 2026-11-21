@@ -499,6 +499,9 @@ class EmployeeController extends Controller
             }
 
             $profilePayload = array_merge($profile->toArray(), [
+                'signature_url' => $profile->signature_path
+                    ? asset('storage/'.ltrim($profile->signature_path, '/'))
+                    : null,
                 'gender' => match (LeaveType::normalizeGender($profile->gender)) {
                     'male' => 'M',
                     'female' => 'F',
@@ -508,6 +511,7 @@ class EmployeeController extends Controller
                 'nationality' => $nationality,
                 'home_country_name' => $homeCountryName,
             ]);
+            unset($profilePayload['signature_path']);
         }
 
         return [

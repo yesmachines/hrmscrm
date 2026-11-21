@@ -1353,6 +1353,8 @@ test('it stores signature image into leave_request_details and exposes signature
 
     $token = $user->createToken('test')->plainTextToken;
     $fakeSignature = UploadedFile::fake()->image('signature.png', 200, 80);
+    $handoverGiverSignature = UploadedFile::fake()->image('handover-giver.png', 200, 80);
+    $handoverReceiverSignature = UploadedFile::fake()->image('handover-receiver.png', 200, 80);
 
     $response = $this->withToken($token)->post('/api/v1/leaves', [
         'leave_type_id' => $leaveType->id,
@@ -1361,6 +1363,8 @@ test('it stores signature image into leave_request_details and exposes signature
         'total_days' => 1,
         'remarks' => 'Taking a day off with oath signature',
         'signature' => $fakeSignature,
+        'handover_giver_signature' => $handoverGiverSignature,
+        'handover_receiver_signature' => $handoverReceiverSignature,
         'declaration' => 'I hereby declare I will remain available for emergency queries.',
     ]);
 
@@ -1379,12 +1383,24 @@ test('it stores signature image into leave_request_details and exposes signature
         'field_key' => 'declaration_text',
         'field_value' => 'I hereby declare I will remain available for emergency queries.',
     ]);
+    $this->assertDatabaseHas('leave_request_details', [
+        'leave_request_id' => $leaveId,
+        'field_key' => 'handover_giver_signature_path',
+    ]);
+    $this->assertDatabaseHas('leave_request_details', [
+        'leave_request_id' => $leaveId,
+        'field_key' => 'handover_receiver_signature_path',
+    ]);
 
     $showResponse = $this->withToken($token)->getJson("/api/v1/leaves/{$leaveId}");
     $showResponse->assertStatus(200);
 
     expect($showResponse->json('data.signature_url'))->not->toBeNull();
     expect($showResponse->json('data.signature_url'))->toContain('leave-signatures');
+    expect(collect($showResponse->json('data.details'))->firstWhere('field_key', 'handover_giver_signature_path')['file_url'])
+        ->toContain('leave-signatures/handover');
+    expect(collect($showResponse->json('data.details'))->firstWhere('field_key', 'handover_receiver_signature_path')['file_url'])
+        ->toContain('leave-signatures/handover');
 });
 
 test('leaves meta hides maternity leave for male employees and shows it for female employees', function () {

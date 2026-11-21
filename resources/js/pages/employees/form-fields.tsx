@@ -66,6 +66,7 @@ type EmployeeFormValues = {
     resignation_date?: string | null;
     division?: string | null;
     image_url?: string | null;
+    signature_url?: string | null;
     status?: number | string | null;
     has_report?: boolean | number | null;
     department_id?: number | string | null;
@@ -129,8 +130,14 @@ function Field({
 }) {
     return (
         <div className={`flex flex-col gap-1.5 ${className ?? ''}`}>
-            <Label htmlFor={name} className="text-xs font-semibold tracking-wide text-foreground/85">
-                {label} {required && <span className="text-destructive font-bold">*</span>}
+            <Label
+                htmlFor={name}
+                className="text-xs font-semibold tracking-wide text-foreground/85"
+            >
+                {label}{' '}
+                {required && (
+                    <span className="font-bold text-destructive">*</span>
+                )}
             </Label>
             {children}
             <InputError message={error} />
@@ -154,7 +161,9 @@ function Section({
             <div className="mb-6 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-4">
                 <div>
                     <div className="flex items-center gap-2.5">
-                        <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+                        <h3 className="text-base font-semibold tracking-tight text-foreground">
+                            {title}
+                        </h3>
                         {badge && (
                             <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                                 {badge}
@@ -189,8 +198,9 @@ export default function EmployeeProfileFormFields({
     religionOptions,
     isEdit = false,
 }: Props) {
-    const profile = (defaults as EmployeeFormValues & { profile?: EmployeeFormValues })
-        .profile;
+    const profile = (
+        defaults as EmployeeFormValues & { profile?: EmployeeFormValues }
+    ).profile;
 
     const profileDefaults = {
         ...defaults,
@@ -202,6 +212,7 @@ export default function EmployeeProfileFormFields({
         String(defaults.department_id ?? ''),
     );
     const [photoError, setPhotoError] = useState('');
+    const [signatureError, setSignatureError] = useState('');
     const today = new Date();
     const maxBirthDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -218,7 +229,8 @@ export default function EmployeeProfileFormFields({
         const match = filteredDesignations.find(
             (d) =>
                 d.title.toLowerCase() === defaults.designation?.toLowerCase() ||
-                d.shortcode.toLowerCase() === defaults.designation?.toLowerCase() ||
+                d.shortcode.toLowerCase() ===
+                    defaults.designation?.toLowerCase() ||
                 String(d.id) === String(defaults.designation_id),
         );
 
@@ -257,7 +269,12 @@ export default function EmployeeProfileFormFields({
                 description="Credentials and role access for system authentication"
                 badge="Required"
             >
-                <Field label="Full name" name="name" error={errors.name} required>
+                <Field
+                    label="Full name"
+                    name="name"
+                    error={errors.name}
+                    required
+                >
                     <Input
                         id="name"
                         name="name"
@@ -268,7 +285,12 @@ export default function EmployeeProfileFormFields({
                         defaultValue={defaults.name ?? ''}
                     />
                 </Field>
-                <Field label="Work email" name="email" error={errors.email} required>
+                <Field
+                    label="Work email"
+                    name="email"
+                    error={errors.email}
+                    required
+                >
                     <Input
                         id="email"
                         type="email"
@@ -279,7 +301,11 @@ export default function EmployeeProfileFormFields({
                     />
                 </Field>
                 <Field
-                    label={isEdit ? 'Password (leave blank to keep current)' : 'Password'}
+                    label={
+                        isEdit
+                            ? 'Password (leave blank to keep current)'
+                            : 'Password'
+                    }
                     name="password"
                     error={errors.password}
                     required={!isEdit}
@@ -287,7 +313,9 @@ export default function EmployeeProfileFormFields({
                     <PasswordInput
                         id="password"
                         name="password"
-                        placeholder={isEdit ? '••••••••' : 'Enter secure password'}
+                        placeholder={
+                            isEdit ? '••••••••' : 'Enter secure password'
+                        }
                         required={!isEdit}
                         autoComplete="new-password"
                     />
@@ -319,7 +347,12 @@ export default function EmployeeProfileFormFields({
                 title="Employment details"
                 description="Designation, department, division, branch, and company placement"
             >
-                <Field label="Employee reference number" name="emp_num" error={errors.emp_num} required>
+                <Field
+                    label="Employee reference number"
+                    name="emp_num"
+                    error={errors.emp_num}
+                    required
+                >
                     <Input
                         id="emp_num"
                         name="emp_num"
@@ -329,18 +362,18 @@ export default function EmployeeProfileFormFields({
                     />
                 </Field>
                 {
-                <Field
-                    label="Employee code"
-                    name="employee_code"
-                    error={errors.employee_code}
-                >
-                    <Input
-                        id="employee_code"
+                    <Field
+                        label="Employee code"
                         name="employee_code"
-                        placeholder="Internal code / badge"
-                        defaultValue={defaults.employee_code ?? ''}
-                    />
-                </Field>
+                        error={errors.employee_code}
+                    >
+                        <Input
+                            id="employee_code"
+                            name="employee_code"
+                            placeholder="Internal code / badge"
+                            defaultValue={defaults.employee_code ?? ''}
+                        />
+                    </Field>
                 }
                 <Field
                     label="Department"
@@ -385,7 +418,10 @@ export default function EmployeeProfileFormFields({
                     >
                         <option value="">Select designation</option>
                         {filteredDesignations.map((designation) => (
-                            <option key={designation.id} value={designation.title}>
+                            <option
+                                key={designation.id}
+                                value={designation.title}
+                            >
                                 {designation.title} ({designation.shortcode})
                             </option>
                         ))}
@@ -408,8 +444,10 @@ export default function EmployeeProfileFormFields({
                             !divisions.some(
                                 (d) =>
                                     d.value === matchedDivisionValue ||
-                                    d.code.toLowerCase() === defaults.division?.toLowerCase() ||
-                                    d.name.toLowerCase() === defaults.division?.toLowerCase(),
+                                    d.code.toLowerCase() ===
+                                        defaults.division?.toLowerCase() ||
+                                    d.name.toLowerCase() ===
+                                        defaults.division?.toLowerCase(),
                             ) && (
                                 <option value={defaults.division}>
                                     {defaults.division}
@@ -496,7 +534,8 @@ export default function EmployeeProfileFormFields({
                         id="status"
                         name="status"
                         defaultValue={
-                            defaults.status === null || defaults.status === undefined
+                            defaults.status === null ||
+                            defaults.status === undefined
                                 ? '1'
                                 : String(defaults.status)
                         }
@@ -543,7 +582,7 @@ export default function EmployeeProfileFormFields({
                             <img
                                 src={defaults.image_url}
                                 alt="Current photo"
-                                className="h-10 w-10 shrink-0 rounded-full border border-border object-cover bg-muted/40 shadow-xs"
+                                className="h-10 w-10 shrink-0 rounded-full border border-border bg-muted/40 object-cover shadow-xs"
                             />
                         ) : null}
                         <Input
@@ -575,6 +614,43 @@ export default function EmployeeProfileFormFields({
                 title="Personal information"
                 description="Demographic, identification, and personal details"
             >
+                <Field
+                    label="Employee signature (optional)"
+                    name="profile_signature"
+                    error={errors.profile_signature ?? signatureError}
+                    className="sm:col-span-2"
+                >
+                    <div className="flex items-center gap-3">
+                        {profileDefaults.signature_url ? (
+                            <img
+                                src={profileDefaults.signature_url}
+                                alt="Current employee signature"
+                                className="h-12 max-w-48 rounded border border-border bg-white object-contain p-1"
+                            />
+                        ) : null}
+                        <Input
+                            id="profile_signature"
+                            name="profile_signature"
+                            type="file"
+                            accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
+                            onChange={(event) => {
+                                const file = event.currentTarget.files?.[0];
+                                const error =
+                                    file && file.size > 5 * 1024 * 1024
+                                        ? 'The employee signature must not exceed 5 MB.'
+                                        : '';
+
+                                event.currentTarget.setCustomValidity(error);
+                                setSignatureError(error);
+                            }}
+                            className="h-10 cursor-pointer file:mr-2 file:h-7 file:rounded-md file:border-0 file:bg-muted file:px-2.5 file:text-xs file:font-medium"
+                        />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                        JPG, PNG, GIF, or WebP. Max 5MB. Leave empty to keep it
+                        blank.
+                    </p>
+                </Field>
                 <Field label="Gender" name="gender" error={errors.gender}>
                     <select
                         id="gender"
@@ -582,7 +658,8 @@ export default function EmployeeProfileFormFields({
                         defaultValue={
                             profileDefaults.gender?.toLowerCase() === 'male'
                                 ? 'M'
-                                : profileDefaults.gender?.toLowerCase() === 'female'
+                                : profileDefaults.gender?.toLowerCase() ===
+                                    'female'
                                   ? 'F'
                                   : (profileDefaults.gender ?? '')
                         }
@@ -641,7 +718,9 @@ export default function EmployeeProfileFormFields({
                                         profileDefaults.nationality?.toLowerCase() ||
                                     String(country.id) ===
                                         String(profileDefaults.nationality),
-                            )?.name ?? (profileDefaults.nationality ?? '')
+                            )?.name ??
+                            profileDefaults.nationality ??
+                            ''
                         }
                         className={fieldClass}
                     >
@@ -833,9 +912,7 @@ export default function EmployeeProfileFormFields({
                         id="home_emergency_name"
                         name="home_emergency_name"
                         placeholder="Emergency contact name"
-                        defaultValue={
-                            profileDefaults.home_emergency_name ?? ''
-                        }
+                        defaultValue={profileDefaults.home_emergency_name ?? ''}
                     />
                 </Field>
                 <Field
@@ -905,7 +982,10 @@ export default function EmployeeProfileFormFields({
                     >
                         <option value="">Select organisation</option>
                         {organisations.map((organisation) => (
-                            <option key={organisation.id} value={organisation.value}>
+                            <option
+                                key={organisation.id}
+                                value={organisation.value}
+                            >
                                 {organisation.name}
                             </option>
                         ))}
@@ -951,10 +1031,18 @@ export default function EmployeeProfileFormFields({
                         className={fieldClass}
                     >
                         <option value="">Select highest education</option>
-                        <option value="Less than High School">Less than High School</option>
-                        <option value="High School/Diploma">High School/Diploma</option>
-                        <option value="Technical/Vocational Certificate">Technical/Vocational Certificate</option>
-                        <option value="Bachelors Degree">Bachelors Degree</option>
+                        <option value="Less than High School">
+                            Less than High School
+                        </option>
+                        <option value="High School/Diploma">
+                            High School/Diploma
+                        </option>
+                        <option value="Technical/Vocational Certificate">
+                            Technical/Vocational Certificate
+                        </option>
+                        <option value="Bachelors Degree">
+                            Bachelors Degree
+                        </option>
                         <option value="Masters Degree">Masters Degree</option>
                         <option value="Doctorate">Doctorate</option>
                         {profileDefaults.highest_education &&
@@ -966,7 +1054,9 @@ export default function EmployeeProfileFormFields({
                                 'Masters Degree',
                                 'Doctorate',
                             ].includes(profileDefaults.highest_education) && (
-                                <option value={profileDefaults.highest_education}>
+                                <option
+                                    value={profileDefaults.highest_education}
+                                >
                                     {profileDefaults.highest_education}
                                 </option>
                             )}

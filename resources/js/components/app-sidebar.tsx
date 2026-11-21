@@ -30,15 +30,16 @@ import { index as documentTypesIndex } from '@/actions/App/Http/Controllers/Docu
 import { index as employeesIndex } from '@/actions/App/Http/Controllers/Employees/EmployeeController';
 import { index as employeeManagersIndex } from '@/actions/App/Http/Controllers/Employees/EmployeeManagerController';
 import { index as ideasIndex } from '@/actions/App/Http/Controllers/IdeaController';
-import { index as leavePoliciesIndex } from '@/actions/App/Http/Controllers/Leave/LeavePolicyController';
+import { index as festivalsIndex } from '@/actions/App/Http/Controllers/Leave/FestivalController';
 import { index as leaveBalancesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveBalanceController';
 import { index as leaveHistoriesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveHistoryController';
+import { index as leavePoliciesIndex } from '@/actions/App/Http/Controllers/Leave/LeavePolicyController';
 import { index as leaveRequestsIndex } from '@/actions/App/Http/Controllers/Leave/LeaveRequestController';
+import { index as leaveTemplatesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveTemplateController';
 import { index as leaveTypesIndex } from '@/actions/App/Http/Controllers/Leave/LeaveTypeController';
+import { index as departmentsIndex } from '@/actions/App/Http/Controllers/Organisation/DepartmentController';
 import { index as officeLocationsIndex } from '@/actions/App/Http/Controllers/Organisation/OfficeLocationController';
 import { index as organisationsIndex } from '@/actions/App/Http/Controllers/Organisation/OrganisationController';
-import { index as departmentsIndex } from '@/actions/App/Http/Controllers/Organisation/DepartmentController';
-import { index as festivalsIndex } from '@/actions/App/Http/Controllers/Leave/FestivalController';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import {
@@ -183,6 +184,11 @@ const mainNavItems: NavItem[] = [
                 title: 'Leave types',
                 href: leaveTypesIndex(),
                 icon: CalendarDays,
+            },
+            {
+                title: 'Leave templates',
+                href: leaveTemplatesIndex(),
+                icon: FileStack,
             },
             {
                 title: 'Leave policies',

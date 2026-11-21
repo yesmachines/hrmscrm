@@ -36,6 +36,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $dob_passport
  * @property float|null $total_experience
  * @property string|null $highest_education
+ * @property string|null $signature_path
  */
 #[Fillable([
     'employee_id',
@@ -62,6 +63,7 @@ use Illuminate\Support\Carbon;
     'dob_passport',
     'total_experience',
     'highest_education',
+    'signature_path',
 ])]
 class EmployeeProfile extends Model
 {

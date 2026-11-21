@@ -16,6 +16,7 @@ import { useState, useId, useMemo, useEffect, useRef } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import HandoverTasksInput from '@/components/handover-tasks-input';
 import Heading from '@/components/heading';
+import LeaveTemplatePreview from '@/components/leave-template-preview';
 import LeaveTypeFields from '@/components/leave-type-fields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,8 +32,8 @@ import {
 } from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
-import { getLeavePolicyRequirements  } from '@/lib/leave-policy-requirements';
-import type {LeaveApplicationRequirements} from '@/lib/leave-policy-requirements';
+import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
+import type { LeaveApplicationRequirements } from '@/lib/leave-policy-requirements';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -122,7 +123,14 @@ interface Props {
     leaveBalances: LeaveBalanceItem[];
     activeLeaves?: ActiveLeaveItem[];
     festivals?: FestivalOption[];
-    compassionateRelationships: Record<string, { label: string; group: string; max_days: number }>;
+    leaveTemplates?: {
+        leave_type_id: number;
+        organisation_id: number | null;
+    }[];
+    compassionateRelationships: Record<
+        string,
+        { label: string; group: string; max_days: number }
+    >;
 }
 
 function dateOnly(value: string | null | undefined): string | null {
@@ -139,6 +147,7 @@ export default function LeaveRequestsCreate({
     leaveBalances = [],
     activeLeaves = [],
     festivals = [],
+    leaveTemplates = [],
 }: Props) {
     const now = new Date();
     const today = [
@@ -166,7 +175,16 @@ export default function LeaveRequestsCreate({
     const certificateInputRef = useRef<HTMLInputElement>(null);
     const submissionStatus = useRef<'applied' | 'approved'>('applied');
 
-    const { data, setData, post, transform, processing, errors, clearErrors, setError } = useForm({
+    const {
+        data,
+        setData,
+        post,
+        transform,
+        processing,
+        errors,
+        clearErrors,
+        setError,
+    } = useForm({
         employee_id: '',
         leave_type_id: '',
         request_type: 'fullday',
@@ -203,7 +221,13 @@ export default function LeaveRequestsCreate({
             const desig = emp.designation?.toLowerCase() ?? '';
             const dept = emp.department?.name?.toLowerCase() ?? '';
 
-            return name.includes(term) || code.includes(term) || num.includes(term) || desig.includes(term) || dept.includes(term);
+            return (
+                name.includes(term) ||
+                code.includes(term) ||
+                num.includes(term) ||
+                desig.includes(term) ||
+                dept.includes(term)
+            );
         });
     }, [employees, employeeSearch]);
 
@@ -221,13 +245,19 @@ export default function LeaveRequestsCreate({
         }
 
         const weekdays = countLeaveWeekdays(startDate, endDate);
-        const totalDays = data.request_type === 'fullday' ? String(weekdays) : '0.5';
+        const totalDays =
+            data.request_type === 'fullday' ? String(weekdays) : '0.5';
 
         if (data.total_days !== totalDays) {
             setData('total_days', totalDays);
         }
-
-    }, [data.start_date, data.end_date, data.request_type, data.total_days, setData]);
+    }, [
+        data.start_date,
+        data.end_date,
+        data.request_type,
+        data.total_days,
+        setData,
+    ]);
 
     // Find current balance for selected employee and leave type
     const selectedBalance = useMemo(() => {
@@ -238,7 +268,11 @@ export default function LeaveRequestsCreate({
         const empId = Number(data.employee_id);
         const typeId = Number(data.leave_type_id);
 
-        return leaveBalances.find((b) => b.employee_id === empId && b.leave_type_id === typeId) ?? null;
+        return (
+            leaveBalances.find(
+                (b) => b.employee_id === empId && b.leave_type_id === typeId,
+            ) ?? null
+        );
     }, [data.employee_id, data.leave_type_id, leaveBalances]);
 
     const selectedEmployee = useMemo(() => {
@@ -246,7 +280,10 @@ export default function LeaveRequestsCreate({
             return null;
         }
 
-        return employees.find((e) => String(e.id) === String(data.employee_id)) ?? null;
+        return (
+            employees.find((e) => String(e.id) === String(data.employee_id)) ??
+            null
+        );
     }, [data.employee_id, employees]);
 
     const clearPolicyDependentValues = () => {
@@ -289,7 +326,13 @@ export default function LeaveRequestsCreate({
         setEmployeeDropdownOpen(false);
         setActiveEmployeeIndex(0);
         setEmployeeSelectionError('');
-        clearErrors('employee_id', 'leave_type_id', 'start_date', 'end_date', 'total_days');
+        clearErrors(
+            'employee_id',
+            'leave_type_id',
+            'start_date',
+            'end_date',
+            'total_days',
+        );
     };
 
     const availableLeaveTypes = useMemo(() => {
@@ -297,14 +340,20 @@ export default function LeaveRequestsCreate({
             return [];
         }
 
-        return leaveTypes.filter((type) => type.eligible_employee_ids.includes(selectedEmployee.id));
+        return leaveTypes.filter((type) =>
+            type.eligible_employee_ids.includes(selectedEmployee.id),
+        );
     }, [selectedEmployee, leaveTypes]);
 
     useEffect(() => {
-        if (data.leave_type_id && !availableLeaveTypes.some((lt) => String(lt.id) === String(data.leave_type_id))) {
+        if (
+            data.leave_type_id &&
+            !availableLeaveTypes.some(
+                (lt) => String(lt.id) === String(data.leave_type_id),
+            )
+        ) {
             setData('leave_type_id', '');
         }
-
     }, [availableLeaveTypes, data.leave_type_id, setData]);
 
     const selectedLeaveType = useMemo(() => {
@@ -312,15 +361,62 @@ export default function LeaveRequestsCreate({
             return null;
         }
 
-        return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? null;
+        return (
+            availableLeaveTypes.find(
+                (lt) => String(lt.id) === String(data.leave_type_id),
+            ) ?? null
+        );
     }, [data.leave_type_id, availableLeaveTypes]);
+    const hasLeaveTemplate = Boolean(
+        selectedEmployee &&
+        selectedLeaveType &&
+        leaveTemplates.some(
+            (template) =>
+                template.leave_type_id === selectedLeaveType.id &&
+                (template.organisation_id === null ||
+                    template.organisation_id ===
+                        selectedEmployee.organisation_id),
+        ),
+    );
+    const templatePreviewValues = useMemo(
+        () => ({
+            start_date: data.start_date,
+            end_date: data.end_date,
+            request_type: data.request_type,
+            total_days: data.total_days,
+            remarks: data.remarks,
+            local_contact_no: data.local_contact_no,
+            traveling_outside_country: data.traveling_outside_country,
+            destination: data.destination,
+            travel_contact_no: data.travel_contact_no,
+            ticket_status: data.ticket_status,
+            handover_person_id: data.handover_person_id,
+            handover_description: data.handover_description,
+        }),
+        [
+            data.destination,
+            data.end_date,
+            data.handover_description,
+            data.handover_person_id,
+            data.local_contact_no,
+            data.remarks,
+            data.request_type,
+            data.start_date,
+            data.ticket_status,
+            data.total_days,
+            data.travel_contact_no,
+            data.traveling_outside_country,
+        ],
+    );
     const detailFields = selectedLeaveType?.field_definitions ?? [];
     const eligibleFestivals = useMemo(() => {
         if (!selectedEmployee) {
             return [];
         }
 
-        return festivals.filter((festival) => festival.eligible_employee_ids.includes(selectedEmployee.id));
+        return festivals.filter((festival) =>
+            festival.eligible_employee_ids.includes(selectedEmployee.id),
+        );
     }, [festivals, selectedEmployee]);
 
     const selectedPolicy = useMemo(() => {
@@ -328,9 +424,13 @@ export default function LeaveRequestsCreate({
             return null;
         }
 
-        return selectedLeaveType.policies?.find(
-            (policy) => Number(policy.organisation_id) === Number(selectedEmployee?.organisation_id),
-        ) ?? null;
+        return (
+            selectedLeaveType.policies?.find(
+                (policy) =>
+                    Number(policy.organisation_id) ===
+                    Number(selectedEmployee?.organisation_id),
+            ) ?? null
+        );
     }, [selectedEmployee, selectedLeaveType]);
 
     const { requiresAttachment, requiresHandover } = getLeavePolicyRequirements(
@@ -341,7 +441,12 @@ export default function LeaveRequestsCreate({
         selectedLeaveType?.application_requirements,
     );
     const eligibilityPayload = useMemo(() => {
-        if (!selectedEmployee || !selectedLeaveType || !data.start_date || !data.end_date) {
+        if (
+            !selectedEmployee ||
+            !selectedLeaveType ||
+            !data.start_date ||
+            !data.end_date
+        ) {
             return null;
         }
 
@@ -400,34 +505,49 @@ export default function LeaveRequestsCreate({
                 headers: {
                     Accept: 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
+                    'X-CSRF-TOKEN':
+                        document.querySelector<HTMLMetaElement>(
+                            'meta[name="csrf-token"]',
+                        )?.content ?? '',
                 },
                 body: leaveValidationFormData(eligibilityPayload),
-            }).then(async (response) => {
-                if (!response.ok && response.status !== 422) {
-                    throw new Error('Unable to validate the leave request.');
-                }
+            })
+                .then(async (response) => {
+                    if (!response.ok && response.status !== 422) {
+                        throw new Error(
+                            'Unable to validate the leave request.',
+                        );
+                    }
 
-                const result = await response.json() as { valid: boolean; errors?: Record<string, string[]> };
+                    const result = (await response.json()) as {
+                        valid: boolean;
+                        errors?: Record<string, string[]>;
+                    };
 
-                if (controller.signal.aborted) {
-                    return;
-                }
+                    if (controller.signal.aborted) {
+                        return;
+                    }
 
-                clearErrors();
+                    clearErrors();
 
-                if (!result.valid && result.errors) {
-                    for (const [field, messages] of Object.entries(result.errors)) {
-                        if (messages[0]) {
-                            setError(field as keyof typeof data, messages[0]);
+                    if (!result.valid && result.errors) {
+                        for (const [field, messages] of Object.entries(
+                            result.errors,
+                        )) {
+                            if (messages[0]) {
+                                setError(
+                                    field as keyof typeof data,
+                                    messages[0],
+                                );
+                            }
                         }
                     }
-                }
-            }).catch((error: unknown) => {
-                if (error instanceof Error && error.name !== 'AbortError') {
-                    console.error(error);
-                }
-            });
+                })
+                .catch((error: unknown) => {
+                    if (error instanceof Error && error.name !== 'AbortError') {
+                        console.error(error);
+                    }
+                });
         }, 300);
 
         return () => {
@@ -446,7 +566,6 @@ export default function LeaveRequestsCreate({
 
             clearErrors('certificate');
         }
-
     }, [clearErrors, data.certificate, requiresAttachment, setData]);
 
     useEffect(() => {
@@ -461,12 +580,20 @@ export default function LeaveRequestsCreate({
 
             clearErrors('handover_person_id', 'handover_description');
         }
-
-    }, [clearErrors, data.handover_description, data.handover_person_id, requiresHandover, setData]);
+    }, [
+        clearErrors,
+        data.handover_description,
+        data.handover_person_id,
+        requiresHandover,
+        setData,
+    ]);
 
     useEffect(() => {
         if (selectedLeaveType) {
-            setData('status', selectedLeaveType.requires_approval ? 'applied' : 'approved');
+            setData(
+                'status',
+                selectedLeaveType.requires_approval ? 'applied' : 'approved',
+            );
         }
     }, [selectedLeaveType, setData]);
 
@@ -489,25 +616,39 @@ export default function LeaveRequestsCreate({
         }
 
         return activeLeaves.some((leave) => {
-            if (leave.employee_id !== empId || !['applied', 'approved'].includes(leave.status)) {
+            if (
+                leave.employee_id !== empId ||
+                !['applied', 'approved'].includes(leave.status)
+            ) {
                 return false;
             }
 
             const leaveStart = dateOnly(leave.start_date);
             const leaveEnd = dateOnly(leave.end_date);
 
-            return leaveStart !== null && leaveEnd !== null && leaveStart <= requestEnd && leaveEnd >= requestStart;
+            return (
+                leaveStart !== null &&
+                leaveEnd !== null &&
+                leaveStart <= requestEnd &&
+                leaveEnd >= requestStart
+            );
         });
     };
 
-    const hasApplicantOverlap = selectedEmployee ? isEmployeeOnLeave(selectedEmployee.id) : false;
-    const isSelectedHandoverOnLeave = Boolean(data.handover_person_id) && isEmployeeOnLeave(Number(data.handover_person_id));
+    const hasApplicantOverlap = selectedEmployee
+        ? isEmployeeOnLeave(selectedEmployee.id)
+        : false;
+    const isSelectedHandoverOnLeave =
+        Boolean(data.handover_person_id) &&
+        isEmployeeOnLeave(Number(data.handover_person_id));
 
     useEffect(() => {
-        if (data.handover_person_id && String(data.employee_id) === String(data.handover_person_id)) {
+        if (
+            data.handover_person_id &&
+            String(data.employee_id) === String(data.handover_person_id)
+        ) {
             setData('handover_person_id', '');
         }
-
     }, [data.employee_id, data.handover_person_id, setData]);
 
     const submit = (e: React.FormEvent) => {
@@ -555,24 +696,34 @@ export default function LeaveRequestsCreate({
         }
 
         if (endDate < startDate) {
-            setError('end_date', 'End date must be on or after the start date.');
+            setError(
+                'end_date',
+                'End date must be on or after the start date.',
+            );
 
             return;
         }
 
         if (data.request_type !== 'fullday' && startDate !== endDate) {
-            setError('request_type', 'Half-day leave must start and end on the same date.');
+            setError(
+                'request_type',
+                'Half-day leave must start and end on the same date.',
+            );
 
             return;
         }
 
-        if (data.request_type !== 'fullday' && countLeaveWeekdays(startDate, startDate) === 0) {
+        if (
+            data.request_type !== 'fullday' &&
+            countLeaveWeekdays(startDate, startDate) === 0
+        ) {
             setError('request_type', 'Half-day leave must be on a weekday.');
 
             return;
         }
 
-        const totalDays = data.request_type === 'fullday' ? Number(data.total_days) : 0.5;
+        const totalDays =
+            data.request_type === 'fullday' ? Number(data.total_days) : 0.5;
 
         if (!Number.isFinite(totalDays) || totalDays < 0.5) {
             setError('total_days', 'Leave duration must be at least 0.5 days.');
@@ -581,52 +732,94 @@ export default function LeaveRequestsCreate({
         }
 
         if (hasApplicantOverlap) {
-            setError('start_date', 'This employee already has an applied or approved leave request overlapping these dates.');
+            setError(
+                'start_date',
+                'This employee already has an applied or approved leave request overlapping these dates.',
+            );
 
             return;
         }
 
-        const policyRequirements = getLeavePolicyRequirements(selectedPolicy, totalDays, startDate, endDate, selectedLeaveType?.application_requirements);
+        const policyRequirements = getLeavePolicyRequirements(
+            selectedPolicy,
+            totalDays,
+            startDate,
+            endDate,
+            selectedLeaveType?.application_requirements,
+        );
 
         if (policyRequirements.requiresHandover && !data.handover_person_id) {
-            setError('handover_person_id', 'A handover colleague is required by this leave policy.');
+            setError(
+                'handover_person_id',
+                'A handover colleague is required by this leave policy.',
+            );
 
             return;
         }
 
-        if (data.handover_person_id && Number(data.handover_person_id) === selectedEmployee.id) {
-            setError('handover_person_id', 'You cannot select the employee themselves as the handover colleague.');
+        if (
+            data.handover_person_id &&
+            Number(data.handover_person_id) === selectedEmployee.id
+        ) {
+            setError(
+                'handover_person_id',
+                'You cannot select the employee themselves as the handover colleague.',
+            );
 
             return;
         }
 
-        if (data.handover_person_id && isEmployeeOnLeave(Number(data.handover_person_id))) {
-            setError('handover_person_id', 'The selected handover colleague is on leave during these dates.');
+        if (
+            data.handover_person_id &&
+            isEmployeeOnLeave(Number(data.handover_person_id))
+        ) {
+            setError(
+                'handover_person_id',
+                'The selected handover colleague is on leave during these dates.',
+            );
 
             return;
         }
 
-        if (policyRequirements.requiresHandover && !hasHandoverTasks(data.handover_description)) {
-            setError('handover_description', 'Add at least one handover task as required by this leave policy.');
+        if (
+            policyRequirements.requiresHandover &&
+            !hasHandoverTasks(data.handover_description)
+        ) {
+            setError(
+                'handover_description',
+                'Add at least one handover task as required by this leave policy.',
+            );
 
             return;
         }
 
         if (policyRequirements.requiresAttachment && !data.certificate) {
-            setError('certificate', 'A supporting document is required by this leave policy.');
+            setError(
+                'certificate',
+                'A supporting document is required by this leave policy.',
+            );
 
             return;
         }
 
-        if (data.certificate && (data.certificate.size > 10 * 1024 * 1024 || !/\.(pdf|jpe?g|png|docx?)$/i.test(data.certificate.name))) {
-            setError('certificate', 'Choose a PDF, JPG, PNG, DOC or DOCX file no larger than 10 MB.');
+        if (
+            data.certificate &&
+            (data.certificate.size > 10 * 1024 * 1024 ||
+                !/\.(pdf|jpe?g|png|docx?)$/i.test(data.certificate.name))
+        ) {
+            setError(
+                'certificate',
+                'Choose a PDF, JPG, PNG, DOC or DOCX file no larger than 10 MB.',
+            );
 
             return;
         }
 
         transform((formData) => ({
             ...formData,
-            handover_description: normalizeHandoverDescription(formData.handover_description),
+            handover_description: normalizeHandoverDescription(
+                formData.handover_description,
+            ),
             status: submissionStatus.current,
         }));
         post('/leave-requests');
@@ -636,7 +829,7 @@ export default function LeaveRequestsCreate({
         <>
             <Head title="Apply Leave for Employee" />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1200px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1200px]">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" size="icon" asChild>
                         <Link href="/leave-requests">
@@ -652,16 +845,27 @@ export default function LeaveRequestsCreate({
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     {/* Main Form */}
                     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm lg:col-span-2">
-                        <form onSubmit={submit} noValidate className="space-y-6">
+                        <form
+                            onSubmit={submit}
+                            noValidate
+                            className="space-y-6"
+                        >
                             {/* Employee Selection */}
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor={employeeSelectId} className="flex items-center gap-1.5 font-medium">
+                                    <Label
+                                        htmlFor={employeeSelectId}
+                                        className="flex items-center gap-1.5 font-medium"
+                                    >
                                         <UserIcon className="size-4 text-primary" />
-                                        Select Employee <span className="text-destructive">*</span>
+                                        Select Employee{' '}
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
                                     </Label>
                                     <span className="text-xs text-muted-foreground">
-                                        {filteredEmployees.length} of {employees.length} available
+                                        {filteredEmployees.length} of{' '}
+                                        {employees.length} available
                                     </span>
                                 </div>
 
@@ -675,12 +879,18 @@ export default function LeaveRequestsCreate({
                                         aria-expanded={employeeDropdownOpen}
                                         aria-controls={employeeListboxId}
                                         aria-activedescendant={
-                                            employeeDropdownOpen && filteredEmployees[activeEmployeeIndex]
+                                            employeeDropdownOpen &&
+                                            filteredEmployees[
+                                                activeEmployeeIndex
+                                            ]
                                                 ? `${employeeListboxId}-option-${filteredEmployees[activeEmployeeIndex].id}`
                                                 : undefined
                                         }
                                         aria-required="true"
-                                        aria-invalid={Boolean(errors.employee_id || employeeSelectionError)}
+                                        aria-invalid={Boolean(
+                                            errors.employee_id ||
+                                            employeeSelectionError,
+                                        )}
                                         placeholder="Search and select an employee..."
                                         value={
                                             employeeDropdownOpen
@@ -694,7 +904,9 @@ export default function LeaveRequestsCreate({
                                             setActiveEmployeeIndex(0);
                                             setEmployeeDropdownOpen(true);
                                         }}
-                                        onBlur={() => setEmployeeDropdownOpen(false)}
+                                        onBlur={() =>
+                                            setEmployeeDropdownOpen(false)
+                                        }
                                         onChange={(e) => {
                                             setEmployeeSearch(e.target.value);
                                             setData('employee_id', '');
@@ -702,22 +914,45 @@ export default function LeaveRequestsCreate({
                                             clearPolicyDependentValues();
                                             setActiveEmployeeIndex(0);
                                             setEmployeeSelectionError('');
-                                            clearErrors('employee_id', 'leave_type_id', 'start_date', 'end_date', 'total_days');
+                                            clearErrors(
+                                                'employee_id',
+                                                'leave_type_id',
+                                                'start_date',
+                                                'end_date',
+                                                'total_days',
+                                            );
                                             setEmployeeDropdownOpen(true);
                                         }}
                                         onKeyDown={(e) => {
                                             if (e.key === 'ArrowDown') {
                                                 e.preventDefault();
                                                 setEmployeeDropdownOpen(true);
-                                                setActiveEmployeeIndex((index) =>
-                                                    Math.min(index + 1, Math.max(filteredEmployees.length - 1, 0)),
+                                                setActiveEmployeeIndex(
+                                                    (index) =>
+                                                        Math.min(
+                                                            index + 1,
+                                                            Math.max(
+                                                                filteredEmployees.length -
+                                                                    1,
+                                                                0,
+                                                            ),
+                                                        ),
                                                 );
                                             } else if (e.key === 'ArrowUp') {
                                                 e.preventDefault();
-                                                setActiveEmployeeIndex((index) => Math.max(index - 1, 0));
-                                            } else if (e.key === 'Enter' && employeeDropdownOpen) {
+                                                setActiveEmployeeIndex(
+                                                    (index) =>
+                                                        Math.max(index - 1, 0),
+                                                );
+                                            } else if (
+                                                e.key === 'Enter' &&
+                                                employeeDropdownOpen
+                                            ) {
                                                 e.preventDefault();
-                                                const employee = filteredEmployees[activeEmployeeIndex];
+                                                const employee =
+                                                    filteredEmployees[
+                                                        activeEmployeeIndex
+                                                    ];
 
                                                 if (employee) {
                                                     selectEmployee(employee);
@@ -731,7 +966,7 @@ export default function LeaveRequestsCreate({
                                     />
                                     <ChevronDown
                                         aria-hidden="true"
-                                        className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                                        className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
                                     />
 
                                     {employeeDropdownOpen && (
@@ -742,28 +977,56 @@ export default function LeaveRequestsCreate({
                                             className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-input bg-popover p-1 text-popover-foreground shadow-md"
                                         >
                                             {filteredEmployees.length > 0 ? (
-                                                filteredEmployees.map((emp, index) => (
-                                                    <button
-                                                        key={emp.id}
-                                                        id={`${employeeListboxId}-option-${emp.id}`}
-                                                        type="button"
-                                                        role="option"
-                                                        aria-selected={String(emp.id) === data.employee_id}
-                                                        tabIndex={-1}
-                                                        onMouseDown={(e) => e.preventDefault()}
-                                                        onMouseEnter={() => setActiveEmployeeIndex(index)}
-                                                        onClick={() => selectEmployee(emp)}
-                                                        className={`w-full rounded-sm px-3 py-2 text-left text-sm ${
-                                                            index === activeEmployeeIndex
-                                                                ? 'bg-accent text-accent-foreground'
-                                                                : 'hover:bg-accent hover:text-accent-foreground'
-                                                        }`}
-                                                    >
-                                                        {emp.user?.name ?? 'Unknown'} ({emp.employee_code || emp.emp_num})
-                                                        {emp.designation ? ` - ${emp.designation}` : ''}
-                                                        {emp.department?.name ? ` [${emp.department.name}]` : ''}
-                                                    </button>
-                                                ))
+                                                filteredEmployees.map(
+                                                    (emp, index) => (
+                                                        <button
+                                                            key={emp.id}
+                                                            id={`${employeeListboxId}-option-${emp.id}`}
+                                                            type="button"
+                                                            role="option"
+                                                            aria-selected={
+                                                                String(
+                                                                    emp.id,
+                                                                ) ===
+                                                                data.employee_id
+                                                            }
+                                                            tabIndex={-1}
+                                                            onMouseDown={(e) =>
+                                                                e.preventDefault()
+                                                            }
+                                                            onMouseEnter={() =>
+                                                                setActiveEmployeeIndex(
+                                                                    index,
+                                                                )
+                                                            }
+                                                            onClick={() =>
+                                                                selectEmployee(
+                                                                    emp,
+                                                                )
+                                                            }
+                                                            className={`w-full rounded-sm px-3 py-2 text-left text-sm ${
+                                                                index ===
+                                                                activeEmployeeIndex
+                                                                    ? 'bg-accent text-accent-foreground'
+                                                                    : 'hover:bg-accent hover:text-accent-foreground'
+                                                            }`}
+                                                        >
+                                                            {emp.user?.name ??
+                                                                'Unknown'}{' '}
+                                                            (
+                                                            {emp.employee_code ||
+                                                                emp.emp_num}
+                                                            )
+                                                            {emp.designation
+                                                                ? ` - ${emp.designation}`
+                                                                : ''}
+                                                            {emp.department
+                                                                ?.name
+                                                                ? ` [${emp.department.name}]`
+                                                                : ''}
+                                                        </button>
+                                                    ),
+                                                )
                                             ) : (
                                                 <p className="px-3 py-2 text-sm text-muted-foreground">
                                                     No employees found.
@@ -772,35 +1035,51 @@ export default function LeaveRequestsCreate({
                                         </div>
                                     )}
                                 </div>
-                                {(errors.employee_id || employeeSelectionError) && (
+                                {(errors.employee_id ||
+                                    employeeSelectionError) && (
                                     <p className="text-sm text-destructive">
-                                        {errors.employee_id || employeeSelectionError}
+                                        {errors.employee_id ||
+                                            employeeSelectionError}
                                     </p>
                                 )}
                             </div>
 
                             {/* Leave Type Selection */}
                             <div className="space-y-2">
-                                <Label htmlFor={leaveTypeSelectId} className="flex items-center gap-1.5 font-medium">
+                                <Label
+                                    htmlFor={leaveTypeSelectId}
+                                    className="flex items-center gap-1.5 font-medium"
+                                >
                                     <Calendar className="size-4 text-primary" />
-                                    Leave Type <span className="text-destructive">*</span>
+                                    Leave Type{' '}
+                                    <span className="text-destructive">*</span>
                                 </Label>
                                 <select
                                     id={leaveTypeSelectId}
                                     value={data.leave_type_id}
                                     onChange={(e) => {
                                         clearPolicyDependentValues();
-                                        setData('leave_type_id', e.target.value);
+                                        setData(
+                                            'leave_type_id',
+                                            e.target.value,
+                                        );
                                         clearErrors('leave_type_id');
                                     }}
                                     disabled={!selectedEmployee}
-                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                                     required
                                 >
-                                    <option value="">{selectedEmployee ? '-- Choose Leave Type --' : 'Select an employee first'}</option>
+                                    <option value="">
+                                        {selectedEmployee
+                                            ? '-- Choose Leave Type --'
+                                            : 'Select an employee first'}
+                                    </option>
                                     {availableLeaveTypes.map((type) => {
                                         return (
-                                            <option key={type.id} value={type.id}>
+                                            <option
+                                                key={type.id}
+                                                value={type.id}
+                                            >
                                                 {type.leave_name}
                                             </option>
                                         );
@@ -808,11 +1087,15 @@ export default function LeaveRequestsCreate({
                                 </select>
                                 {!selectedEmployee && (
                                     <p className="text-xs text-muted-foreground">
-                                        Select an employee first to load leave types and the policy for their organisation.
+                                        Select an employee first to load leave
+                                        types and the policy for their
+                                        organisation.
                                     </p>
                                 )}
                                 {errors.leave_type_id && (
-                                    <p className="text-sm text-destructive">{errors.leave_type_id}</p>
+                                    <p className="text-sm text-destructive">
+                                        {errors.leave_type_id}
+                                    </p>
                                 )}
                             </div>
 
@@ -825,21 +1108,43 @@ export default function LeaveRequestsCreate({
                                     setData(key, value);
                                     clearErrors(key, 'total_days');
 
-                                    if (key === 'traveling_outside_country' && value === '0') {
+                                    if (
+                                        key === 'traveling_outside_country' &&
+                                        value === '0'
+                                    ) {
                                         setData('destination', '');
                                         setData('travel_contact_no', '');
-                                        clearErrors('destination', 'travel_contact_no');
+                                        clearErrors(
+                                            'destination',
+                                            'travel_contact_no',
+                                        );
                                     }
                                 }}
                                 onFestivalDatesChange={(startDate, endDate) => {
                                     setData('start_date', startDate);
-                                    setData('end_date', data.request_type === 'fullday' ? endDate : startDate);
+                                    setData(
+                                        'end_date',
+                                        data.request_type === 'fullday'
+                                            ? endDate
+                                            : startDate,
+                                    );
                                     clearErrors('start_date', 'end_date');
                                 }}
                             />
 
+                            {selectedEmployee && selectedLeaveType && (
+                                <LeaveTemplatePreview
+                                    employeeId={selectedEmployee.id}
+                                    leaveTypeId={selectedLeaveType.id}
+                                    values={templatePreviewValues}
+                                    templateAvailable={hasLeaveTemplate}
+                                />
+                            )}
+
                             <div className="space-y-2">
-                                <Label htmlFor={requestTypeSelectId}>Leave duration type</Label>
+                                <Label htmlFor={requestTypeSelectId}>
+                                    Leave duration type
+                                </Label>
                                 <select
                                     id={requestTypeSelectId}
                                     value={data.request_type}
@@ -847,18 +1152,33 @@ export default function LeaveRequestsCreate({
                                         const requestType = e.target.value;
                                         setData('request_type', requestType);
 
-                                        if (requestType !== 'fullday' && data.start_date) {
-                                            setData('end_date', data.start_date);
+                                        if (
+                                            requestType !== 'fullday' &&
+                                            data.start_date
+                                        ) {
+                                            setData(
+                                                'end_date',
+                                                data.start_date,
+                                            );
                                         }
 
-                                        clearErrors('request_type', 'start_date', 'end_date', 'total_days');
+                                        clearErrors(
+                                            'request_type',
+                                            'start_date',
+                                            'end_date',
+                                            'total_days',
+                                        );
                                     }}
-                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                                     required
                                 >
                                     <option value="fullday">Full day</option>
-                                    <option value="firsthalf">First half</option>
-                                    <option value="secondhalf">Second half</option>
+                                    <option value="firsthalf">
+                                        First half
+                                    </option>
+                                    <option value="secondhalf">
+                                        Second half
+                                    </option>
                                 </select>
                                 {data.request_type !== 'fullday' && (
                                     <p className="text-xs text-muted-foreground">
@@ -866,7 +1186,9 @@ export default function LeaveRequestsCreate({
                                     </p>
                                 )}
                                 {errors.request_type && (
-                                    <p className="text-sm text-destructive">{errors.request_type}</p>
+                                    <p className="text-sm text-destructive">
+                                        {errors.request_type}
+                                    </p>
                                 )}
                             </div>
 
@@ -874,7 +1196,10 @@ export default function LeaveRequestsCreate({
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 <div className="space-y-2">
                                     <Label htmlFor={startDateId}>
-                                        Start Date <span className="text-destructive">*</span>
+                                        Start Date{' '}
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
                                     </Label>
                                     <FormattedDatePicker
                                         id={startDateId}
@@ -882,41 +1207,64 @@ export default function LeaveRequestsCreate({
                                         onChange={(value) => {
                                             setData('start_date', value);
 
-                                            if (data.request_type !== 'fullday') {
+                                            if (
+                                                data.request_type !== 'fullday'
+                                            ) {
                                                 setData('end_date', value);
                                             }
 
-                                            clearErrors('start_date', 'end_date', 'total_days');
+                                            clearErrors(
+                                                'start_date',
+                                                'end_date',
+                                                'total_days',
+                                            );
                                         }}
                                         required
                                     />
                                     {errors.start_date && (
-                                        <p className="text-sm text-destructive">{errors.start_date}</p>
+                                        <p className="text-sm text-destructive">
+                                            {errors.start_date}
+                                        </p>
                                     )}
                                 </div>
 
                                 <div className="space-y-2">
                                     <Label htmlFor={endDateId}>
-                                        End Date <span className="text-destructive">*</span>
+                                        End Date{' '}
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
                                     </Label>
                                     <FormattedDatePicker
                                         id={endDateId}
                                         min={data.start_date}
-                                        max={data.request_type === 'fullday' ? undefined : data.start_date}
+                                        max={
+                                            data.request_type === 'fullday'
+                                                ? undefined
+                                                : data.start_date
+                                        }
                                         value={data.end_date}
                                         onChange={(value) => {
                                             setData('end_date', value);
-                                            clearErrors('start_date', 'end_date', 'total_days');
+                                            clearErrors(
+                                                'start_date',
+                                                'end_date',
+                                                'total_days',
+                                            );
                                         }}
                                         required
                                     />
                                     {errors.end_date && (
-                                        <p className="text-sm text-destructive">{errors.end_date}</p>
+                                        <p className="text-sm text-destructive">
+                                            {errors.end_date}
+                                        </p>
                                     )}
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor={totalDaysId}>Total Days</Label>
+                                    <Label htmlFor={totalDaysId}>
+                                        Total Days
+                                    </Label>
                                     <Input
                                         id={totalDaysId}
                                         type="number"
@@ -925,31 +1273,54 @@ export default function LeaveRequestsCreate({
                                         className="cursor-default disabled:cursor-default disabled:opacity-100"
                                     />
                                     {errors.total_days && (
-                                        <p className="text-sm text-destructive">{errors.total_days}</p>
+                                        <p className="text-sm text-destructive">
+                                            {errors.total_days}
+                                        </p>
                                     )}
                                 </div>
                             </div>
 
                             {hasApplicantOverlap && (
-                                <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                                <div
+                                    role="alert"
+                                    className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+                                >
                                     <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                                    <span>This employee already has an applied or approved leave request overlapping these dates.</span>
+                                    <span>
+                                        This employee already has an applied or
+                                        approved leave request overlapping these
+                                        dates.
+                                    </span>
                                 </div>
                             )}
 
                             {/* Remarks / Reason */}
                             <div className="space-y-2">
-                                <Label htmlFor={remarksId}>Reason / Remarks{selectedLeaveType?.application_requirements.remarks_required ? ' *' : ''}</Label>
+                                <Label htmlFor={remarksId}>
+                                    Reason / Remarks
+                                    {selectedLeaveType?.application_requirements
+                                        .remarks_required
+                                        ? ' *'
+                                        : ''}
+                                </Label>
                                 <Textarea
                                     id={remarksId}
                                     rows={3}
                                     placeholder="Provide reason for leave, special authorization notes, or handover notes..."
                                     value={data.remarks}
-                                    required={selectedLeaveType?.application_requirements.remarks_required}
-                                    onChange={(e) => setData('remarks', e.target.value)}
+                                    required={
+                                        selectedLeaveType
+                                            ?.application_requirements
+                                            .remarks_required
+                                    }
+                                    onChange={(e) =>
+                                        setData('remarks', e.target.value)
+                                    }
                                 />
                                 {errors.remarks && (
-                                    <p className="text-sm text-destructive">{errors.remarks}</p>
+                                    <p className="text-sm text-destructive">
+                                        {errors.remarks}
+                                    </p>
                                 )}
                             </div>
 
@@ -962,7 +1333,9 @@ export default function LeaveRequestsCreate({
                                             <h4 className="text-sm font-semibold text-foreground">
                                                 Work Handover Details
                                                 {requiresHandover && (
-                                                    <span className="ml-1 text-destructive">*</span>
+                                                    <span className="ml-1 text-destructive">
+                                                        *
+                                                    </span>
                                                 )}
                                             </h4>
                                         </div>
@@ -975,66 +1348,113 @@ export default function LeaveRequestsCreate({
 
                                     {/* Handover Colleague Dropdown */}
                                     <div className="space-y-2">
-                                        <Label htmlFor={handoverPersonSelectId} className="flex items-center gap-1">
+                                        <Label
+                                            htmlFor={handoverPersonSelectId}
+                                            className="flex items-center gap-1"
+                                        >
                                             Handover Colleague
                                             {requiresHandover && (
-                                                <span className="text-destructive">*</span>
+                                                <span className="text-destructive">
+                                                    *
+                                                </span>
                                             )}
                                         </Label>
                                         <select
                                             id={handoverPersonSelectId}
-                                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                             value={data.handover_person_id}
                                             onChange={(e) => {
-                                                setData('handover_person_id', e.target.value);
-                                                clearErrors('handover_person_id');
+                                                setData(
+                                                    'handover_person_id',
+                                                    e.target.value,
+                                                );
+                                                clearErrors(
+                                                    'handover_person_id',
+                                                );
                                             }}
                                             required={requiresHandover}
                                         >
-                                            <option value="">Select colleague to handover work to...</option>
-                                            {candidateHandoverEmployees.map((emp) => {
-                                                const onLeave = isEmployeeOnLeave(emp.id);
+                                            <option value="">
+                                                Select colleague to handover
+                                                work to...
+                                            </option>
+                                            {candidateHandoverEmployees.map(
+                                                (emp) => {
+                                                    const onLeave =
+                                                        isEmployeeOnLeave(
+                                                            emp.id,
+                                                        );
 
-                                                return (
-                                                    <option key={emp.id} value={emp.id} disabled={onLeave}>
-                                                        {emp.user?.name ?? `Employee #${emp.id}`}
-                                                        {emp.designation ? ` (${emp.designation})` : ''}
-                                                        {onLeave ? ' — [On Leave during these dates]' : ''}
-                                                    </option>
-                                                );
-                                            })}
+                                                    return (
+                                                        <option
+                                                            key={emp.id}
+                                                            value={emp.id}
+                                                            disabled={onLeave}
+                                                        >
+                                                            {emp.user?.name ??
+                                                                `Employee #${emp.id}`}
+                                                            {emp.designation
+                                                                ? ` (${emp.designation})`
+                                                                : ''}
+                                                            {onLeave
+                                                                ? ' — [On Leave during these dates]'
+                                                                : ''}
+                                                        </option>
+                                                    );
+                                                },
+                                            )}
                                         </select>
 
                                         {isSelectedHandoverOnLeave && (
                                             <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
                                                 <AlertCircle className="size-4 shrink-0" />
-                                                <span>The selected handover colleague is also on leave during the requested dates. Please choose another employee.</span>
+                                                <span>
+                                                    The selected handover
+                                                    colleague is also on leave
+                                                    during the requested dates.
+                                                    Please choose another
+                                                    employee.
+                                                </span>
                                             </div>
                                         )}
 
                                         {errors.handover_person_id && (
-                                            <p className="text-sm text-destructive">{errors.handover_person_id}</p>
+                                            <p className="text-sm text-destructive">
+                                                {errors.handover_person_id}
+                                            </p>
                                         )}
                                     </div>
 
                                     {/* Handover Description */}
                                     <div className="space-y-2">
-                                        <Label htmlFor={handoverDescId} className="flex items-center gap-1">
+                                        <Label
+                                            htmlFor={handoverDescId}
+                                            className="flex items-center gap-1"
+                                        >
                                             Handover Tasks & Responsibilities
                                             {requiresHandover && (
-                                                <span className="text-destructive">*</span>
+                                                <span className="text-destructive">
+                                                    *
+                                                </span>
                                             )}
                                         </Label>
                                         <HandoverTasksInput
                                             idPrefix={handoverDescId}
                                             value={data.handover_description}
                                             onChange={(value) => {
-                                                setData('handover_description', value);
-                                                clearErrors('handover_description');
+                                                setData(
+                                                    'handover_description',
+                                                    value,
+                                                );
+                                                clearErrors(
+                                                    'handover_description',
+                                                );
                                             }}
                                         />
                                         {errors.handover_description && (
-                                            <p className="text-sm text-destructive">{errors.handover_description}</p>
+                                            <p className="text-sm text-destructive">
+                                                {errors.handover_description}
+                                            </p>
                                         )}
                                     </div>
                                 </div>
@@ -1043,9 +1463,15 @@ export default function LeaveRequestsCreate({
                             {/* Document / Certificate Attachment */}
                             {requiresAttachment && (
                                 <div className="space-y-2">
-                                    <Label htmlFor={certificateId} className="flex items-center gap-1.5">
+                                    <Label
+                                        htmlFor={certificateId}
+                                        className="flex items-center gap-1.5"
+                                    >
                                         <FileUp className="size-4 text-muted-foreground" />
-                                        Attachment / Certificate <span className="text-destructive">*</span>
+                                        Attachment / Certificate{' '}
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
                                     </Label>
                                     <Input
                                         ref={certificateInputRef}
@@ -1054,45 +1480,57 @@ export default function LeaveRequestsCreate({
                                         accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                         required
                                         onChange={(e) => {
-                                            const file = e.target.files?.[0] || null;
+                                            const file =
+                                                e.target.files?.[0] || null;
                                             setData('certificate', file);
                                             clearErrors('certificate');
                                         }}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                        Accepted formats: PDF, JPG, PNG, DOC, DOCX up to 10MB.
+                                        Accepted formats: PDF, JPG, PNG, DOC,
+                                        DOCX up to 10MB.
                                     </p>
                                     {errors.certificate && (
-                                        <p className="text-sm text-destructive">{errors.certificate}</p>
+                                        <p className="text-sm text-destructive">
+                                            {errors.certificate}
+                                        </p>
                                     )}
                                 </div>
                             )}
 
                             {/* Action Buttons */}
-                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+                            <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
                                 <Button variant="outline" type="button" asChild>
                                     <Link href="/leave-requests">Cancel</Link>
                                 </Button>
                                 <Button
                                     type="submit"
                                     variant="outline"
-                                    disabled={processing || isSelectedHandoverOnLeave}
+                                    disabled={
+                                        processing || isSelectedHandoverOnLeave
+                                    }
                                     onClick={() => {
                                         submissionStatus.current = 'applied';
                                     }}
                                 >
                                     <Send className="size-4" />
-                                    {processing ? 'Submitting...' : 'Apply Leave'}
+                                    {processing
+                                        ? 'Submitting...'
+                                        : 'Apply Leave'}
                                 </Button>
                                 <Button
                                     type="submit"
-                                    disabled={processing || isSelectedHandoverOnLeave}
+                                    disabled={
+                                        processing || isSelectedHandoverOnLeave
+                                    }
                                     onClick={() => {
                                         submissionStatus.current = 'approved';
                                     }}
                                 >
                                     <CheckCircle2 className="size-4" />
-                                    {processing ? 'Submitting...' : 'Apply & Approve Leave'}
+                                    {processing
+                                        ? 'Submitting...'
+                                        : 'Apply & Approve Leave'}
                                 </Button>
                             </div>
                         </form>
@@ -1103,29 +1541,48 @@ export default function LeaveRequestsCreate({
                         {/* Employee Card */}
                         {selectedEmployee && (
                             <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
-                                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                                <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                                     <UserIcon className="size-4 text-primary" />
                                     Employee Summary
                                 </h3>
                                 <div className="space-y-2 text-sm">
                                     <div>
-                                        <p className="text-xs text-muted-foreground">Name</p>
-                                        <p className="font-medium text-foreground">{selectedEmployee.user?.name ?? 'Unknown'}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Name
+                                        </p>
+                                        <p className="font-medium text-foreground">
+                                            {selectedEmployee.user?.name ??
+                                                'Unknown'}
+                                        </p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <p className="text-xs text-muted-foreground">Employee Code</p>
-                                            <p className="font-medium text-foreground">{selectedEmployee.employee_code || selectedEmployee.emp_num}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Employee Code
+                                            </p>
+                                            <p className="font-medium text-foreground">
+                                                {selectedEmployee.employee_code ||
+                                                    selectedEmployee.emp_num}
+                                            </p>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-muted-foreground">Department</p>
-                                            <p className="font-medium text-foreground">{selectedEmployee.department?.name || 'N/A'}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Department
+                                            </p>
+                                            <p className="font-medium text-foreground">
+                                                {selectedEmployee.department
+                                                    ?.name || 'N/A'}
+                                            </p>
                                         </div>
                                     </div>
                                     {selectedEmployee.designation && (
                                         <div>
-                                            <p className="text-xs text-muted-foreground">Designation</p>
-                                            <p className="font-medium text-foreground">{selectedEmployee.designation}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Designation
+                                            </p>
+                                            <p className="font-medium text-foreground">
+                                                {selectedEmployee.designation}
+                                            </p>
                                         </div>
                                     )}
                                 </div>
@@ -1134,62 +1591,100 @@ export default function LeaveRequestsCreate({
 
                         {/* Leave Balance Card */}
                         <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">
-                            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                                 <Calendar className="size-4 text-primary" />
-                                Leave Quota & Balance ({new Date().getFullYear()})
+                                Leave Quota & Balance (
+                                {new Date().getFullYear()})
                             </h3>
 
                             {selectedBalance ? (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-3 gap-2 text-center">
                                         <div className="rounded-lg bg-muted/40 p-2.5">
-                                            <p className="text-xs text-muted-foreground">Allocated</p>
-                                            <p className="text-lg font-bold text-foreground">{selectedBalance.allocated}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Allocated
+                                            </p>
+                                            <p className="text-lg font-bold text-foreground">
+                                                {selectedBalance.allocated}
+                                            </p>
                                         </div>
                                         <div className="rounded-lg bg-muted/40 p-2.5">
-                                            <p className="text-xs text-muted-foreground">Used</p>
-                                            <p className="text-lg font-bold text-amber-600">{selectedBalance.used}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Used
+                                            </p>
+                                            <p className="text-lg font-bold text-amber-600">
+                                                {selectedBalance.used}
+                                            </p>
                                         </div>
                                         <div className="rounded-lg bg-emerald-50 p-2.5">
-                                            <p className="text-xs text-emerald-700">Remaining</p>
-                                            <p className="text-lg font-bold text-emerald-700">{selectedBalance.balance}</p>
+                                            <p className="text-xs text-emerald-700">
+                                                Remaining
+                                            </p>
+                                            <p className="text-lg font-bold text-emerald-700">
+                                                {selectedBalance.balance}
+                                            </p>
                                         </div>
                                     </div>
 
-                                    {data.total_days && Number(data.total_days) > selectedBalance.balance && (
-                                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 flex items-start gap-2 text-amber-800 text-xs">
-                                            <AlertCircle className="size-4 shrink-0 text-amber-600 mt-0.5" />
-                                            <span>
-                                                Requested duration (<strong>{data.total_days} days</strong>) exceeds current remaining quota (<strong>{selectedBalance.balance} days</strong>).
-                                            </span>
-                                        </div>
-                                    )}
+                                    {data.total_days &&
+                                        Number(data.total_days) >
+                                            selectedBalance.balance && (
+                                            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                                                <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                                                <span>
+                                                    Requested duration (
+                                                    <strong>
+                                                        {data.total_days} days
+                                                    </strong>
+                                                    ) exceeds current remaining
+                                                    quota (
+                                                    <strong>
+                                                        {
+                                                            selectedBalance.balance
+                                                        }{' '}
+                                                        days
+                                                    </strong>
+                                                    ).
+                                                </span>
+                                            </div>
+                                        )}
                                 </div>
                             ) : data.employee_id && data.leave_type_id ? (
                                 <div className="rounded-lg bg-muted/30 p-4 text-center">
-                                    <Clock className="size-6 text-muted-foreground mx-auto mb-1 opacity-70" />
+                                    <Clock className="mx-auto mb-1 size-6 text-muted-foreground opacity-70" />
                                     <p className="text-xs text-muted-foreground">
-                                        No explicit balance allocation recorded for this employee and leave type in {new Date().getFullYear()}.
+                                        No explicit balance allocation recorded
+                                        for this employee and leave type in{' '}
+                                        {new Date().getFullYear()}.
                                     </p>
                                 </div>
                             ) : (
                                 <div className="rounded-lg bg-muted/30 p-4 text-center">
                                     <p className="text-xs text-muted-foreground">
-                                        Select both an employee and a leave type to preview available quota balance.
+                                        Select both an employee and a leave type
+                                        to preview available quota balance.
                                     </p>
                                 </div>
                             )}
 
                             {selectedLeaveType && (
-                                <div className="mt-4 pt-4 border-t border-border space-y-2 text-xs">
+                                <div className="mt-4 space-y-2 border-t border-border pt-4 text-xs">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Type:</span>
-                                        <span className="font-medium text-foreground">{selectedLeaveType.leave_name}</span>
+                                        <span className="text-muted-foreground">
+                                            Type:
+                                        </span>
+                                        <span className="font-medium text-foreground">
+                                            {selectedLeaveType.leave_name}
+                                        </span>
                                     </div>
                                     {requiresAttachment && (
-                                        <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 p-2 rounded mt-2">
+                                        <div className="mt-2 flex items-center gap-1.5 rounded bg-amber-50 p-2 text-amber-700">
                                             <ShieldAlert className="size-3.5 shrink-0" />
-                                            <span>Policy requires an attachment/certificate for this leave type.</span>
+                                            <span>
+                                                Policy requires an
+                                                attachment/certificate for this
+                                                leave type.
+                                            </span>
                                         </div>
                                     )}
                                 </div>
@@ -1201,25 +1696,33 @@ export default function LeaveRequestsCreate({
                                 <h3 className="text-sm font-semibold text-foreground">
                                     Policy Annual Limit
                                 </h3>
-                                {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined ? (
+                                {selectedPolicy?.annual_limit !== null &&
+                                selectedPolicy?.annual_limit !== undefined ? (
                                     <p className="mt-2 text-sm text-muted-foreground">
-                                        {selectedPolicy.annual_limit} days per year
+                                        {selectedPolicy.annual_limit} days per
+                                        year
                                     </p>
                                 ) : (
                                     <p className="mt-2 text-sm text-muted-foreground">
-                                        No annual limit configured for this organisation.
+                                        No annual limit configured for this
+                                        organisation.
                                     </p>
                                 )}
                             </div>
                         )}
 
                         {/* Audit Note */}
-                        <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-xs text-blue-900 flex items-start gap-2.5">
-                            <CheckCircle2 className="size-4 text-blue-600 shrink-0 mt-0.5" />
+                        <div className="flex items-start gap-2.5 rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-xs text-blue-900">
+                            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-blue-600" />
                             <div>
-                                <p className="font-semibold mb-0.5">HR Action Audit</p>
-                                <p className="text-blue-700 leading-relaxed">
-                                    Applying this leave on behalf of the employee will automatically be logged in the system leave history with your HR identity for transparency.
+                                <p className="mb-0.5 font-semibold">
+                                    HR Action Audit
+                                </p>
+                                <p className="leading-relaxed text-blue-700">
+                                    Applying this leave on behalf of the
+                                    employee will automatically be logged in the
+                                    system leave history with your HR identity
+                                    for transparency.
                                 </p>
                             </div>
                         </div>

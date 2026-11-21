@@ -7,6 +7,7 @@ use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User;
 use App\Support\SalesCrmRoles;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class CreateEmployee
@@ -88,6 +89,7 @@ class CreateEmployee
                 'dob_passport' => $profile['dob_passport'] ?? null,
                 'total_experience' => $profile['total_experience'] ?? null,
                 'highest_education' => $profile['highest_education'] ?? null,
+                'signature_path' => $profile['signature_path'] ?? null,
             ]);
 
             $sales->commit();
@@ -97,6 +99,10 @@ class CreateEmployee
         } catch (Throwable $exception) {
             $sales->rollBack();
             $hrms->rollBack();
+
+            if (! empty($profile['signature_path'])) {
+                Storage::disk('public')->delete($profile['signature_path']);
+            }
 
             throw $exception;
         }

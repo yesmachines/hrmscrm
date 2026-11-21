@@ -28,6 +28,10 @@ class UpdateEmployee
     ): Employee {
         $sales = DB::connection('salescrm');
         $hrms = DB::connection();
+        $previousSignaturePath = EmployeeProfile::query()
+            ->where('employee_id', $employee->id)
+            ->value('signature_path');
+        $newSignaturePath = $profile['signature_path'] ?? null;
 
         $sales->beginTransaction();
         $hrms->beginTransaction();
@@ -57,10 +61,22 @@ class UpdateEmployee
             $sales->commit();
             $hrms->commit();
 
+            if (
+                $newSignaturePath !== null
+                && $previousSignaturePath !== null
+                && $newSignaturePath !== $previousSignaturePath
+            ) {
+                Storage::disk('public')->delete($previousSignaturePath);
+            }
+
             return $employee->fresh(['user']) ?? $employee;
         } catch (Throwable $exception) {
             $sales->rollBack();
             $hrms->rollBack();
+
+            if ($newSignaturePath !== null && $newSignaturePath !== $previousSignaturePath) {
+                Storage::disk('public')->delete($newSignaturePath);
+            }
 
             throw $exception;
         }

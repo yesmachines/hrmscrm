@@ -14,6 +14,7 @@ import { useState, useId, useMemo, useEffect } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
 import HandoverTasksInput from '@/components/handover-tasks-input';
 import Heading from '@/components/heading';
+import LeaveTemplatePreview from '@/components/leave-template-preview';
 import LeaveTypeFields from '@/components/leave-type-fields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,8 +30,8 @@ import {
 } from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
-import { getLeavePolicyRequirements  } from '@/lib/leave-policy-requirements';
-import type {LeaveApplicationRequirements} from '@/lib/leave-policy-requirements';
+import { getLeavePolicyRequirements } from '@/lib/leave-policy-requirements';
+import type { LeaveApplicationRequirements } from '@/lib/leave-policy-requirements';
 import { dashboard } from '@/routes';
 
 interface EmployeeOption {
@@ -146,7 +147,14 @@ interface Props {
     leaveBalances: LeaveBalanceItem[];
     activeLeaves?: ActiveLeaveItem[];
     festivals?: FestivalOption[];
-    compassionateRelationships: Record<string, { label: string; group: string; max_days: number }>;
+    leaveTemplates?: {
+        leave_type_id: number;
+        organisation_id: number | null;
+    }[];
+    compassionateRelationships: Record<
+        string,
+        { label: string; group: string; max_days: number }
+    >;
 }
 
 export default function LeaveRequestsEdit({
@@ -156,6 +164,7 @@ export default function LeaveRequestsEdit({
     leaveBalances = [],
     activeLeaves = [],
     festivals = [],
+    leaveTemplates = [],
 }: Props) {
     const employeeSelectId = useId();
     const leaveTypeSelectId = useId();
@@ -172,7 +181,16 @@ export default function LeaveRequestsEdit({
 
     const [isCancelling, setIsCancelling] = useState(false);
 
-    const { data, setData, post, transform, processing, errors, clearErrors, setError } = useForm({
+    const {
+        data,
+        setData,
+        post,
+        transform,
+        processing,
+        errors,
+        clearErrors,
+        setError,
+    } = useForm({
         _method: 'PUT',
         employee_id: String(leaveRequest.employee_id),
         leave_type_id: String(leaveRequest.leave_type_id),
@@ -202,12 +220,21 @@ export default function LeaveRequestsEdit({
             const start = new Date(data.start_date);
             const end = new Date(data.end_date);
 
-            if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end >= start) {
-                const weekdays = countLeaveWeekdays(data.start_date, data.end_date);
-                setData('total_days', data.request_type === 'fullday' ? String(weekdays) : '0.5');
+            if (
+                !isNaN(start.getTime()) &&
+                !isNaN(end.getTime()) &&
+                end >= start
+            ) {
+                const weekdays = countLeaveWeekdays(
+                    data.start_date,
+                    data.end_date,
+                );
+                setData(
+                    'total_days',
+                    data.request_type === 'fullday' ? String(weekdays) : '0.5',
+                );
             }
         }
-
     }, [data.start_date, data.end_date, data.request_type, setData]);
 
     const selectedEmployee = useMemo(() => {
@@ -215,7 +242,11 @@ export default function LeaveRequestsEdit({
             return null;
         }
 
-        return employees.find((e) => String(e.id) === String(data.employee_id)) ?? leaveRequest.employee ?? null;
+        return (
+            employees.find((e) => String(e.id) === String(data.employee_id)) ??
+            leaveRequest.employee ??
+            null
+        );
     }, [data.employee_id, employees, leaveRequest.employee]);
 
     // Find current balance for selected employee and leave type
@@ -227,7 +258,11 @@ export default function LeaveRequestsEdit({
         const empId = Number(data.employee_id);
         const typeId = Number(data.leave_type_id);
 
-        return leaveBalances.find((b) => b.employee_id === empId && b.leave_type_id === typeId) ?? null;
+        return (
+            leaveBalances.find(
+                (b) => b.employee_id === empId && b.leave_type_id === typeId,
+            ) ?? null
+        );
     }, [data.employee_id, data.leave_type_id, leaveBalances]);
 
     const availableLeaveTypes = useMemo(() => {
@@ -235,7 +270,9 @@ export default function LeaveRequestsEdit({
             return leaveTypes;
         }
 
-        return leaveTypes.filter((type) => type.eligible_employee_ids.includes(selectedEmployee.id));
+        return leaveTypes.filter((type) =>
+            type.eligible_employee_ids.includes(selectedEmployee.id),
+        );
     }, [selectedEmployee, leaveTypes]);
 
     const selectedLeaveType = useMemo(() => {
@@ -243,8 +280,55 @@ export default function LeaveRequestsEdit({
             return null;
         }
 
-        return availableLeaveTypes.find((lt) => String(lt.id) === String(data.leave_type_id)) ?? leaveRequest.leave_type ?? null;
+        return (
+            availableLeaveTypes.find(
+                (lt) => String(lt.id) === String(data.leave_type_id),
+            ) ??
+            leaveRequest.leave_type ??
+            null
+        );
     }, [data.leave_type_id, availableLeaveTypes, leaveRequest.leave_type]);
+    const hasLeaveTemplate = Boolean(
+        selectedEmployee &&
+        selectedLeaveType &&
+        leaveTemplates.some(
+            (template) =>
+                template.leave_type_id === selectedLeaveType.id &&
+                (template.organisation_id === null ||
+                    template.organisation_id ===
+                        selectedEmployee.organisation_id),
+        ),
+    );
+    const templatePreviewValues = useMemo(
+        () => ({
+            start_date: data.start_date,
+            end_date: data.end_date,
+            request_type: data.request_type,
+            total_days: data.total_days,
+            remarks: data.remarks,
+            local_contact_no: data.local_contact_no,
+            traveling_outside_country: data.traveling_outside_country,
+            destination: data.destination,
+            travel_contact_no: data.travel_contact_no,
+            ticket_status: data.ticket_status,
+            handover_person_id: data.handover_person_id,
+            handover_description: data.handover_description,
+        }),
+        [
+            data.destination,
+            data.end_date,
+            data.handover_description,
+            data.handover_person_id,
+            data.local_contact_no,
+            data.remarks,
+            data.request_type,
+            data.start_date,
+            data.ticket_status,
+            data.total_days,
+            data.travel_contact_no,
+            data.traveling_outside_country,
+        ],
+    );
 
     const selectedPolicy = useMemo(() => {
         if (!selectedLeaveType || selectedEmployee?.organisation_id == null) {
@@ -252,19 +336,28 @@ export default function LeaveRequestsEdit({
         }
 
         const organisationPolicy = selectedLeaveType.policies?.find(
-            (policy) => Number(policy.organisation_id) === Number(selectedEmployee?.organisation_id),
+            (policy) =>
+                Number(policy.organisation_id) ===
+                Number(selectedEmployee?.organisation_id),
         );
 
         if (organisationPolicy) {
             return organisationPolicy;
         }
 
-        const isOriginalEmployee = selectedEmployee.id === leaveRequest.employee_id;
+        const isOriginalEmployee =
+            selectedEmployee.id === leaveRequest.employee_id;
 
-        return isOriginalEmployee && selectedLeaveType.id === leaveRequest.leave_type_id
-            ? selectedLeaveType.policy ?? null
+        return isOriginalEmployee &&
+            selectedLeaveType.id === leaveRequest.leave_type_id
+            ? (selectedLeaveType.policy ?? null)
             : null;
-    }, [leaveRequest.employee_id, leaveRequest.leave_type_id, selectedEmployee, selectedLeaveType]);
+    }, [
+        leaveRequest.employee_id,
+        leaveRequest.leave_type_id,
+        selectedEmployee,
+        selectedLeaveType,
+    ]);
 
     const detailFields = selectedLeaveType?.field_definitions ?? [];
     const eligibleFestivals = useMemo(() => {
@@ -272,7 +365,9 @@ export default function LeaveRequestsEdit({
             return [];
         }
 
-        return festivals.filter((festival) => festival.eligible_employee_ids.includes(selectedEmployee.id));
+        return festivals.filter((festival) =>
+            festival.eligible_employee_ids.includes(selectedEmployee.id),
+        );
     }, [festivals, selectedEmployee]);
     const isActiveRequest = ['applied', 'approved'].includes(data.status);
 
@@ -287,51 +382,54 @@ export default function LeaveRequestsEdit({
         isActiveRequest && policyRequirements.requiresAttachment;
     const requiresHandover =
         isActiveRequest && policyRequirements.requiresHandover;
-    const eligibilityPayload = useMemo(() => ({
-        employee_id: Number(data.employee_id),
-        leave_type_id: Number(data.leave_type_id),
-        request_type: data.request_type,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        total_days: data.total_days,
-        remarks: data.remarks,
-        due_date: data.due_date || null,
-        child_birth_date: data.child_birth_date || null,
-        handover_person_id: data.handover_person_id || null,
-        handover_description: data.handover_description || null,
-        festival_id: data.festival_id || null,
-        family_relationship: data.family_relationship || null,
-        local_contact_no: data.local_contact_no || null,
-        traveling_outside_country: data.traveling_outside_country || null,
-        destination: data.destination || null,
-        travel_contact_no: data.travel_contact_no || null,
-        ticket_status: data.ticket_status || null,
-        status: data.status,
-        certificate: data.certificate,
-        ignore_leave_request_id: leaveRequest.id,
-    }), [
-        data.child_birth_date,
-        data.certificate,
-        data.festival_id,
-        data.family_relationship,
-        data.local_contact_no,
-        data.traveling_outside_country,
-        data.destination,
-        data.travel_contact_no,
-        data.ticket_status,
-        data.due_date,
-        data.employee_id,
-        data.end_date,
-        data.handover_description,
-        data.handover_person_id,
-        data.leave_type_id,
-        data.request_type,
-        data.remarks,
-        data.start_date,
-        data.status,
-        data.total_days,
-        leaveRequest.id,
-    ]);
+    const eligibilityPayload = useMemo(
+        () => ({
+            employee_id: Number(data.employee_id),
+            leave_type_id: Number(data.leave_type_id),
+            request_type: data.request_type,
+            start_date: data.start_date,
+            end_date: data.end_date,
+            total_days: data.total_days,
+            remarks: data.remarks,
+            due_date: data.due_date || null,
+            child_birth_date: data.child_birth_date || null,
+            handover_person_id: data.handover_person_id || null,
+            handover_description: data.handover_description || null,
+            festival_id: data.festival_id || null,
+            family_relationship: data.family_relationship || null,
+            local_contact_no: data.local_contact_no || null,
+            traveling_outside_country: data.traveling_outside_country || null,
+            destination: data.destination || null,
+            travel_contact_no: data.travel_contact_no || null,
+            ticket_status: data.ticket_status || null,
+            status: data.status,
+            certificate: data.certificate,
+            ignore_leave_request_id: leaveRequest.id,
+        }),
+        [
+            data.child_birth_date,
+            data.certificate,
+            data.festival_id,
+            data.family_relationship,
+            data.local_contact_no,
+            data.traveling_outside_country,
+            data.destination,
+            data.travel_contact_no,
+            data.ticket_status,
+            data.due_date,
+            data.employee_id,
+            data.end_date,
+            data.handover_description,
+            data.handover_person_id,
+            data.leave_type_id,
+            data.request_type,
+            data.remarks,
+            data.start_date,
+            data.status,
+            data.total_days,
+            leaveRequest.id,
+        ],
+    );
     useEffect(() => {
         if (!eligibilityPayload.start_date || !eligibilityPayload.end_date) {
             return;
@@ -345,34 +443,49 @@ export default function LeaveRequestsEdit({
                 headers: {
                     Accept: 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
+                    'X-CSRF-TOKEN':
+                        document.querySelector<HTMLMetaElement>(
+                            'meta[name="csrf-token"]',
+                        )?.content ?? '',
                 },
                 body: leaveValidationFormData(eligibilityPayload),
-            }).then(async (response) => {
-                if (!response.ok && response.status !== 422) {
-                    throw new Error('Unable to validate the leave request.');
-                }
+            })
+                .then(async (response) => {
+                    if (!response.ok && response.status !== 422) {
+                        throw new Error(
+                            'Unable to validate the leave request.',
+                        );
+                    }
 
-                const result = await response.json() as { valid: boolean; errors?: Record<string, string[]> };
+                    const result = (await response.json()) as {
+                        valid: boolean;
+                        errors?: Record<string, string[]>;
+                    };
 
-                if (controller.signal.aborted) {
-                    return;
-                }
+                    if (controller.signal.aborted) {
+                        return;
+                    }
 
-                clearErrors();
+                    clearErrors();
 
-                if (!result.valid && result.errors) {
-                    for (const [field, messages] of Object.entries(result.errors)) {
-                        if (messages[0]) {
-                            setError(field as keyof typeof data, messages[0]);
+                    if (!result.valid && result.errors) {
+                        for (const [field, messages] of Object.entries(
+                            result.errors,
+                        )) {
+                            if (messages[0]) {
+                                setError(
+                                    field as keyof typeof data,
+                                    messages[0],
+                                );
+                            }
                         }
                     }
-                }
-            }).catch((error: unknown) => {
-                if (error instanceof Error && error.name !== 'AbortError') {
-                    console.error(error);
-                }
-            });
+                })
+                .catch((error: unknown) => {
+                    if (error instanceof Error && error.name !== 'AbortError') {
+                        console.error(error);
+                    }
+                });
         }, 300);
 
         return () => {
@@ -416,14 +529,22 @@ export default function LeaveRequestsEdit({
         }
 
         return map;
-    }, [data.start_date, data.end_date, candidateHandoverEmployees, activeLeaves]);
+    }, [
+        data.start_date,
+        data.end_date,
+        candidateHandoverEmployees,
+        activeLeaves,
+    ]);
 
     const isHandoverPersonConflicted = useMemo(() => {
         if (!data.handover_person_id) {
             return false;
         }
 
-        return handoverAvailabilityMap.get(Number(data.handover_person_id)) === true;
+        return (
+            handoverAvailabilityMap.get(Number(data.handover_person_id)) ===
+            true
+        );
     }, [data.handover_person_id, handoverAvailabilityMap]);
 
     function handleSubmit(e: React.FormEvent) {
@@ -431,26 +552,45 @@ export default function LeaveRequestsEdit({
 
         clearErrors();
 
-        if (data.request_type !== 'fullday' && data.start_date !== data.end_date) {
-            setError('request_type', 'Half-day leave must start and end on the same date.');
+        if (
+            data.request_type !== 'fullday' &&
+            data.start_date !== data.end_date
+        ) {
+            setError(
+                'request_type',
+                'Half-day leave must start and end on the same date.',
+            );
 
             return;
         }
 
-        if (data.request_type !== 'fullday' && countLeaveWeekdays(data.start_date, data.start_date) === 0) {
+        if (
+            data.request_type !== 'fullday' &&
+            countLeaveWeekdays(data.start_date, data.start_date) === 0
+        ) {
             setError('request_type', 'Half-day leave must be on a weekday.');
 
             return;
         }
 
-        if (data.request_type === 'fullday' && countLeaveWeekdays(data.start_date, data.end_date) === 0) {
-            setError('total_days', 'Selected dates do not include any weekdays.');
+        if (
+            data.request_type === 'fullday' &&
+            countLeaveWeekdays(data.start_date, data.end_date) === 0
+        ) {
+            setError(
+                'total_days',
+                'Selected dates do not include any weekdays.',
+            );
 
             return;
         }
 
         for (const field of detailFields) {
-            if (isActiveRequest && isLeaveFieldRequired(field, data) && !data[field.key]) {
+            if (
+                isActiveRequest &&
+                isLeaveFieldRequired(field, data) &&
+                !data[field.key]
+            ) {
                 setError(field.key, `${field.label} is required.`);
 
                 return;
@@ -458,53 +598,92 @@ export default function LeaveRequestsEdit({
         }
 
         if (isActiveRequest && requiresHandover && !data.handover_person_id) {
-            setError('handover_person_id', 'A handover colleague is required by this leave policy.');
+            setError(
+                'handover_person_id',
+                'A handover colleague is required by this leave policy.',
+            );
 
             return;
         }
 
-        if (isActiveRequest && requiresHandover && !hasHandoverTasks(data.handover_description)) {
-            setError('handover_description', 'Add at least one handover task as required by this leave policy.');
+        if (
+            isActiveRequest &&
+            requiresHandover &&
+            !hasHandoverTasks(data.handover_description)
+        ) {
+            setError(
+                'handover_description',
+                'Add at least one handover task as required by this leave policy.',
+            );
 
             return;
         }
 
         if (isActiveRequest && requiresHandover && isHandoverPersonConflicted) {
-            setError('handover_person_id', 'The selected handover colleague is on leave during these dates.');
+            setError(
+                'handover_person_id',
+                'The selected handover colleague is on leave during these dates.',
+            );
 
             return;
         }
 
-        if (isActiveRequest && requiresAttachment && !hasExistingAttachment && !data.certificate) {
-            setError('certificate', 'A supporting document is required by this leave policy.');
+        if (
+            isActiveRequest &&
+            requiresAttachment &&
+            !hasExistingAttachment &&
+            !data.certificate
+        ) {
+            setError(
+                'certificate',
+                'A supporting document is required by this leave policy.',
+            );
 
             return;
         }
 
-        if (data.certificate && (data.certificate.size > 10 * 1024 * 1024 || !/\.(pdf|jpe?g|png|docx?)$/i.test(data.certificate.name))) {
-            setError('certificate', 'Choose a PDF, JPG, PNG, DOC or DOCX file no larger than 10 MB.');
+        if (
+            data.certificate &&
+            (data.certificate.size > 10 * 1024 * 1024 ||
+                !/\.(pdf|jpe?g|png|docx?)$/i.test(data.certificate.name))
+        ) {
+            setError(
+                'certificate',
+                'Choose a PDF, JPG, PNG, DOC or DOCX file no larger than 10 MB.',
+            );
 
             return;
         }
 
         transform((formData) => ({
             ...formData,
-            handover_description: normalizeHandoverDescription(formData.handover_description),
+            handover_description: normalizeHandoverDescription(
+                formData.handover_description,
+            ),
         }));
         post(`/leave-requests/${leaveRequest.id}`);
     }
 
     function handleQuickCancel() {
-        if (confirm('Are you sure you want to cancel this leave request? If approved, any deducted balance will be refunded.')) {
+        if (
+            confirm(
+                'Are you sure you want to cancel this leave request? If approved, any deducted balance will be refunded.',
+            )
+        ) {
             setIsCancelling(true);
-            router.post(`/leave-requests/${leaveRequest.id}/cancel`, {}, {
-                onFinish: () => setIsCancelling(false),
-            });
+            router.post(
+                `/leave-requests/${leaveRequest.id}/cancel`,
+                {},
+                {
+                    onFinish: () => setIsCancelling(false),
+                },
+            );
         }
     }
 
     const wasApproved = leaveRequest.status === 'approved';
-    const daysDiff = Number(data.total_days || 0) - Number(leaveRequest.total_days || 0);
+    const daysDiff =
+        Number(data.total_days || 0) - Number(leaveRequest.total_days || 0);
 
     return (
         <>
@@ -549,26 +728,37 @@ export default function LeaveRequestsEdit({
                 {wasApproved && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-xs">
                         <div className="flex items-start gap-3">
-                            <AlertCircle className="size-5 shrink-0 text-amber-600 mt-0.5" />
+                            <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
                             <div>
-                                <h4 className="font-semibold text-sm">Approved Leave Balance Impact</h4>
-                                <p className="text-xs text-amber-800 mt-0.5">
-                                    This leave is currently <strong>Approved</strong> with <strong>{leaveRequest.total_days} days</strong> deducted.
+                                <h4 className="text-sm font-semibold">
+                                    Approved Leave Balance Impact
+                                </h4>
+                                <p className="mt-0.5 text-xs text-amber-800">
+                                    This leave is currently{' '}
+                                    <strong>Approved</strong> with{' '}
+                                    <strong>
+                                        {leaveRequest.total_days} days
+                                    </strong>{' '}
+                                    deducted.
                                     {data.status === 'cancelled' ? (
-                                        <span className="block mt-1 text-emerald-800 font-medium">
-                                            ✓ Changing status to Cancelled will immediately refund {leaveRequest.total_days} days back to the employee's balance.
+                                        <span className="mt-1 block font-medium text-emerald-800">
+                                            ✓ Changing status to Cancelled will
+                                            immediately refund{' '}
+                                            {leaveRequest.total_days} days back
+                                            to the employee's balance.
                                         </span>
                                     ) : daysDiff !== 0 ? (
-                                        <span className="block mt-1 font-medium">
-                                            {daysDiff > 0 ? (
-                                                `✓ Increasing duration will deduct an additional ${daysDiff} day(s) from balance.`
-                                            ) : (
-                                                `✓ Reducing duration will refund ${Math.abs(daysDiff)} day(s) back to balance.`
-                                            )}
+                                        <span className="mt-1 block font-medium">
+                                            {daysDiff > 0
+                                                ? `✓ Increasing duration will deduct an additional ${daysDiff} day(s) from balance.`
+                                                : `✓ Reducing duration will refund ${Math.abs(daysDiff)} day(s) back to balance.`}
                                         </span>
                                     ) : (
-                                        <span className="block mt-1 text-amber-700">
-                                            Any changes to the date range, days, or status will automatically recalculate and adjust the employee's quota balance.
+                                        <span className="mt-1 block text-amber-700">
+                                            Any changes to the date range, days,
+                                            or status will automatically
+                                            recalculate and adjust the
+                                            employee's quota balance.
                                         </span>
                                     )}
                                 </p>
@@ -583,29 +773,46 @@ export default function LeaveRequestsEdit({
                         <div className="space-y-6 lg:col-span-2">
                             {/* Employee and Status Card */}
                             <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
-                                <h3 className="mb-4 text-base font-semibold text-foreground flex items-center gap-2">
+                                <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground">
                                     <UserIcon className="size-4 text-primary" />
                                     Employee & Request Status
                                 </h3>
 
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <div>
-                                        <Label htmlFor={employeeSelectId}>Employee</Label>
+                                        <Label htmlFor={employeeSelectId}>
+                                            Employee
+                                        </Label>
                                         <select
                                             id={employeeSelectId}
                                             value={data.employee_id}
-                                            onChange={(e) => setData('employee_id', e.target.value)}
+                                            onChange={(e) =>
+                                                setData(
+                                                    'employee_id',
+                                                    e.target.value,
+                                                )
+                                            }
                                             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                             required
                                         >
                                             {employees.map((emp) => (
-                                                <option key={emp.id} value={emp.id}>
-                                                    {emp.user?.name ?? 'Unknown'} ({emp.employee_code ?? emp.emp_num})
+                                                <option
+                                                    key={emp.id}
+                                                    value={emp.id}
+                                                >
+                                                    {emp.user?.name ??
+                                                        'Unknown'}{' '}
+                                                    (
+                                                    {emp.employee_code ??
+                                                        emp.emp_num}
+                                                    )
                                                 </option>
                                             ))}
                                         </select>
                                         {errors.employee_id && (
-                                            <p className="mt-1 text-xs text-destructive">{errors.employee_id}</p>
+                                            <p className="mt-1 text-xs text-destructive">
+                                                {errors.employee_id}
+                                            </p>
                                         )}
                                     </div>
 
@@ -621,28 +828,48 @@ export default function LeaveRequestsEdit({
                                             setData(key, value);
                                             clearErrors(key);
                                         }}
-                                        onFestivalDatesChange={(startDate, endDate) => {
+                                        onFestivalDatesChange={(
+                                            startDate,
+                                            endDate,
+                                        ) => {
                                             setData('start_date', startDate);
                                             setData('end_date', endDate);
                                         }}
                                     />
 
                                     <div>
-                                        <Label htmlFor={statusSelectId}>Request Status</Label>
+                                        <Label htmlFor={statusSelectId}>
+                                            Request Status
+                                        </Label>
                                         <select
                                             id={statusSelectId}
                                             value={data.status}
-                                            onChange={(e) => setData('status', e.target.value)}
+                                            onChange={(e) =>
+                                                setData(
+                                                    'status',
+                                                    e.target.value,
+                                                )
+                                            }
                                             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                             required
                                         >
-                                            <option value="applied">Applied (Pending Review)</option>
-                                            <option value="approved">Approved (Deducts Balance)</option>
-                                            <option value="cancelled">Cancelled (Refunds Balance)</option>
-                                            <option value="rejected">Rejected (No Balance Deduction)</option>
+                                            <option value="applied">
+                                                Applied (Pending Review)
+                                            </option>
+                                            <option value="approved">
+                                                Approved (Deducts Balance)
+                                            </option>
+                                            <option value="cancelled">
+                                                Cancelled (Refunds Balance)
+                                            </option>
+                                            <option value="rejected">
+                                                Rejected (No Balance Deduction)
+                                            </option>
                                         </select>
                                         {errors.status && (
-                                            <p className="mt-1 text-xs text-destructive">{errors.status}</p>
+                                            <p className="mt-1 text-xs text-destructive">
+                                                {errors.status}
+                                            </p>
                                         )}
                                     </div>
                                 </div>
@@ -650,55 +877,88 @@ export default function LeaveRequestsEdit({
 
                             {/* Dates and Type Card */}
                             <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
-                                <h3 className="mb-4 text-base font-semibold text-foreground flex items-center gap-2">
+                                <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground">
                                     <Calendar className="size-4 text-primary" />
                                     Leave Type & Duration
                                 </h3>
 
                                 <div className="space-y-4">
                                     <div>
-                                        <Label htmlFor={leaveTypeSelectId}>Leave Type</Label>
+                                        <Label htmlFor={leaveTypeSelectId}>
+                                            Leave Type
+                                        </Label>
                                         <Input
                                             id={leaveTypeSelectId}
                                             type="text"
-                                            value={selectedLeaveType?.leave_name ?? 'Leave type unavailable'}
+                                            value={
+                                                selectedLeaveType?.leave_name ??
+                                                'Leave type unavailable'
+                                            }
                                             disabled
                                             className="mt-1.5 bg-muted text-muted-foreground"
                                         />
                                         {errors.leave_type_id && (
-                                            <p className="mt-1 text-xs text-destructive">{errors.leave_type_id}</p>
+                                            <p className="mt-1 text-xs text-destructive">
+                                                {errors.leave_type_id}
+                                            </p>
                                         )}
                                     </div>
 
                                     <div>
-                                        <Label htmlFor={requestTypeSelectId}>Leave duration type</Label>
+                                        <Label htmlFor={requestTypeSelectId}>
+                                            Leave duration type
+                                        </Label>
                                         <select
                                             id={requestTypeSelectId}
                                             value={data.request_type}
                                             onChange={(e) => {
-                                                const requestType = e.target.value;
-                                                setData('request_type', requestType);
+                                                const requestType =
+                                                    e.target.value;
+                                                setData(
+                                                    'request_type',
+                                                    requestType,
+                                                );
 
-                                                if (requestType !== 'fullday' && data.start_date) {
-                                                    setData('end_date', data.start_date);
+                                                if (
+                                                    requestType !== 'fullday' &&
+                                                    data.start_date
+                                                ) {
+                                                    setData(
+                                                        'end_date',
+                                                        data.start_date,
+                                                    );
                                                 }
 
-                                                clearErrors('request_type', 'start_date', 'end_date', 'total_days');
+                                                clearErrors(
+                                                    'request_type',
+                                                    'start_date',
+                                                    'end_date',
+                                                    'total_days',
+                                                );
                                             }}
                                             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                             required
                                         >
-                                            <option value="fullday">Full day</option>
-                                            <option value="firsthalf">First half</option>
-                                            <option value="secondhalf">Second half</option>
+                                            <option value="fullday">
+                                                Full day
+                                            </option>
+                                            <option value="firsthalf">
+                                                First half
+                                            </option>
+                                            <option value="secondhalf">
+                                                Second half
+                                            </option>
                                         </select>
                                         {data.request_type !== 'fullday' && (
                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                Half-day leave must cover one date only.
+                                                Half-day leave must cover one
+                                                date only.
                                             </p>
                                         )}
                                         {errors.request_type && (
-                                            <p className="mt-1 text-xs text-destructive">{errors.request_type}</p>
+                                            <p className="mt-1 text-xs text-destructive">
+                                                {errors.request_type}
+                                            </p>
                                         )}
                                     </div>
 
@@ -714,58 +974,114 @@ export default function LeaveRequestsEdit({
                                             setData(key, value);
                                             clearErrors(key, 'total_days');
 
-                                            if (key === 'traveling_outside_country' && value === '0') {
+                                            if (
+                                                key ===
+                                                    'traveling_outside_country' &&
+                                                value === '0'
+                                            ) {
                                                 setData('destination', '');
-                                                setData('travel_contact_no', '');
-                                                clearErrors('destination', 'travel_contact_no');
+                                                setData(
+                                                    'travel_contact_no',
+                                                    '',
+                                                );
+                                                clearErrors(
+                                                    'destination',
+                                                    'travel_contact_no',
+                                                );
                                             }
                                         }}
-                                        onFestivalDatesChange={(startDate, endDate) => {
+                                        onFestivalDatesChange={(
+                                            startDate,
+                                            endDate,
+                                        ) => {
                                             setData('start_date', startDate);
-                                            setData('end_date', data.request_type === 'fullday' ? endDate : startDate);
-                                            clearErrors('start_date', 'end_date');
+                                            setData(
+                                                'end_date',
+                                                data.request_type === 'fullday'
+                                                    ? endDate
+                                                    : startDate,
+                                            );
+                                            clearErrors(
+                                                'start_date',
+                                                'end_date',
+                                            );
                                         }}
                                     />
 
+                                    {selectedEmployee && selectedLeaveType && (
+                                        <LeaveTemplatePreview
+                                            employeeId={selectedEmployee.id}
+                                            leaveTypeId={selectedLeaveType.id}
+                                            values={templatePreviewValues}
+                                            templateAvailable={hasLeaveTemplate}
+                                        />
+                                    )}
+
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                         <div>
-                                            <Label htmlFor={startDateId}>Start Date</Label>
+                                            <Label htmlFor={startDateId}>
+                                                Start Date
+                                            </Label>
                                             <FormattedDatePicker
                                                 id={startDateId}
                                                 value={data.start_date}
                                                 onChange={(value) => {
-                                                    setData('start_date', value);
+                                                    setData(
+                                                        'start_date',
+                                                        value,
+                                                    );
 
-                                                    if (data.request_type !== 'fullday') {
-                                                        setData('end_date', value);
+                                                    if (
+                                                        data.request_type !==
+                                                        'fullday'
+                                                    ) {
+                                                        setData(
+                                                            'end_date',
+                                                            value,
+                                                        );
                                                     }
                                                 }}
                                                 className="mt-1.5"
                                                 required
                                             />
                                             {errors.start_date && (
-                                                <p className="mt-1 text-xs text-destructive">{errors.start_date}</p>
+                                                <p className="mt-1 text-xs text-destructive">
+                                                    {errors.start_date}
+                                                </p>
                                             )}
                                         </div>
 
                                         <div>
-                                            <Label htmlFor={endDateId}>End Date</Label>
+                                            <Label htmlFor={endDateId}>
+                                                End Date
+                                            </Label>
                                             <FormattedDatePicker
                                                 id={endDateId}
                                                 value={data.end_date}
                                                 min={data.start_date}
-                                                max={data.request_type === 'fullday' ? undefined : data.start_date}
-                                                onChange={(value) => setData('end_date', value)}
+                                                max={
+                                                    data.request_type ===
+                                                    'fullday'
+                                                        ? undefined
+                                                        : data.start_date
+                                                }
+                                                onChange={(value) =>
+                                                    setData('end_date', value)
+                                                }
                                                 className="mt-1.5"
                                                 required
                                             />
                                             {errors.end_date && (
-                                                <p className="mt-1 text-xs text-destructive">{errors.end_date}</p>
+                                                <p className="mt-1 text-xs text-destructive">
+                                                    {errors.end_date}
+                                                </p>
                                             )}
                                         </div>
 
                                         <div>
-                                            <Label htmlFor={totalDaysId}>Total Days</Label>
+                                            <Label htmlFor={totalDaysId}>
+                                                Total Days
+                                            </Label>
                                             <Input
                                                 id={totalDaysId}
                                                 type="number"
@@ -774,23 +1090,45 @@ export default function LeaveRequestsEdit({
                                                 className="mt-1.5 cursor-default font-semibold text-primary disabled:cursor-default disabled:opacity-100"
                                             />
                                             {errors.total_days && (
-                                                <p className="mt-1 text-xs text-destructive">{errors.total_days}</p>
+                                                <p className="mt-1 text-xs text-destructive">
+                                                    {errors.total_days}
+                                                </p>
                                             )}
                                         </div>
                                     </div>
 
                                     <div>
-                                        <Label htmlFor={remarksId}>HR Remarks / Reason{isActiveRequest && selectedLeaveType?.application_requirements.remarks_required ? ' *' : ''}</Label>
+                                        <Label htmlFor={remarksId}>
+                                            HR Remarks / Reason
+                                            {isActiveRequest &&
+                                            selectedLeaveType
+                                                ?.application_requirements
+                                                .remarks_required
+                                                ? ' *'
+                                                : ''}
+                                        </Label>
                                         <Textarea
                                             id={remarksId}
                                             value={data.remarks}
-                                            required={isActiveRequest && selectedLeaveType?.application_requirements.remarks_required}
-                                            onChange={(e) => setData('remarks', e.target.value)}
+                                            required={
+                                                isActiveRequest &&
+                                                selectedLeaveType
+                                                    ?.application_requirements
+                                                    .remarks_required
+                                            }
+                                            onChange={(e) =>
+                                                setData(
+                                                    'remarks',
+                                                    e.target.value,
+                                                )
+                                            }
                                             placeholder="Provide reason for editing or remarks..."
                                             className="mt-1.5 min-h-[80px]"
                                         />
                                         {errors.remarks && (
-                                            <p className="mt-1 text-xs text-destructive">{errors.remarks}</p>
+                                            <p className="mt-1 text-xs text-destructive">
+                                                {errors.remarks}
+                                            </p>
                                         )}
                                     </div>
                                 </div>
@@ -799,70 +1137,120 @@ export default function LeaveRequestsEdit({
                             {/* Handover Section */}
                             {requiresHandover && (
                                 <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
-                                    <h3 className="mb-2 text-base font-semibold text-foreground flex items-center gap-2">
+                                    <h3 className="mb-2 flex items-center gap-2 text-base font-semibold text-foreground">
                                         <Clock className="size-4 text-primary" />
                                         Handover / Delegation Details
                                     </h3>
                                     <p className="mb-4 text-xs text-muted-foreground">
-                                        Specify a colleague to take over duties during this leave period.
+                                        Specify a colleague to take over duties
+                                        during this leave period.
                                     </p>
 
                                     <div className="space-y-4">
                                         <div>
-                                            <Label htmlFor={handoverPersonSelectId}>
-                                                Handover Person <span className="ml-1 text-destructive">*</span>
+                                            <Label
+                                                htmlFor={handoverPersonSelectId}
+                                            >
+                                                Handover Person{' '}
+                                                <span className="ml-1 text-destructive">
+                                                    *
+                                                </span>
                                             </Label>
                                             <select
                                                 id={handoverPersonSelectId}
                                                 value={data.handover_person_id}
                                                 onChange={(e) => {
-                                                    setData('handover_person_id', e.target.value);
-                                                    clearErrors('handover_person_id');
+                                                    setData(
+                                                        'handover_person_id',
+                                                        e.target.value,
+                                                    );
+                                                    clearErrors(
+                                                        'handover_person_id',
+                                                    );
                                                 }}
                                                 required
                                                 className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                             >
-                                                <option value="">-- Select a handover person --</option>
-                                                {candidateHandoverEmployees.map((emp) => {
-                                                    const onLeave = handoverAvailabilityMap.get(emp.id) === true;
+                                                <option value="">
+                                                    -- Select a handover person
+                                                    --
+                                                </option>
+                                                {candidateHandoverEmployees.map(
+                                                    (emp) => {
+                                                        const onLeave =
+                                                            handoverAvailabilityMap.get(
+                                                                emp.id,
+                                                            ) === true;
 
-                                                    return (
-                                                        <option
-                                                            key={emp.id}
-                                                            value={emp.id}
-                                                            disabled={onLeave}
-                                                        >
-                                                            {emp.user?.name ?? 'Unknown'} ({emp.designation ?? 'Staff'}) {onLeave ? '— (On leave on these dates)' : ''}
-                                                        </option>
-                                                    );
-                                                })}
+                                                        return (
+                                                            <option
+                                                                key={emp.id}
+                                                                value={emp.id}
+                                                                disabled={
+                                                                    onLeave
+                                                                }
+                                                            >
+                                                                {emp.user
+                                                                    ?.name ??
+                                                                    'Unknown'}{' '}
+                                                                (
+                                                                {emp.designation ??
+                                                                    'Staff'}
+                                                                ){' '}
+                                                                {onLeave
+                                                                    ? '— (On leave on these dates)'
+                                                                    : ''}
+                                                            </option>
+                                                        );
+                                                    },
+                                                )}
                                             </select>
                                             {isHandoverPersonConflicted && (
-                                                <p className="mt-1 text-xs text-destructive font-medium flex items-center gap-1">
+                                                <p className="mt-1 flex items-center gap-1 text-xs font-medium text-destructive">
                                                     <AlertCircle className="size-3.5" />
-                                                    This colleague is also on leave during the requested dates. Please select someone else.
+                                                    This colleague is also on
+                                                    leave during the requested
+                                                    dates. Please select someone
+                                                    else.
                                                 </p>
                                             )}
                                             {errors.handover_person_id && (
-                                                <p className="mt-1 text-xs text-destructive">{errors.handover_person_id}</p>
+                                                <p className="mt-1 text-xs text-destructive">
+                                                    {errors.handover_person_id}
+                                                </p>
                                             )}
                                         </div>
 
                                         {data.handover_person_id && (
                                             <div>
                                                 <Label htmlFor={handoverDescId}>
-                                                    Handover Tasks & Instructions <span className="ml-1 text-destructive">*</span>
+                                                    Handover Tasks &
+                                                    Instructions{' '}
+                                                    <span className="ml-1 text-destructive">
+                                                        *
+                                                    </span>
                                                 </Label>
                                                 <HandoverTasksInput
                                                     idPrefix={handoverDescId}
-                                                    value={data.handover_description}
+                                                    value={
+                                                        data.handover_description
+                                                    }
                                                     onChange={(value) => {
-                                                        setData('handover_description', value);
-                                                        clearErrors('handover_description');
+                                                        setData(
+                                                            'handover_description',
+                                                            value,
+                                                        );
+                                                        clearErrors(
+                                                            'handover_description',
+                                                        );
                                                     }}
                                                 />
                                                 {errors.handover_description && (
-                                                    <p className="mt-1 text-xs text-destructive">{errors.handover_description}</p>
+                                                    <p className="mt-1 text-xs text-destructive">
+                                                        {
+                                                            errors.handover_description
+                                                        }
+                                                    </p>
                                                 )}
                                             </div>
                                         )}
@@ -875,7 +1263,7 @@ export default function LeaveRequestsEdit({
                         <div className="space-y-6">
                             {/* Current Leave Balance Widget */}
                             <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
-                                <h4 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+                                <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                                     <Clock className="size-4 text-muted-foreground" />
                                     Quota Balance Overview
                                 </h4>
@@ -883,21 +1271,32 @@ export default function LeaveRequestsEdit({
                                 {selectedBalance ? (
                                     <div className="space-y-3 rounded-lg bg-muted/40 p-4">
                                         <div className="flex justify-between text-xs">
-                                            <span className="text-muted-foreground">Allocated</span>
-                                            <span className="font-medium text-foreground">{selectedBalance.allocated} days</span>
+                                            <span className="text-muted-foreground">
+                                                Allocated
+                                            </span>
+                                            <span className="font-medium text-foreground">
+                                                {selectedBalance.allocated} days
+                                            </span>
                                         </div>
                                         <div className="flex justify-between text-xs">
-                                            <span className="text-muted-foreground">Used</span>
-                                            <span className="font-medium text-foreground">{selectedBalance.used} days</span>
+                                            <span className="text-muted-foreground">
+                                                Used
+                                            </span>
+                                            <span className="font-medium text-foreground">
+                                                {selectedBalance.used} days
+                                            </span>
                                         </div>
-                                        <div className="border-t border-border pt-2 flex justify-between text-sm font-bold">
+                                        <div className="flex justify-between border-t border-border pt-2 text-sm font-bold">
                                             <span>Current Balance</span>
-                                            <span className="text-primary">{selectedBalance.balance} days</span>
+                                            <span className="text-primary">
+                                                {selectedBalance.balance} days
+                                            </span>
                                         </div>
                                     </div>
                                 ) : (
                                     <p className="text-xs text-muted-foreground">
-                                        No balance record found for this employee and leave type.
+                                        No balance record found for this
+                                        employee and leave type.
                                     </p>
                                 )}
                             </div>
@@ -907,13 +1306,17 @@ export default function LeaveRequestsEdit({
                                     <h4 className="text-sm font-semibold text-foreground">
                                         Policy Annual Limit
                                     </h4>
-                                    {selectedPolicy?.annual_limit !== null && selectedPolicy?.annual_limit !== undefined ? (
+                                    {selectedPolicy?.annual_limit !== null &&
+                                    selectedPolicy?.annual_limit !==
+                                        undefined ? (
                                         <p className="mt-2 text-sm text-muted-foreground">
-                                            {selectedPolicy.annual_limit} days per year
+                                            {selectedPolicy.annual_limit} days
+                                            per year
                                         </p>
                                     ) : (
                                         <p className="mt-2 text-sm text-muted-foreground">
-                                            No annual limit configured for this organisation.
+                                            No annual limit configured for this
+                                            organisation.
                                         </p>
                                     )}
                                 </div>
@@ -922,50 +1325,68 @@ export default function LeaveRequestsEdit({
                             {/* Attachments / Certificate */}
                             {(requiresAttachment || hasExistingAttachment) && (
                                 <div className="rounded-xl border border-border bg-white p-6 shadow-xs">
-                                    <h4 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+                                    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                                         <FileUp className="size-4 text-muted-foreground" />
                                         Supporting Document
                                     </h4>
 
-                                    {leaveRequest.files && leaveRequest.files.length > 0 && (
-                                        <div className="mb-4 space-y-2">
-                                            <p className="text-xs text-muted-foreground font-medium">Existing Attachment:</p>
-                                            {leaveRequest.files.map((f) => (
-                                                <a
-                                                    key={f.id}
-                                                    href={`/storage/${f.file_path}`}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="flex items-center gap-2 rounded-md border border-border p-2 text-xs font-medium text-primary hover:underline"
-                                                >
-                                                    <FileText className="size-4" />
-                                                    View Uploaded Document
-                                                </a>
-                                            ))}
-                                        </div>
-                                    )}
+                                    {leaveRequest.files &&
+                                        leaveRequest.files.length > 0 && (
+                                            <div className="mb-4 space-y-2">
+                                                <p className="text-xs font-medium text-muted-foreground">
+                                                    Existing Attachment:
+                                                </p>
+                                                {leaveRequest.files.map((f) => (
+                                                    <a
+                                                        key={f.id}
+                                                        href={`/storage/${f.file_path}`}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="flex items-center gap-2 rounded-md border border-border p-2 text-xs font-medium text-primary hover:underline"
+                                                    >
+                                                        <FileText className="size-4" />
+                                                        View Uploaded Document
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        )}
 
                                     {requiresAttachment && (
                                         <div>
-                                            <Label htmlFor={certificateId} className="text-xs text-muted-foreground">
-                                                Upload Replacement or New Document
+                                            <Label
+                                                htmlFor={certificateId}
+                                                className="text-xs text-muted-foreground"
+                                            >
+                                                Upload Replacement or New
+                                                Document
                                                 {!hasExistingAttachment && (
-                                                    <span className="ml-1 text-destructive">*</span>
+                                                    <span className="ml-1 text-destructive">
+                                                        *
+                                                    </span>
                                                 )}
                                             </Label>
                                             <Input
                                                 id={certificateId}
                                                 type="file"
                                                 accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                                required={requiresAttachment && !hasExistingAttachment}
+                                                required={
+                                                    requiresAttachment &&
+                                                    !hasExistingAttachment
+                                                }
                                                 onChange={(e) => {
-                                                    setData('certificate', e.target.files?.[0] ?? null);
+                                                    setData(
+                                                        'certificate',
+                                                        e.target.files?.[0] ??
+                                                            null,
+                                                    );
                                                     clearErrors('certificate');
                                                 }}
                                                 className="mt-1.5 text-xs"
                                             />
                                             {errors.certificate && (
-                                                <p className="mt-1 text-xs text-destructive">{errors.certificate}</p>
+                                                <p className="mt-1 text-xs text-destructive">
+                                                    {errors.certificate}
+                                                </p>
                                             )}
                                         </div>
                                     )}
@@ -977,13 +1398,23 @@ export default function LeaveRequestsEdit({
                                 <Button
                                     type="submit"
                                     className="w-full"
-                                    disabled={processing || isHandoverPersonConflicted}
+                                    disabled={
+                                        processing || isHandoverPersonConflicted
+                                    }
                                 >
                                     <Save className="mr-2 size-4" />
-                                    {processing ? 'Saving...' : 'Save & Update Leave'}
+                                    {processing
+                                        ? 'Saving...'
+                                        : 'Save & Update Leave'}
                                 </Button>
-                                <Button variant="outline" asChild className="w-full">
-                                    <Link href="/leave-requests">Cancel & Discard</Link>
+                                <Button
+                                    variant="outline"
+                                    asChild
+                                    className="w-full"
+                                >
+                                    <Link href="/leave-requests">
+                                        Cancel & Discard
+                                    </Link>
                                 </Button>
                             </div>
                         </div>

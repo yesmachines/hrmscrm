@@ -53,6 +53,11 @@ class LeaveRequest extends Model
         return $this->hasMany(LeaveRequestFile::class);
     }
 
+    public function generatedFiles(): HasMany
+    {
+        return $this->hasMany(LeaveRequestGeneratedFile::class);
+    }
+
     public function details(): HasMany
     {
         return $this->hasMany(LeaveRequestDetail::class);

@@ -35,6 +35,16 @@ trait LeaveRequestValidationRules
                 'mimes:'.implode(',', config('params.leave_request.signature_mimes')),
                 'max:'.config('params.leave_request.signature_max_kb'),
             ],
+            'handover_giver_signature' => [
+                'nullable', 'image',
+                'mimes:'.implode(',', config('params.leave_request.signature_mimes')),
+                'max:'.config('params.leave_request.signature_max_kb'),
+            ],
+            'handover_receiver_signature' => [
+                'nullable', 'image',
+                'mimes:'.implode(',', config('params.leave_request.signature_mimes')),
+                'max:'.config('params.leave_request.signature_max_kb'),
+            ],
             'declaration' => ['nullable', 'string'],
         ];
 

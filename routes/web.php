@@ -21,6 +21,7 @@ use App\Http\Controllers\Leave\LeaveBalanceController;
 use App\Http\Controllers\Leave\LeaveHistoryController;
 use App\Http\Controllers\Leave\LeavePolicyController;
 use App\Http\Controllers\Leave\LeaveRequestController;
+use App\Http\Controllers\Leave\LeaveTemplateController;
 use App\Http\Controllers\Leave\LeaveTypeController;
 use App\Http\Controllers\Leave\WorkFromHomeController;
 use App\Http\Controllers\Organisation\DepartmentController;
@@ -86,8 +87,12 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
     Route::resource('festivals', FestivalController::class);
     Route::patch('festivals/{festival}/status', [FestivalController::class, 'updateStatus'])->name('festivals.update-status');
     Route::post('leave-requests/validate', [LeaveRequestController::class, 'validateForm'])->name('leave-requests.validate');
+    Route::post('leave-requests/template-preview', [LeaveRequestController::class, 'templatePreview'])->name('leave-requests.template-preview');
+    Route::get('leave-requests/{leave_request}/pdf', [LeaveRequestController::class, 'downloadPdf'])->name('leave-requests.pdf');
     Route::resource('leave-requests', LeaveRequestController::class)->only(['index', 'show', 'edit', 'update', 'create', 'store']);
     Route::post('leave-requests/{leave_request}/cancel', [LeaveRequestController::class, 'cancel'])->name('leave-requests.cancel');
+    Route::resource('leave-templates', LeaveTemplateController::class);
+    Route::patch('leave-templates/{leave_template}/status', [LeaveTemplateController::class, 'updateStatus'])->name('leave-templates.update-status');
     Route::middleware('role:hr,admin')->group(function () {
         Route::get('wfh-schedules', [WorkFromHomeController::class, 'index'])->name('wfh-schedules.index');
         Route::get('wfh-schedules/create', [WorkFromHomeController::class, 'create'])->name('wfh-schedules.create');
