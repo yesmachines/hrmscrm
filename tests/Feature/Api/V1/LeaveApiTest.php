@@ -1641,6 +1641,9 @@ test('applying leave fails if selected handover person is also on leave during r
         'start_date' => '2026-11-12',
         'end_date' => '2026-11-18',
         'total_days' => 6,
+        'local_contact_no' => '+971501234567',
+        'traveling_outside_country' => false,
+        'ticket_status' => 'no_ticket',
         'remarks' => 'Holiday vacation',
         'handover_person_id' => $colleague->id,
         'handover_description' => 'Handover sprint tasks',
@@ -1707,6 +1710,9 @@ test('applying leave succeeds when selected handover person is not on leave', fu
             'start_date' => '2026-11-12',
             'end_date' => '2026-11-18',
             'total_days' => 6,
+            'local_contact_no' => '+971501234567',
+            'traveling_outside_country' => false,
+            'ticket_status' => 'no_ticket',
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['handover_person_id']);
@@ -1716,6 +1722,9 @@ test('applying leave succeeds when selected handover person is not on leave', fu
         'start_date' => '2026-11-12',
         'end_date' => '2026-11-18',
         'total_days' => 6,
+        'local_contact_no' => '+971501234567',
+        'traveling_outside_country' => false,
+        'ticket_status' => 'no_ticket',
         'remarks' => 'Holiday vacation',
         'handover_person_id' => $colleague->id,
         'handover_description' => 'Handover sprint tasks to available colleague',

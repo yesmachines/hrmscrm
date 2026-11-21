@@ -25,7 +25,10 @@ import {
     hasHandoverTasks,
     normalizeHandoverDescription,
 } from '@/lib/handover-tasks';
-import { leaveValidationFormData } from '@/lib/leave-application';
+import {
+    isLeaveFieldRequired,
+    leaveValidationFormData,
+} from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
 import { getLeavePolicyRequirements  } from '@/lib/leave-policy-requirements';
@@ -179,6 +182,11 @@ export default function LeaveRequestsCreate({
         due_date: '',
         festival_id: '',
         family_relationship: '',
+        local_contact_no: '',
+        traveling_outside_country: '',
+        destination: '',
+        travel_contact_no: '',
+        ticket_status: '',
     });
 
     const filteredEmployees = useMemo(() => {
@@ -249,12 +257,28 @@ export default function LeaveRequestsCreate({
         setData('due_date', '');
         setData('festival_id', '');
         setData('family_relationship', '');
+        setData('local_contact_no', '');
+        setData('traveling_outside_country', '');
+        setData('destination', '');
+        setData('travel_contact_no', '');
+        setData('ticket_status', '');
 
         if (certificateInputRef.current) {
             certificateInputRef.current.value = '';
         }
 
-        clearErrors('certificate', 'handover_person_id', 'handover_description', 'child_birth_date', 'due_date');
+        clearErrors(
+            'certificate',
+            'handover_person_id',
+            'handover_description',
+            'child_birth_date',
+            'due_date',
+            'local_contact_no',
+            'traveling_outside_country',
+            'destination',
+            'travel_contact_no',
+            'ticket_status',
+        );
     };
 
     const selectEmployee = (employee: EmployeeOption) => {
@@ -333,6 +357,11 @@ export default function LeaveRequestsCreate({
             due_date: data.due_date || null,
             festival_id: data.festival_id || null,
             family_relationship: data.family_relationship || null,
+            local_contact_no: data.local_contact_no || null,
+            traveling_outside_country: data.traveling_outside_country || null,
+            destination: data.destination || null,
+            travel_contact_no: data.travel_contact_no || null,
+            ticket_status: data.ticket_status || null,
             handover_person_id: data.handover_person_id || null,
             handover_description: data.handover_description || null,
             certificate: data.certificate,
@@ -343,6 +372,11 @@ export default function LeaveRequestsCreate({
         data.due_date,
         data.festival_id,
         data.family_relationship,
+        data.local_contact_no,
+        data.traveling_outside_country,
+        data.destination,
+        data.travel_contact_no,
+        data.ticket_status,
         data.end_date,
         data.handover_description,
         data.handover_person_id,
@@ -498,7 +532,7 @@ export default function LeaveRequestsCreate({
         }
 
         for (const field of detailFields) {
-            if (field.required && !data[field.key]) {
+            if (isLeaveFieldRequired(field, data) && !data[field.key]) {
                 setError(field.key, `${field.label} is required.`);
 
                 return;
@@ -790,6 +824,12 @@ export default function LeaveRequestsCreate({
                                 onChange={(key, value) => {
                                     setData(key, value);
                                     clearErrors(key, 'total_days');
+
+                                    if (key === 'traveling_outside_country' && value === '0') {
+                                        setData('destination', '');
+                                        setData('travel_contact_no', '');
+                                        clearErrors('destination', 'travel_contact_no');
+                                    }
                                 }}
                                 onFestivalDatesChange={(startDate, endDate) => {
                                     setData('start_date', startDate);

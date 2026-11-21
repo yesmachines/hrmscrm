@@ -1,10 +1,15 @@
 import { useId } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type {
     LeaveDetailKey,
     LeaveDetailValues,
     LeaveFieldDefinition,
+} from '@/lib/leave-application';
+import {
+    isLeaveFieldRequired,
+    isLeaveFieldVisible,
 } from '@/lib/leave-application';
 
 interface FestivalOption {
@@ -35,16 +40,51 @@ export default function LeaveTypeFields({
 }: Props) {
     const id = useId();
 
-    return fields.map((field) => {
+    return fields.filter((field) => isLeaveFieldVisible(field, values)).map((field) => {
         const fieldId = `${id}-${field.key}`;
-        const required = active && field.required;
+        const required = active && isLeaveFieldRequired(field, values);
 
         return (
             <div key={field.key} className="space-y-2">
-                <Label htmlFor={fieldId}>
-                    {field.label}
-                    {required && <span className="text-destructive"> *</span>}
-                </Label>
+                {field.type === 'radio' ? (
+                    <fieldset>
+                        <legend className="text-sm font-medium">
+                            {field.label}
+                            {required && <span className="text-destructive"> *</span>}
+                        </legend>
+                        <div className="mt-2 flex flex-wrap gap-4">
+                            {Object.entries(field.options).map(([value, option]) => {
+                                const optionId = `${fieldId}-${value}`;
+                                const optionValue = option.value ?? value;
+
+                                return (
+                                    <label
+                                        key={value}
+                                        htmlFor={optionId}
+                                        className="flex items-center gap-2 text-sm"
+                                    >
+                                        <input
+                                            id={optionId}
+                                            type="radio"
+                                            name={fieldId}
+                                            value={optionValue}
+                                            checked={values[field.key] === optionValue}
+                                            required={required}
+                                            onChange={() => onChange(field.key, optionValue)}
+                                            className="size-4 accent-primary"
+                                        />
+                                        {option.label}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </fieldset>
+                ) : (
+                    <Label htmlFor={fieldId}>
+                        {field.label}
+                        {required && <span className="text-destructive"> *</span>}
+                    </Label>
+                )}
                 {field.type === 'date' ? (
                     <FormattedDatePicker
                         id={fieldId}
@@ -52,7 +92,15 @@ export default function LeaveTypeFields({
                         onChange={(value) => onChange(field.key, value)}
                         required={required}
                     />
-                ) : (
+                ) : field.type === 'text' || field.type === 'tel' ? (
+                    <Input
+                        id={fieldId}
+                        type={field.type}
+                        value={values[field.key]}
+                        required={required}
+                        onChange={(event) => onChange(field.key, event.target.value)}
+                    />
+                ) : field.type === 'radio' ? null : (
                     <select
                         id={fieldId}
                         value={values[field.key]}
@@ -86,7 +134,7 @@ export default function LeaveTypeFields({
                               ))
                             : Object.entries(field.options).map(
                                   ([key, option]) => (
-                                      <option key={key} value={key}>
+                                      <option key={key} value={option.value ?? key}>
                                           {option.label}
                                       </option>
                                   ),

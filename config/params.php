@@ -1,10 +1,6 @@
 <?php
 
 return [
-    'status' => [
-        1 => 'Active',
-        2 => 'Inactive',
-    ],
     'field_requires' => [
         'ref_number',  // document_number
         'expiry_date',
@@ -18,6 +14,16 @@ return [
         'parental_birth_window_months' => 6,
         'festival_name_match' => 'Festival',
         'special_rules' => [
+            'ANNUAL' => [
+                'validator' => 'annual',
+                'fields' => [
+                    'local_contact_no',
+                    'traveling_outside_country',
+                    'destination',
+                    'travel_contact_no',
+                    'ticket_status',
+                ],
+            ],
             'SICK' => [
                 // Includes holidays within the range and on the immediately adjacent calendar days.
                 'requires_holiday_document' => true,
@@ -56,6 +62,49 @@ return [
             ],
         ],
         'detail_fields' => [
+            'local_contact_no' => [
+                'label' => 'Local Contact Number',
+                'type' => 'tel',
+                'required' => true,
+                'rules' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/', 'max:25'],
+                'required_message' => 'A local contact number is required for Annual Leave.',
+            ],
+            'traveling_outside_country' => [
+                'label' => 'Travelling Outside Country',
+                'type' => 'radio',
+                'required' => true,
+                'rules' => ['nullable', 'boolean'],
+                'options_config' => 'params.leave_type.traveling_outside_country_options',
+                'required_message' => 'Please select whether you are travelling outside the country.',
+            ],
+            'destination' => [
+                'label' => 'Destination of Vacation',
+                'storage_label' => 'Destination of Vacation',
+                'type' => 'text',
+                'required' => false,
+                'required_if' => ['key' => 'traveling_outside_country', 'value' => '1'],
+                'visible_if' => ['key' => 'traveling_outside_country', 'value' => '1'],
+                'rules' => ['nullable', 'string', 'max:255'],
+                'help' => 'Required when travelling outside the country.',
+            ],
+            'travel_contact_no' => [
+                'label' => 'Contact Number at Destination',
+                'storage_label' => 'Destination Contact Number',
+                'type' => 'tel',
+                'required' => false,
+                'required_if' => ['key' => 'traveling_outside_country', 'value' => '1'],
+                'visible_if' => ['key' => 'traveling_outside_country', 'value' => '1'],
+                'rules' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/', 'max:25'],
+                'help' => 'Required when travelling outside the country.',
+            ],
+            'ticket_status' => [
+                'label' => 'Ticket',
+                'type' => 'radio',
+                'required' => true,
+                'rules' => ['nullable', 'in:ticket,no_ticket'],
+                'options_config' => 'params.leave_type.ticket_status_options',
+                'required_message' => 'Please select Ticket or No Ticket.',
+            ],
             'due_date' => [
                 'label' => 'Expected Due Date',
                 'type' => 'date',
@@ -99,6 +148,14 @@ return [
             'grandparent' => ['label' => 'Grandparent', 'group' => 'B', 'max_days' => 3],
             'grandchild' => ['label' => 'Grandchild', 'group' => 'B', 'max_days' => 3],
             'in_laws' => ['label' => 'In-laws', 'group' => 'B', 'max_days' => 3],
+        ],
+        'traveling_outside_country_options' => [
+            'yes' => ['value' => '1', 'label' => 'Yes'],
+            'no' => ['value' => '0', 'label' => 'No'],
+        ],
+        'ticket_status_options' => [
+            'ticket' => ['label' => 'Ticket'],
+            'no_ticket' => ['label' => 'No Ticket'],
         ],
         'gender_options' => [
             'male' => 'Male',

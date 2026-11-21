@@ -23,7 +23,10 @@ import {
     hasHandoverTasks,
     normalizeHandoverDescription,
 } from '@/lib/handover-tasks';
-import { leaveValidationFormData } from '@/lib/leave-application';
+import {
+    isLeaveFieldRequired,
+    leaveValidationFormData,
+} from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
 import { getLeavePolicyRequirements  } from '@/lib/leave-policy-requirements';
@@ -129,6 +132,11 @@ interface LeaveRequestItem {
     due_date?: string | null;
     festival_id?: string | null;
     family_relationship?: string | null;
+    local_contact_no?: string | null;
+    traveling_outside_country?: string | null;
+    destination?: string | null;
+    travel_contact_no?: string | null;
+    ticket_status?: string | null;
 }
 
 interface Props {
@@ -181,6 +189,11 @@ export default function LeaveRequestsEdit({
         due_date: leaveRequest.due_date ?? '',
         festival_id: leaveRequest.festival_id ?? '',
         family_relationship: leaveRequest.family_relationship ?? '',
+        local_contact_no: leaveRequest.local_contact_no ?? '',
+        traveling_outside_country: leaveRequest.traveling_outside_country ?? '',
+        destination: leaveRequest.destination ?? '',
+        travel_contact_no: leaveRequest.travel_contact_no ?? '',
+        ticket_status: leaveRequest.ticket_status ?? '',
     });
 
     // Calculate days between start and end date when dates change
@@ -288,6 +301,11 @@ export default function LeaveRequestsEdit({
         handover_description: data.handover_description || null,
         festival_id: data.festival_id || null,
         family_relationship: data.family_relationship || null,
+        local_contact_no: data.local_contact_no || null,
+        traveling_outside_country: data.traveling_outside_country || null,
+        destination: data.destination || null,
+        travel_contact_no: data.travel_contact_no || null,
+        ticket_status: data.ticket_status || null,
         status: data.status,
         certificate: data.certificate,
         ignore_leave_request_id: leaveRequest.id,
@@ -296,6 +314,11 @@ export default function LeaveRequestsEdit({
         data.certificate,
         data.festival_id,
         data.family_relationship,
+        data.local_contact_no,
+        data.traveling_outside_country,
+        data.destination,
+        data.travel_contact_no,
+        data.ticket_status,
         data.due_date,
         data.employee_id,
         data.end_date,
@@ -427,7 +450,7 @@ export default function LeaveRequestsEdit({
         }
 
         for (const field of detailFields) {
-            if (isActiveRequest && field.required && !data[field.key]) {
+            if (isActiveRequest && isLeaveFieldRequired(field, data) && !data[field.key]) {
                 setError(field.key, `${field.label} is required.`);
 
                 return;
@@ -690,6 +713,12 @@ export default function LeaveRequestsEdit({
                                         onChange={(key, value) => {
                                             setData(key, value);
                                             clearErrors(key, 'total_days');
+
+                                            if (key === 'traveling_outside_country' && value === '0') {
+                                                setData('destination', '');
+                                                setData('travel_contact_no', '');
+                                                clearErrors('destination', 'travel_contact_no');
+                                            }
                                         }}
                                         onFestivalDatesChange={(startDate, endDate) => {
                                             setData('start_date', startDate);

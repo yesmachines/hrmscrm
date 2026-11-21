@@ -252,6 +252,118 @@ test('admin and app requests persist JSON handover task lists', function (string
         ->toBe($description);
 })->with(['admin create', 'admin update', 'api create', 'api update']);
 
+test('Annual Leave fields are persisted by admin and API create flows', function (string $flow) {
+    $annual = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $annual->id,
+        'organisation_id' => $this->employee->organisation_id,
+        'allow_balance' => false,
+    ]);
+
+    $data = [
+        ...$this->data,
+        'leave_type_id' => $annual->id,
+        'local_contact_no' => '+971501234567',
+        'traveling_outside_country' => '1',
+        'destination' => 'London',
+        'travel_contact_no' => '+447700900123',
+        'ticket_status' => 'ticket',
+    ];
+    $response = $flow === 'admin'
+        ? $this->post(route('leave-requests.store'), $data)
+        : $this->postJson('/api/v1/leaves', $data);
+
+    if ($flow === 'admin') {
+        $response->assertRedirect()->assertSessionHasNoErrors();
+    } else {
+        $response->assertCreated();
+    }
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $this->employee->id)
+        ->where('leave_type_id', $annual->id)
+        ->firstOrFail();
+    expect($leaveRequest->details()->pluck('field_value', 'field_key')->all())
+        ->toMatchArray([
+            'local_contact_no' => '+971501234567',
+            'traveling_outside_country' => 'Yes',
+            'destination' => 'London',
+            'travel_contact_no' => '+447700900123',
+            'ticket_status' => 'ticket',
+        ]);
+
+    if ($flow === 'admin') {
+        $this->get(route('leave-requests.edit', $leaveRequest))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('leaveRequest.local_contact_no', '+971501234567')
+                ->where('leaveRequest.traveling_outside_country', '1')
+                ->where('leaveRequest.destination', 'London')
+                ->where('leaveRequest.travel_contact_no', '+447700900123')
+                ->where('leaveRequest.ticket_status', 'ticket'));
+    }
+})->with(['admin', 'api']);
+
+test('Annual Leave requires the local contact number', function () {
+    $annual = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $annual->id,
+        'organisation_id' => $this->employee->organisation_id,
+        'allow_balance' => false,
+    ]);
+
+    $this->postJson('/api/v1/leaves/validate', [
+        ...$this->data,
+        'leave_type_id' => $annual->id,
+    ])->assertUnprocessable()->assertJsonValidationErrors('local_contact_no');
+});
+
+test('API can mark Annual Leave as not travelling and removes destination details', function () {
+    $annual = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    LeavePolicy::query()->create([
+        'leave_type_id' => $annual->id,
+        'organisation_id' => $this->employee->organisation_id,
+        'allow_balance' => false,
+    ]);
+
+    $response = $this->postJson('/api/v1/leaves', [
+        ...$this->data,
+        'leave_type_id' => $annual->id,
+        'local_contact_no' => '+971501234567',
+        'traveling_outside_country' => true,
+        'destination' => 'London',
+        'travel_contact_no' => '+447700900123',
+        'ticket_status' => 'ticket',
+    ])->assertCreated();
+    $leaveRequestId = $response->json('data.id');
+
+    $this->patchJson('/api/v1/leaves/'.$leaveRequestId, [
+        'traveling_outside_country' => false,
+    ])->assertOk();
+
+    expect(LeaveRequest::query()->findOrFail($leaveRequestId)->details()->pluck('field_value', 'field_key')->all())
+        ->toMatchArray([
+            'local_contact_no' => '+971501234567',
+            'traveling_outside_country' => 'No',
+            'ticket_status' => 'ticket',
+        ])
+        ->not->toHaveKeys(['destination', 'travel_contact_no']);
+});
+
 test('handover uses a strict configurable threshold independent of documents', function (float $days, bool $required) {
     $this->policy->update(['requires_handover' => false, 'requires_document_after_days' => 10, 'requires_attachment' => true]);
     $this->getJson('/api/v1/leaves/meta')->assertOk()

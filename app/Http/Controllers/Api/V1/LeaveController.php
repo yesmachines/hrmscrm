@@ -339,7 +339,11 @@ class LeaveController extends Controller
                             description: 'JSON-encoded list of task strings, for example ["Cover inbox", "Review approvals"]. Legacy plain-text descriptions are still accepted.',
                         ),
                         new OA\Property(property: 'emergency_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
+                        new OA\Property(property: 'local_contact_no', type: 'string', description: 'Required for Annual Leave. Digits only, with an optional leading +.'),
+                        new OA\Property(property: 'traveling_outside_country', type: 'boolean', description: 'Required for Annual Leave. When true, destination and travel_contact_no are required.'),
+                        new OA\Property(property: 'destination', type: 'string', description: 'Destination of vacation; required for Annual Leave when travelling outside the country.'),
                         new OA\Property(property: 'travel_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
+                        new OA\Property(property: 'ticket_status', type: 'string', enum: ['ticket', 'no_ticket'], description: 'Required for Annual Leave.'),
                         new OA\Property(property: 'certificate', type: 'string', format: 'binary', description: 'Supporting document required by the leave policy. Sick Leave also requires it when an active holiday falls within the leave range or on the immediately preceding or following calendar day.'),
                         new OA\Property(property: 'files', type: 'array', items: new OA\Items(type: 'string', format: 'binary')),
                     ]
@@ -450,12 +454,14 @@ class LeaveController extends Controller
                 $details[] = ['field_name' => 'Emergency Contact No', 'field_key' => 'emergency_contact_no', 'field_value' => (string) $request->input('emergency_contact_no')];
             }
 
-            if (filter_var($request->input('traveling_outside_country'), FILTER_VALIDATE_BOOLEAN)) {
-                $details[] = ['field_name' => 'Traveling Outside Country', 'field_key' => 'traveling_outside_country', 'field_value' => 'Yes'];
-                $details[] = ['field_name' => 'Destination', 'field_key' => 'destination', 'field_value' => (string) $request->input('destination')];
-                $details[] = ['field_name' => 'Travel Contact No', 'field_key' => 'travel_contact_no', 'field_value' => (string) $request->input('travel_contact_no')];
-            } else {
-                $details[] = ['field_name' => 'Declaration Signed', 'field_key' => 'declaration_signed', 'field_value' => 'Yes'];
+            if ($leaveType->code !== 'ANNUAL') {
+                if (filter_var($request->input('traveling_outside_country'), FILTER_VALIDATE_BOOLEAN)) {
+                    $details[] = ['field_name' => 'Traveling Outside Country', 'field_key' => 'traveling_outside_country', 'field_value' => 'Yes'];
+                    $details[] = ['field_name' => 'Destination', 'field_key' => 'destination', 'field_value' => (string) $request->input('destination')];
+                    $details[] = ['field_name' => 'Travel Contact No', 'field_key' => 'travel_contact_no', 'field_value' => (string) $request->input('travel_contact_no')];
+                } else {
+                    $details[] = ['field_name' => 'Declaration Signed', 'field_key' => 'declaration_signed', 'field_value' => 'Yes'];
+                }
             }
 
             foreach ($details as $detail) {
@@ -686,7 +692,7 @@ class LeaveController extends Controller
 
             $validationService->syncLeaveTypeDetails($leaveRequest, $leaveType, $validationData);
 
-            if ($request->exists('traveling_outside_country')) {
+            if ($request->exists('traveling_outside_country') && $leaveType->code !== 'ANNUAL') {
                 if ($request->boolean('traveling_outside_country')) {
                     $this->updateLeaveRequestDetail($leaveRequest, 'traveling_outside_country', 'Traveling Outside Country', 'Yes');
                 } else {

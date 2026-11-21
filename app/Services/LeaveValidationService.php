@@ -125,16 +125,45 @@ class LeaveValidationService
             ]);
         }
 
+        $leaveRequest->loadMissing('leaveType');
         $details = $leaveRequest->details->pluck('field_value', 'field_key')->all();
+        $travelingOutsideCountry = filter_var(
+            $details['traveling_outside_country'] ?? false,
+            FILTER_VALIDATE_BOOLEAN,
+        );
+        $annualFields = config('params.leave_type.special_rules.ANNUAL.fields', []);
+        $hasAnnualFieldUpdates = array_intersect(array_keys($data), $annualFields) !== [];
 
-        return array_merge($details, [
+        $validationData = array_merge($details, [
             'leave_type_id' => $leaveRequest->leave_type_id,
             'start_date' => Carbon::parse($leaveRequest->start_date)->toDateString(),
             'end_date' => $leaveRequest->end_date !== null ? Carbon::parse($leaveRequest->end_date)->toDateString() : null,
             'request_type' => $leaveRequest->request_type ?? 'fullday',
             'remarks' => $leaveRequest->remarks,
-            'traveling_outside_country' => ($details['traveling_outside_country'] ?? null) === 'Yes',
+            'traveling_outside_country' => $travelingOutsideCountry,
         ], $data);
+
+        $validationData['_skip_annual_leave_required_fields'] = ! $hasAnnualFieldUpdates
+            && $leaveRequest->leaveType?->code === 'ANNUAL';
+
+        if (
+            $leaveRequest->leaveType?->code === 'ANNUAL'
+            && ! $hasAnnualFieldUpdates
+            && ! array_key_exists('traveling_outside_country', $details)
+        ) {
+            $validationData['traveling_outside_country'] = null;
+        }
+
+        if (
+            $leaveRequest->leaveType?->code === 'ANNUAL'
+            && array_key_exists('traveling_outside_country', $data)
+            && ! filter_var($data['traveling_outside_country'], FILTER_VALIDATE_BOOLEAN)
+        ) {
+            $validationData['destination'] = null;
+            $validationData['travel_contact_no'] = null;
+        }
+
+        return $validationData;
     }
 
     public function validatePolicyEligibility(
@@ -204,6 +233,7 @@ class LeaveValidationService
 
         $validator = $this->leaveTypeRules->definition($leaveType)['validator'] ?? null;
         match ($validator) {
+            'annual' => $this->validateAnnualLeave($data),
             'unpaid' => $this->validateUnpaidLeave($leaveType, $data),
             'compassionate' => $this->validateCompassionateLeave($data, $totalDays),
             'maternity' => $this->validateMaternityLeave($data),
@@ -239,6 +269,19 @@ class LeaveValidationService
         $values = [];
         foreach ($this->leaveTypeRules->fields($leaveType) as $key => $field) {
             $value = $data[$key] ?? null;
+            if (in_array($key, ['destination', 'travel_contact_no'], true)
+                && array_key_exists('traveling_outside_country', $data)
+                && ! filter_var($data['traveling_outside_country'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                continue;
+            }
+            if ($key === 'traveling_outside_country') {
+                $travelingOutsideCountry = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                if ($travelingOutsideCountry !== null) {
+                    $values[$key] = $travelingOutsideCountry ? 'Yes' : 'No';
+                }
+
+                continue;
+            }
             if ($field['type'] !== 'festival' && is_string($value) && trim($value) !== '') {
                 $values[$key] = $value;
             }
@@ -409,7 +452,7 @@ class LeaveValidationService
         if (! filter_var($data['traveling_outside_country'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             return;
         }
-        if (empty($data['destination'])) {
+        if (! is_string($data['destination'] ?? null) || trim($data['destination']) === '') {
             throw ValidationException::withMessages(['destination' => ['Travel destination is required when traveling outside the country.']]);
         }
         if (empty($data['travel_contact_no'])) {

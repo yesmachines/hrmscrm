@@ -13,6 +13,37 @@ use Illuminate\Validation\ValidationException;
 trait LeaveBusinessRules
 {
     /** @param array<string, mixed> $data */
+    private function validateAnnualLeave(array $data): void
+    {
+        if (($data['_skip_annual_leave_required_fields'] ?? false) === true) {
+            return;
+        }
+
+        $this->requiredDetail('local_contact_no', $data['local_contact_no'] ?? null);
+        $ticketStatus = $this->requiredDetail('ticket_status', $data['ticket_status'] ?? null);
+        if (! in_array($ticketStatus, ['ticket', 'no_ticket'], true)) {
+            throw ValidationException::withMessages([
+                'ticket_status' => ['Please select Ticket or No Ticket.'],
+            ]);
+        }
+
+        $travelingOutsideCountry = $data['traveling_outside_country'] ?? null;
+        if (! array_key_exists('traveling_outside_country', $data)
+            || $travelingOutsideCountry === null
+            || $travelingOutsideCountry === '') {
+            throw ValidationException::withMessages([
+                'traveling_outside_country' => ['Please select whether you are travelling outside the country.'],
+            ]);
+        }
+
+        if (filter_var($travelingOutsideCountry, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === null) {
+            throw ValidationException::withMessages([
+                'traveling_outside_country' => ['Please select a valid travel option.'],
+            ]);
+        }
+    }
+
+    /** @param array<string, mixed> $data */
     private function validateUnpaidLeave(LeaveType $leaveType, array $data): void
     {
         if (($this->leaveTypeRules->definition($leaveType)['remarks_required'] ?? false)

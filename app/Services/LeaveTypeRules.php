@@ -74,7 +74,7 @@ class LeaveTypeRules
     }
 
     /**
-     * @return list<array{key: string, label: string, type: string, required: bool, help: string|null, options: array<string, array{label: string, group: string, max_days: int}>}>
+     * @return list<array{key: string, label: string, type: string, required: bool, help: string|null, options: array<string, array{label: string, group?: string, max_days?: int, value?: string}>|object, required_if?: array{key: string, value: string}, visible_if?: array{key: string, value: string}}>
      */
     public function fieldDefinitions(LeaveType $leaveType): array
     {
@@ -88,7 +88,10 @@ class LeaveTypeRules
                 'help' => isset($field['help'])
                     ? str_replace(':months', (string) config('params.leave_type.parental_birth_window_months'), $field['help'])
                     : null,
-                'options' => isset($field['options_config']) ? config($field['options_config']) : [],
+                'options' => isset($field['options_config'])
+                    ? config($field['options_config'])
+                    : (object) [],
+                ...array_intersect_key($field, array_flip(['required_if', 'visible_if'])),
             ];
         }
 

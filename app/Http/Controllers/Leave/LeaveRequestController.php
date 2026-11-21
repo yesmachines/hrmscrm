@@ -409,6 +409,7 @@ class LeaveRequestController extends Controller
         $handoverDetail = $leave_request->details->firstWhere('field_key', 'handover_person_id');
         $handoverDescDetail = $leave_request->details->firstWhere('field_key', 'handover_description');
         $childBirthDateDetail = $leave_request->details->firstWhere('field_key', 'child_birth_date');
+        $travelingOutsideCountryDetail = $leave_request->details->firstWhere('field_key', 'traveling_outside_country');
 
         return Inertia::render('leave-requests/edit', [
             'leaveRequest' => [
@@ -430,6 +431,13 @@ class LeaveRequestController extends Controller
                 'due_date' => $leave_request->details->firstWhere('field_key', 'due_date')?->field_value,
                 'family_relationship' => $leave_request->details->firstWhere('field_key', 'family_relationship')?->field_value,
                 'festival_id' => $leave_request->details->firstWhere('field_key', 'festival_id')?->field_value,
+                'local_contact_no' => $leave_request->details->firstWhere('field_key', 'local_contact_no')?->field_value,
+                'traveling_outside_country' => $travelingOutsideCountryDetail
+                    ? (filter_var($travelingOutsideCountryDetail->field_value, FILTER_VALIDATE_BOOLEAN) ? '1' : '0')
+                    : '',
+                'destination' => $leave_request->details->firstWhere('field_key', 'destination')?->field_value,
+                'travel_contact_no' => $leave_request->details->firstWhere('field_key', 'travel_contact_no')?->field_value,
+                'ticket_status' => $leave_request->details->firstWhere('field_key', 'ticket_status')?->field_value,
                 'files' => $leave_request->files,
             ],
             'employees' => $employees,
