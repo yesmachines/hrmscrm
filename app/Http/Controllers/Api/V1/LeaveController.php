@@ -333,7 +333,11 @@ class LeaveController extends Controller
                         new OA\Property(property: 'family_relationship', type: 'string', description: 'Required for Compassionate Leave. Use the key property of an option from the family_relationship field definition in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.'),
                         new OA\Property(property: 'child_birth_date', type: 'string', format: 'date', description: "Required for Parental Leave. The leave start date must be within six months of the child's birth."),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
-                        new OA\Property(property: 'handover_description', type: 'string'),
+                        new OA\Property(
+                            property: 'handover_description',
+                            type: 'string',
+                            description: 'JSON-encoded list of task strings, for example ["Cover inbox", "Review approvals"]. Legacy plain-text descriptions are still accepted.',
+                        ),
                         new OA\Property(property: 'emergency_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
                         new OA\Property(property: 'travel_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
                         new OA\Property(property: 'certificate', type: 'string', format: 'binary', description: 'Supporting document required by the leave policy. Sick Leave also requires it when an active holiday falls within the leave range or on the immediately preceding or following calendar day.'),

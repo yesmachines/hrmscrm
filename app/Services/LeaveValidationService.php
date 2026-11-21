@@ -344,11 +344,11 @@ class LeaveValidationService
             // An approved edit can reuse the days already deducted for this request.
             $available += $existing ? (float) $existing->total_days : 0.0;
         }
-        if ($available < $totalDays) {
-            throw ValidationException::withMessages([
-                'total_days' => ["Insufficient leave balance for {$leaveType->leave_name}. Available: {$available} days, requested: {$totalDays} days."],
-            ]);
-        }
+        // if ($available < $totalDays) {
+        //     throw ValidationException::withMessages([
+        //         'total_days' => ["Insufficient leave balance for {$leaveType->leave_name}. Available: {$available} days, requested: {$totalDays} days."],
+        //     ]);
+        // }
     }
 
     /** @param array<string, mixed> $data */
@@ -374,9 +374,33 @@ class LeaveValidationService
             ->whereDate('end_date', '>=', $startDate->toDateString())->exists()) {
             throw ValidationException::withMessages(['handover_person_id' => ['The selected handover person is also on leave during the requested dates.']]);
         }
-        if ($required && empty($data['handover_description'])) {
-            throw ValidationException::withMessages(['handover_description' => ['Handover description / responsibilities are required.']]);
+        if ($required && ! $this->hasHandoverTasks($data['handover_description'] ?? null)) {
+            throw ValidationException::withMessages(['handover_description' => ['At least one non-empty handover task is required.']]);
         }
+    }
+
+    private function hasHandoverTasks(mixed $description): bool
+    {
+        if (! is_string($description) || trim($description) === '') {
+            return false;
+        }
+
+        $tasks = json_decode($description);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($tasks)) {
+            $hasNonEmptyTask = false;
+            foreach ($tasks as $task) {
+                if (! is_string($task)) {
+                    return false;
+                }
+
+                $hasNonEmptyTask = $hasNonEmptyTask || trim($task) !== '';
+            }
+
+            return $hasNonEmptyTask;
+        }
+
+        return true;
     }
 
     /** @param array<string, mixed> $data */

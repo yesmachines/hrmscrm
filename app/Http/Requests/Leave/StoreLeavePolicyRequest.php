@@ -83,7 +83,7 @@ class StoreLeavePolicyRequest extends FormRequest
             'probation_applicable' => ['nullable', 'boolean'],
             'minimum_service_months' => ['nullable', 'integer', 'min:0'],
             'exclude_rules' => ['nullable', 'array'],
-            'exclude_rules.*' => Rule::forEach(fn (mixed $value, string $attribute): array => $attribute === 'exclude_rules.department_overlap' ? ['boolean'] : ['nullable']),
+            'exclude_rules.*' => Rule::forEach(fn (mixed $value, string $attribute): array => array_key_exists(substr($attribute, strlen('exclude_rules.')), config('params.leave_policy.exclusion_rules', [])) ? ['boolean'] : ['nullable']),
             'tiers' => ['sometimes', 'array'],
             'tiers.*' => ['required', 'array:from_day,to_day,pay_percentage'],
             'tiers.*.from_day' => ['required', 'integer', 'min:1'],
@@ -109,8 +109,10 @@ class StoreLeavePolicyRequest extends FormRequest
     public function payload(): array
     {
         $validated = $this->validated();
-        if (isset($validated['exclude_rules']['department_overlap'])) {
-            $validated['exclude_rules']['department_overlap'] = (bool) $validated['exclude_rules']['department_overlap'];
+        foreach (array_keys(config('params.leave_policy.exclusion_rules', [])) as $rule) {
+            if (array_key_exists($rule, $validated['exclude_rules'] ?? [])) {
+                $validated['exclude_rules'][$rule] = (bool) $validated['exclude_rules'][$rule];
+            }
         }
 
         $payload = [

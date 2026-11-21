@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 type Errors = Record<string, string>;
+
+export type ExclusionRuleOptions = Record<
+    string,
+    { label: string; description: string; implemented: boolean }
+>;
 
 type Option = {
     id: number;
@@ -51,6 +56,7 @@ type Props = {
     defaults?: LeavePolicyFormValues;
     leaveTypes?: Option[];
     organisations?: Option[];
+    exclusionRuleOptions: ExclusionRuleOptions;
 };
 
 const fieldClass =
@@ -109,7 +115,12 @@ export default function LeavePolicyFormFields({
     defaults = {},
     leaveTypes = [],
     organisations = [],
+    exclusionRuleOptions,
 }: Props) {
+    const savedExcludeRules =
+        defaults.exclude_rules && !Array.isArray(defaults.exclude_rules)
+            ? defaults.exclude_rules
+            : {};
     const [tiers, setTiers] = useState<TierFormValue[]>(() =>
         (defaults.tiers ?? []).map((tier) => ({
             from_day: String(tier.from_day),
@@ -328,41 +339,53 @@ export default function LeavePolicyFormFields({
                     />
                 </Field>
 
-                <div className="sm:col-span-2">
-                    <Field
-                        label="Exclude rules (JSON object or array)"
-                        name="exclude_rules"
-                        error={errors.exclude_rules}
-                    >
-                        <textarea
-                            id="exclude_rules"
-                            name="exclude_rules"
-                            rows={4}
-                            defaultValue={
-                                defaults.exclude_rules
-                                    ? JSON.stringify(
-                                          defaults.exclude_rules,
-                                          null,
-                                          2,
-                                      )
-                                    : ''
-                            }
-                            placeholder="{}"
-                            aria-describedby="exclude_rules_help"
-                            className="min-h-24 w-full rounded-lg border border-input bg-white px-3 py-2 font-mono text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
-                        />
-                        <p
-                            id="exclude_rules_help"
-                            className="text-xs text-muted-foreground"
-                        >
-                            Leave empty if there are no exclusion rules.
-                            {' '}Use {'{"department_overlap": true}'} to prevent overlapping
-                            applied or approved requests of this leave type by colleagues in
-                            the same organisation and department. False or omitted disables
-                            this check.
-                        </p>
-                    </Field>
-                </div>
+                <fieldset className="space-y-3 sm:col-span-2">
+                    <legend className="text-sm font-medium">Exclusion rules</legend>
+                    <input
+                        type="hidden"
+                        name="exclude_rules_present"
+                        value="1"
+                    />
+                    <div className="space-y-3 rounded-lg border border-border p-4">
+                        {Object.entries(exclusionRuleOptions).map(([key, rule]) => (
+                            <label
+                                key={key}
+                                htmlFor={`exclude_rules_${key}`}
+                                className="flex items-start gap-3"
+                            >
+                                <input
+                                    id={`exclude_rules_${key}`}
+                                    name={`exclude_rules[${key}]`}
+                                    type="checkbox"
+                                    value="1"
+                                    defaultChecked={
+                                        savedExcludeRules[key] === true ||
+                                        savedExcludeRules[key] === 1 ||
+                                        savedExcludeRules[key] === '1'
+                                    }
+                                    className="mt-0.5 size-4 shrink-0 rounded border-border text-primary focus:ring-primary"
+                                />
+                                <span className="space-y-1">
+                                    <span className="block text-sm font-medium">
+                                        {rule.label}
+                                    </span>
+                                    <span className="block text-xs text-muted-foreground">
+                                        {rule.description}
+                                    </span>
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                    <InputError message={errors.exclude_rules} />
+                    {Object.entries(exclusionRuleOptions).map(([key]) =>
+                        errors[`exclude_rules.${key}`] ? (
+                            <InputError
+                                key={key}
+                                message={errors[`exclude_rules.${key}`]}
+                            />
+                        ) : null,
+                    )}
+                </fieldset>
 
                 <div className="space-y-4 rounded-xl border border-border p-4 sm:col-span-2">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -427,6 +450,7 @@ export default function LeavePolicyFormFields({
                                             type="number"
                                             min={1}
                                             step={1}
+                                            placeholder="1"
                                             value={tier.from_day}
                                             onChange={(event) =>
                                                 updateTier(
@@ -450,6 +474,7 @@ export default function LeavePolicyFormFields({
                                             type="number"
                                             min={1}
                                             step={1}
+                                            placeholder="15"
                                             value={tier.to_day}
                                             onChange={(event) =>
                                                 updateTier(
@@ -476,6 +501,7 @@ export default function LeavePolicyFormFields({
                                             min={0}
                                             max={100}
                                             step={0.01}
+                                            placeholder="100"
                                             value={tier.pay_percentage}
                                             onChange={(event) =>
                                                 updateTier(

@@ -4,6 +4,7 @@ import { index, update } from '@/actions/App/Http/Controllers/Leave/LeaveRequest
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { formatDate, formatDateTime } from '@/lib/date-format';
+import { parseHandoverTasks } from '@/lib/handover-tasks';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { dashboard } from '@/routes';
 
@@ -69,6 +70,13 @@ export default function LeaveRequestShow({
     handoverEmployee?: HandoverEmployee;
     fieldDefinitions?: LeaveFieldDefinition[];
 }) {
+    const handoverDescription = leave_request.details?.find(
+        (detail) => detail.field_key === 'handover_description',
+    )?.field_value;
+    const handoverTasks = parseHandoverTasks(handoverDescription)
+        .map((task) => task.trim())
+        .filter((task) => task !== '');
+
     const handleStatusUpdate = (status: string) => {
         router.put(update.url(leave_request.id), { status }, {
             preserveScroll: true,
@@ -248,12 +256,16 @@ export default function LeaveRequestShow({
                                         </div>
                                     )}
 
-                                    {leave_request.details?.find((d) => d.field_key === 'handover_description')?.field_value && (
+                                    {handoverTasks.length > 0 && (
                                         <div>
                                             <p className="text-sm text-muted-foreground mb-1">Tasks & Coverage Responsibilities</p>
-                                            <p className="text-foreground whitespace-pre-line bg-muted/30 p-3 rounded-md border text-sm">
-                                                {leave_request.details.find((d) => d.field_key === 'handover_description')?.field_value}
-                                            </p>
+                                            <ul className="list-disc space-y-1 rounded-md border bg-muted/30 p-3 pl-8 text-sm text-foreground">
+                                                {handoverTasks.map((task, index) => (
+                                                    <li key={`${index}-${task}`} className="whitespace-pre-line">
+                                                        {task}
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         </div>
                                     )}
 

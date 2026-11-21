@@ -14,12 +14,17 @@ import {
 } from 'lucide-react';
 import { useState, useId, useMemo, useEffect, useRef } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
+import HandoverTasksInput from '@/components/handover-tasks-input';
 import Heading from '@/components/heading';
 import LeaveTypeFields from '@/components/leave-type-fields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+    hasHandoverTasks,
+    normalizeHandoverDescription,
+} from '@/lib/handover-tasks';
 import { leaveValidationFormData } from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
@@ -132,6 +137,12 @@ export default function LeaveRequestsCreate({
     activeLeaves = [],
     festivals = [],
 }: Props) {
+    const now = new Date();
+    const today = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0'),
+    ].join('-');
     const employeeSelectId = useId();
     const employeeListboxId = useId();
     const leaveTypeSelectId = useId();
@@ -139,7 +150,6 @@ export default function LeaveRequestsCreate({
     const startDateId = useId();
     const endDateId = useId();
     const totalDaysId = useId();
-    const statusSelectId = useId();
     const remarksId = useId();
     const certificateId = useId();
     const handoverPersonSelectId = useId();
@@ -151,13 +161,14 @@ export default function LeaveRequestsCreate({
     const [employeeSelectionError, setEmployeeSelectionError] = useState('');
     const employeeInputRef = useRef<HTMLInputElement>(null);
     const certificateInputRef = useRef<HTMLInputElement>(null);
+    const submissionStatus = useRef<'applied' | 'approved'>('applied');
 
-    const { data, setData, post, processing, errors, clearErrors, setError } = useForm({
+    const { data, setData, post, transform, processing, errors, clearErrors, setError } = useForm({
         employee_id: '',
         leave_type_id: '',
         request_type: 'fullday',
-        start_date: '',
-        end_date: '',
+        start_date: today,
+        end_date: today,
         total_days: '',
         status: 'applied',
         remarks: '',
@@ -561,8 +572,8 @@ export default function LeaveRequestsCreate({
             return;
         }
 
-        if (policyRequirements.requiresHandover && !data.handover_description.trim()) {
-            setError('handover_description', 'A handover description is required by this leave policy.');
+        if (policyRequirements.requiresHandover && !hasHandoverTasks(data.handover_description)) {
+            setError('handover_description', 'Add at least one handover task as required by this leave policy.');
 
             return;
         }
@@ -579,6 +590,11 @@ export default function LeaveRequestsCreate({
             return;
         }
 
+        transform((formData) => ({
+            ...formData,
+            handover_description: normalizeHandoverDescription(formData.handover_description),
+            status: submissionStatus.current,
+        }));
         post('/leave-requests');
     };
 
@@ -749,22 +765,9 @@ export default function LeaveRequestsCreate({
                                 >
                                     <option value="">{selectedEmployee ? '-- Choose Leave Type --' : 'Select an employee first'}</option>
                                     {availableLeaveTypes.map((type) => {
-                                        const policy = type.policies?.find(
-                                            (item) => Number(item.organisation_id) === Number(selectedEmployee?.organisation_id),
-                                        ) ?? null;
-                                        const { requiresAttachment: attachmentRequired } = getLeavePolicyRequirements(
-                                            policy,
-                                            Number(data.total_days || 0),
-                                            data.start_date,
-                                            data.end_date,
-                                            type.application_requirements,
-                                        );
-
                                         return (
                                             <option key={type.id} value={type.id}>
-                                                {type.leave_name} ({type.code}) - {type.is_paid ? 'Paid' : 'Unpaid'}
-                                                {type.status === 0 ? ' [Inactive]' : ''}
-                                                {attachmentRequired ? ' [Attachment Required]' : ''}
+                                                {type.leave_name}
                                             </option>
                                         );
                                     })}
@@ -790,7 +793,7 @@ export default function LeaveRequestsCreate({
                                 }}
                                 onFestivalDatesChange={(startDate, endDate) => {
                                     setData('start_date', startDate);
-                                    setData('end_date', endDate);
+                                    setData('end_date', data.request_type === 'fullday' ? endDate : startDate);
                                     clearErrors('start_date', 'end_date');
                                 }}
                             />
@@ -801,8 +804,14 @@ export default function LeaveRequestsCreate({
                                     id={requestTypeSelectId}
                                     value={data.request_type}
                                     onChange={(e) => {
-                                        setData('request_type', e.target.value);
-                                        clearErrors('request_type', 'total_days');
+                                        const requestType = e.target.value;
+                                        setData('request_type', requestType);
+
+                                        if (requestType !== 'fullday' && data.start_date) {
+                                            setData('end_date', data.start_date);
+                                        }
+
+                                        clearErrors('request_type', 'start_date', 'end_date', 'total_days');
                                     }}
                                     className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                                     required
@@ -832,6 +841,11 @@ export default function LeaveRequestsCreate({
                                         value={data.start_date}
                                         onChange={(value) => {
                                             setData('start_date', value);
+
+                                            if (data.request_type !== 'fullday') {
+                                                setData('end_date', value);
+                                            }
+
                                             clearErrors('start_date', 'end_date', 'total_days');
                                         }}
                                         required
@@ -866,16 +880,9 @@ export default function LeaveRequestsCreate({
                                     <Input
                                         id={totalDaysId}
                                         type="number"
-                                        step="0.5"
-                                        min="0"
-                                        placeholder="e.g. 1 or 0.5"
                                         value={data.total_days}
-                                        readOnly={data.request_type === 'fullday'}
-                                        disabled={data.request_type !== 'fullday'}
-                                        onChange={(e) => {
-                                            setData('total_days', e.target.value);
-                                            clearErrors('total_days', 'certificate', 'handover_person_id', 'handover_description');
-                                        }}
+                                        disabled
+                                        className="cursor-default disabled:cursor-default disabled:opacity-100"
                                     />
                                     {errors.total_days && (
                                         <p className="text-sm text-destructive">{errors.total_days}</p>
@@ -889,44 +896,6 @@ export default function LeaveRequestsCreate({
                                     <span>This employee already has an applied or approved leave request overlapping these dates.</span>
                                 </div>
                             )}
-
-                            {/* Status Option for HR */}
-                            <div className="space-y-2">
-                                <Label
-                                    htmlFor={selectedLeaveType?.requires_approval === false ? undefined : statusSelectId}
-                                    className="flex items-center gap-1.5 font-medium"
-                                >
-                                    Application Status
-                                    {selectedLeaveType?.requires_approval !== false && (
-                                        <span className="text-destructive">*</span>
-                                    )}
-                                </Label>
-                                {selectedLeaveType?.requires_approval === false ? (
-                                    <p className="text-sm text-muted-foreground">
-                                        This leave type does not require approval. The request will be approved automatically.
-                                    </p>
-                                ) : (
-                                    <>
-                                        <select
-                                            id={statusSelectId}
-                                            value={data.status}
-                                            onChange={(e) => setData('status', e.target.value)}
-                                            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <option value="applied">Applied (Standard workflow - pending further action)</option>
-                                            <option value="approved">Approved (Directly approve leave on submission)</option>
-                                        </select>
-                                        <p className="text-xs text-muted-foreground">
-                                            {data.status === 'approved'
-                                                ? 'Selecting "Approved" will immediately approve the request and deduct the employee\'s leave balance quota.'
-                                                : 'Selecting "Applied" submits the request as pending for regular review.'}
-                                        </p>
-                                    </>
-                                )}
-                                {errors.status && (
-                                    <p className="text-sm text-destructive">{errors.status}</p>
-                                )}
-                            </div>
 
                             {/* Remarks / Reason */}
                             <div className="space-y-2">
@@ -1016,16 +985,13 @@ export default function LeaveRequestsCreate({
                                                 <span className="text-destructive">*</span>
                                             )}
                                         </Label>
-                                        <Textarea
-                                            id={handoverDescId}
-                                            rows={3}
-                                            placeholder="Detail active tasks, pending approvals, and primary contact coverage during your leave..."
+                                        <HandoverTasksInput
+                                            idPrefix={handoverDescId}
                                             value={data.handover_description}
-                                            onChange={(e) => {
-                                                setData('handover_description', e.target.value);
+                                            onChange={(value) => {
+                                                setData('handover_description', value);
                                                 clearErrors('handover_description');
                                             }}
-                                            required={requiresHandover}
                                         />
                                         {errors.handover_description && (
                                             <p className="text-sm text-destructive">{errors.handover_description}</p>
@@ -1067,9 +1033,26 @@ export default function LeaveRequestsCreate({
                                 <Button variant="outline" type="button" asChild>
                                     <Link href="/leave-requests">Cancel</Link>
                                 </Button>
-                                <Button type="submit" disabled={processing || isSelectedHandoverOnLeave} className="min-w-[140px]">
-                                    <Send className="mr-2 size-4" />
+                                <Button
+                                    type="submit"
+                                    variant="outline"
+                                    disabled={processing || isSelectedHandoverOnLeave}
+                                    onClick={() => {
+                                        submissionStatus.current = 'applied';
+                                    }}
+                                >
+                                    <Send className="size-4" />
                                     {processing ? 'Submitting...' : 'Apply Leave'}
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={processing || isSelectedHandoverOnLeave}
+                                    onClick={() => {
+                                        submissionStatus.current = 'approved';
+                                    }}
+                                >
+                                    <CheckCircle2 className="size-4" />
+                                    {processing ? 'Submitting...' : 'Apply & Approve Leave'}
                                 </Button>
                             </div>
                         </form>
@@ -1162,14 +1145,6 @@ export default function LeaveRequestsCreate({
                                     <div className="flex items-center justify-between">
                                         <span className="text-muted-foreground">Type:</span>
                                         <span className="font-medium text-foreground">{selectedLeaveType.leave_name}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Pay Status:</span>
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                                            selectedLeaveType.is_paid ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                                        }`}>
-                                            {selectedLeaveType.is_paid ? 'Paid Leave' : 'Unpaid Leave'}
-                                        </span>
                                     </div>
                                     {requiresAttachment && (
                                         <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 p-2 rounded mt-2">

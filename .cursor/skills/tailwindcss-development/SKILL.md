@@ -18,6 +18,12 @@ Use `search-docs` for detailed Tailwind CSS v4 patterns and documentation.
 - Offer to extract repeated patterns into components that match the project's conventions (e.g., Blade, JSX, Vue).
 - Consider class placement, order, priority, and defaults. Remove redundant classes, add classes to parent or child elements carefully to reduce repetition, and group elements logically.
 
+## UX and Complexity
+
+- When adding UI behavior, consider useful defaults and how changes to one input affect related inputs. Keep dependent values consistent when modes change, while preserving user intent.
+- Prefer the simplest clear interaction that covers the relevant initial and transition states; avoid abstractions that add complexity without reuse.
+- Verify the behavior users experience, including defaults and switching between modes.
+
 ## Tailwind CSS v4 Specifics
 
 - Always use Tailwind CSS v4 and avoid deprecated utilities.

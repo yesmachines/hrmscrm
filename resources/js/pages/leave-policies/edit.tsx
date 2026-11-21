@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
 import LeavePolicyFormFields from './form-fields';
+import type { ExclusionRuleOptions } from './form-fields';
 
 type Option = {
     id: number;
@@ -45,10 +46,12 @@ export default function LeavePoliciesEdit({
     leavePolicy,
     leaveTypes,
     organisations,
+    exclusionRuleOptions,
 }: {
     leavePolicy: LeavePolicy;
     leaveTypes: Option[];
     organisations: Option[];
+    exclusionRuleOptions: ExclusionRuleOptions;
 }) {
     const title = leavePolicy.leave_type
         ? `${leavePolicy.leave_type.name} — ${leavePolicy.organisation?.name ?? 'Policy'}`
@@ -93,6 +96,7 @@ export default function LeavePoliciesEdit({
                                 defaults={leavePolicy}
                                 leaveTypes={leaveTypes}
                                 organisations={organisations}
+                                exclusionRuleOptions={exclusionRuleOptions}
                             />
 
                             <div className="flex items-center justify-end gap-3">

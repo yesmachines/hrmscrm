@@ -126,7 +126,21 @@ return [
     ],
     'leave_policy' => [
         'exclusion_rules' => [
-            'department_overlap' => 'When true, blocks overlapping applied or approved requests of the same leave type by another employee in the same organisation and department. Requires the applicant to have a department.',
+            'department_overlap' => [
+                'label' => 'Department Overlap',
+                'description' => 'Prevents overlapping applied or approved requests of the same leave type in the same organisation and department.',
+                'implemented' => true,
+            ],
+            'holiday' => [
+                'label' => 'Holiday',
+                'description' => 'Saved with the policy; validation behavior is not implemented yet.',
+                'implemented' => false,
+            ],
+            'weekend' => [
+                'label' => 'Weekend',
+                'description' => 'Saved with the policy; validation behavior is not implemented yet.',
+                'implemented' => false,
+            ],
         ],
     ],
     'letter_request' => [

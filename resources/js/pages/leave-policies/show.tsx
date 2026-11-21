@@ -5,6 +5,7 @@ import DeleteConfirmDialog from '@/components/delete-confirm-dialog';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
+import type { ExclusionRuleOptions } from './form-fields';
 
 type LeavePolicy = {
     id: number;
@@ -72,10 +73,24 @@ function yesNo(value: number): string {
     return value === 1 ? 'Yes' : 'No';
 }
 
+function formatRuleValue(value: unknown): string {
+    if (typeof value === 'boolean') {
+        return value ? 'Enabled' : 'Disabled';
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+        return String(value);
+    }
+
+    return JSON.stringify(value) ?? '—';
+}
+
 export default function LeavePoliciesShow({
     leavePolicy,
+    exclusionRuleOptions,
 }: {
     leavePolicy: LeavePolicy;
+    exclusionRuleOptions: ExclusionRuleOptions;
 }) {
     const title = leavePolicy.leave_type
         ? `${leavePolicy.leave_type.name} — ${leavePolicy.organisation?.name ?? 'Policy'}`
@@ -188,14 +203,36 @@ export default function LeavePoliciesShow({
                         label="Probation applicable"
                         value={yesNo(leavePolicy.probation_applicable)}
                     />
-                    <Detail
-                        label="Exclude rules"
-                        value={
-                            leavePolicy.exclude_rules === null
-                                ? null
-                                : JSON.stringify(leavePolicy.exclude_rules)
-                        }
-                    />
+                    <div className="space-y-1">
+                        <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                            Exclusion rules
+                        </dt>
+                        <dd className="text-sm text-foreground">
+                            {Object.entries(leavePolicy.exclude_rules ?? {})
+                                .length === 0 ? (
+                                '—'
+                            ) : (
+                                <ul className="space-y-1">
+                                    {Object.entries(
+                                        leavePolicy.exclude_rules ?? {},
+                                    ).map(([key, value]) => (
+                                        <li
+                                            key={key}
+                                            className="flex flex-wrap justify-between gap-x-4"
+                                        >
+                                            <span>
+                                                {exclusionRuleOptions[key]
+                                                    ?.label ?? key}
+                                            </span>
+                                            <span className="text-muted-foreground">
+                                                {formatRuleValue(value)}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </dd>
+                    </div>
                     <Detail label="Remarks" value={leavePolicy.remarks} />
                 </Section>
 

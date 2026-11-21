@@ -12,12 +12,17 @@ import {
 } from 'lucide-react';
 import { useState, useId, useMemo, useEffect } from 'react';
 import { FormattedDatePicker } from '@/components/formatted-date-picker';
+import HandoverTasksInput from '@/components/handover-tasks-input';
 import Heading from '@/components/heading';
 import LeaveTypeFields from '@/components/leave-type-fields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+    hasHandoverTasks,
+    normalizeHandoverDescription,
+} from '@/lib/handover-tasks';
 import { leaveValidationFormData } from '@/lib/leave-application';
 import type { LeaveFieldDefinition } from '@/lib/leave-application';
 import { countLeaveWeekdays } from '@/lib/leave-duration';
@@ -159,7 +164,7 @@ export default function LeaveRequestsEdit({
 
     const [isCancelling, setIsCancelling] = useState(false);
 
-    const { data, setData, post, processing, errors, clearErrors, setError } = useForm({
+    const { data, setData, post, transform, processing, errors, clearErrors, setError } = useForm({
         _method: 'PUT',
         employee_id: String(leaveRequest.employee_id),
         leave_type_id: String(leaveRequest.leave_type_id),
@@ -435,8 +440,8 @@ export default function LeaveRequestsEdit({
             return;
         }
 
-        if (isActiveRequest && requiresHandover && !data.handover_description.trim()) {
-            setError('handover_description', 'A handover description is required by this leave policy.');
+        if (isActiveRequest && requiresHandover && !hasHandoverTasks(data.handover_description)) {
+            setError('handover_description', 'Add at least one handover task as required by this leave policy.');
 
             return;
         }
@@ -459,6 +464,10 @@ export default function LeaveRequestsEdit({
             return;
         }
 
+        transform((formData) => ({
+            ...formData,
+            handover_description: normalizeHandoverDescription(formData.handover_description),
+        }));
         post(`/leave-requests/${leaveRequest.id}`);
     }
 
@@ -643,7 +652,16 @@ export default function LeaveRequestsEdit({
                                         <select
                                             id={requestTypeSelectId}
                                             value={data.request_type}
-                                            onChange={(e) => setData('request_type', e.target.value)}
+                                            onChange={(e) => {
+                                                const requestType = e.target.value;
+                                                setData('request_type', requestType);
+
+                                                if (requestType !== 'fullday' && data.start_date) {
+                                                    setData('end_date', data.start_date);
+                                                }
+
+                                                clearErrors('request_type', 'start_date', 'end_date', 'total_days');
+                                            }}
                                             className="mt-1.5 h-10 w-full rounded-lg border border-input bg-white px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30"
                                             required
                                         >
@@ -675,7 +693,7 @@ export default function LeaveRequestsEdit({
                                         }}
                                         onFestivalDatesChange={(startDate, endDate) => {
                                             setData('start_date', startDate);
-                                            setData('end_date', endDate);
+                                            setData('end_date', data.request_type === 'fullday' ? endDate : startDate);
                                             clearErrors('start_date', 'end_date');
                                         }}
                                     />
@@ -686,7 +704,13 @@ export default function LeaveRequestsEdit({
                                             <FormattedDatePicker
                                                 id={startDateId}
                                                 value={data.start_date}
-                                                onChange={(value) => setData('start_date', value)}
+                                                onChange={(value) => {
+                                                    setData('start_date', value);
+
+                                                    if (data.request_type !== 'fullday') {
+                                                        setData('end_date', value);
+                                                    }
+                                                }}
                                                 className="mt-1.5"
                                                 required
                                             />
@@ -716,14 +740,9 @@ export default function LeaveRequestsEdit({
                                             <Input
                                                 id={totalDaysId}
                                                 type="number"
-                                                step="0.5"
-                                                min="0"
                                                 value={data.total_days}
-                                                readOnly={data.request_type === 'fullday'}
-                                                disabled={data.request_type !== 'fullday'}
-                                                onChange={(e) => setData('total_days', e.target.value)}
-                                                className="mt-1.5 font-semibold text-primary"
-                                                required
+                                                disabled
+                                                className="mt-1.5 cursor-default font-semibold text-primary disabled:cursor-default disabled:opacity-100"
                                             />
                                             {errors.total_days && (
                                                 <p className="mt-1 text-xs text-destructive">{errors.total_days}</p>
@@ -805,16 +824,13 @@ export default function LeaveRequestsEdit({
                                                 <Label htmlFor={handoverDescId}>
                                                     Handover Tasks & Instructions <span className="ml-1 text-destructive">*</span>
                                                 </Label>
-                                                <Textarea
-                                                    id={handoverDescId}
+                                                <HandoverTasksInput
+                                                    idPrefix={handoverDescId}
                                                     value={data.handover_description}
-                                                    onChange={(e) => {
-                                                        setData('handover_description', e.target.value);
+                                                    onChange={(value) => {
+                                                        setData('handover_description', value);
                                                         clearErrors('handover_description');
                                                     }}
-                                                    required
-                                                    placeholder="Key duties, urgent contacts, pending tickets..."
-                                                    className="mt-1.5 min-h-[80px]"
                                                 />
                                                 {errors.handover_description && (
                                                     <p className="mt-1 text-xs text-destructive">{errors.handover_description}</p>

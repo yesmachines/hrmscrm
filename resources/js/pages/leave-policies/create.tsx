@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { dashboard } from '@/routes';
 import LeavePolicyFormFields from './form-fields';
+import type { ExclusionRuleOptions } from './form-fields';
 
 type Option = {
     id: number;
@@ -15,9 +16,11 @@ type Option = {
 export default function LeavePoliciesCreate({
     leaveTypes,
     organisations,
+    exclusionRuleOptions,
 }: {
     leaveTypes: Option[];
     organisations: Option[];
+    exclusionRuleOptions: ExclusionRuleOptions;
 }) {
     return (
         <>
@@ -39,6 +42,7 @@ export default function LeavePoliciesCreate({
                                 errors={errors}
                                 leaveTypes={leaveTypes}
                                 organisations={organisations}
+                                exclusionRuleOptions={exclusionRuleOptions}
                             />
 
                             <div className="flex items-center justify-end gap-3">

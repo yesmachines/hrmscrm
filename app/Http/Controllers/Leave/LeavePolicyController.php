@@ -42,6 +42,7 @@ class LeavePolicyController extends Controller
         return Inertia::render('leave-policies/create', [
             'leaveTypes' => $this->leaveTypes(),
             'organisations' => $this->organisations(),
+            'exclusionRuleOptions' => config('params.leave_policy.exclusion_rules'),
         ]);
     }
 
@@ -74,6 +75,7 @@ class LeavePolicyController extends Controller
 
         return Inertia::render('leave-policies/show', [
             'leavePolicy' => $this->payload($leave_policy),
+            'exclusionRuleOptions' => config('params.leave_policy.exclusion_rules'),
         ]);
     }
 
@@ -89,6 +91,7 @@ class LeavePolicyController extends Controller
             'leavePolicy' => $this->payload($leave_policy),
             'leaveTypes' => $this->leaveTypes(),
             'organisations' => $this->organisations(),
+            'exclusionRuleOptions' => config('params.leave_policy.exclusion_rules'),
         ]);
     }
 

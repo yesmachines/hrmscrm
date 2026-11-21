@@ -184,6 +184,74 @@ test('unpaid requests at three days need neither balance nor handover in every f
     expect(LeaveBalance::query()->where('employee_id', $this->employee->id)->exists())->toBeFalse();
 })->with('policy rule flows');
 
+test('required handover descriptions accept task lists and reject empty task lists', function (string $description, bool $valid) {
+    $this->policy->update(['requires_handover' => true]);
+    $handoverPerson = policyRuleColleague($this->employee);
+    $data = [
+        ...$this->data,
+        'end_date' => '2027-04-08',
+        'handover_person_id' => $handoverPerson->id,
+        'handover_description' => $description,
+    ];
+    $validate = fn () => $this->service->validateApplication($this->employee, $data);
+
+    if ($valid) {
+        expect($validate())->toBeArray();
+
+        return;
+    }
+
+    expect($validate)->toThrow(ValidationException::class, 'handover task');
+})->with([
+    'multiple tasks' => ['["Cover incoming requests", "Review approvals"]', true],
+    'legacy text' => ['Cover incoming requests', true],
+    'empty task list' => ['[]', false],
+    'blank task list' => ['["", "   "]', false],
+    'non-string task' => ['["Cover requests", 3]', false],
+]);
+
+test('admin and app previews reject empty required handover task lists', function (string $flow) {
+    $this->policy->update(['requires_handover' => true]);
+    $handoverPerson = policyRuleColleague($this->employee);
+
+    assertPolicyRuleError(
+        submitPolicyRuleFlow($this, $flow, [
+            ...$this->data,
+            'end_date' => '2027-04-08',
+            'handover_person_id' => $handoverPerson->id,
+            'handover_description' => '[]',
+        ]),
+        $flow,
+        'handover_description',
+        'handover task',
+    );
+})->with(['admin preview', 'api preview']);
+
+test('admin and app requests persist JSON handover task lists', function (string $flow) {
+    $this->policy->update(['requires_handover' => true]);
+    $handoverPerson = policyRuleColleague($this->employee);
+    $description = '["Cover incoming requests", "Review approvals"]';
+    $response = submitPolicyRuleFlow($this, $flow, [
+        ...$this->data,
+        'end_date' => '2027-04-08',
+        'handover_person_id' => $handoverPerson->id,
+        'handover_description' => $description,
+    ]);
+
+    if (str_starts_with($flow, 'admin')) {
+        $response->assertRedirect();
+    } elseif ($flow === 'api create') {
+        $response->assertCreated();
+    } else {
+        $response->assertOk();
+    }
+
+    $leaveRequest = LeaveRequest::query()->latest('id')->firstOrFail();
+
+    expect($leaveRequest->details()->where('field_key', 'handover_description')->value('field_value'))
+        ->toBe($description);
+})->with(['admin create', 'admin update', 'api create', 'api update']);
+
 test('handover uses a strict configurable threshold independent of documents', function (float $days, bool $required) {
     $this->policy->update(['requires_handover' => false, 'requires_document_after_days' => 10, 'requires_attachment' => true]);
     $this->getJson('/api/v1/leaves/meta')->assertOk()
@@ -435,7 +503,12 @@ test('unpaid ceiling stays out of admin request and policy page props', function
 test('department rule accepts booleans and preserves unknown JSON rules on policy writes', function (string $operation, mixed $flag, bool $valid) {
     $data = [
         'leave_type_id' => $this->leaveType->id, 'organisation_id' => $this->employee->organisation_id,
-        'exclude_rules' => json_encode(['department_overlap' => $flag, 'other_rule' => ['nested' => true]]),
+        'exclude_rules' => json_encode([
+            'department_overlap' => $flag,
+            'holiday' => 1,
+            'weekend' => '1',
+            'other_rule' => ['nested' => true],
+        ]),
     ];
     if ($operation === 'store') {
         $this->policy->forceDelete();
@@ -450,11 +523,73 @@ test('department rule accepts booleans and preserves unknown JSON rules on polic
     }
     $response->assertRedirect()->assertSessionHasNoErrors();
     $policy = LeavePolicy::query()->where('leave_type_id', $this->leaveType->id)->sole();
-    expect($policy->exclude_rules)->toHaveCount(2)
+    expect($policy->exclude_rules)->toHaveCount(4)
         ->and($policy->exclude_rules['department_overlap'])->toBe((bool) $flag)
+        ->and($policy->exclude_rules['holiday'])->toBeTrue()
+        ->and($policy->exclude_rules['weekend'])->toBeTrue()
         ->and($policy->exclude_rules['other_rule'])->toBe(['nested' => true])
         ->and($policy->preventsDepartmentOverlap())->toBe((bool) $flag);
 })->with(['store', 'update'])->with([[true, true], [false, true], [1, true], [0, true], ['yes', false], [null, false], [[], false]]);
+
+test('policy forms receive exclusion rule options', function () {
+    $this->withoutVite()
+        ->get(route('leave-policies.create'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('leave-policies/create')
+            ->where('exclusionRuleOptions', config('params.leave_policy.exclusion_rules')));
+
+    $this->get(route('leave-policies.edit', $this->policy))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('leave-policies/edit')
+            ->where('exclusionRuleOptions', config('params.leave_policy.exclusion_rules')));
+
+    $this->get(route('leave-policies.show', $this->policy))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('leave-policies/show')
+            ->where('exclusionRuleOptions', config('params.leave_policy.exclusion_rules')));
+});
+
+test('policy checkbox updates clear unchecked known rules and preserve unknown rules', function () {
+    $this->policy->update([
+        'exclude_rules' => [
+            'department_overlap' => true,
+            'holiday' => true,
+            'custom_rule' => ['preserve' => true],
+        ],
+    ]);
+
+    $this->put(route('leave-policies.update', $this->policy), [
+        'leave_type_id' => $this->leaveType->id,
+        'organisation_id' => $this->employee->organisation_id,
+        'exclude_rules_present' => '1',
+        'exclude_rules' => ['weekend' => '1'],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($this->policy->fresh()->exclude_rules)->toEqual([
+        'custom_rule' => ['preserve' => true],
+        'weekend' => true,
+    ]);
+});
+
+test('department overlap is enforced by admin and app validation flows', function (string $flow) {
+    $this->policy->update(['exclude_rules' => ['department_overlap' => true]]);
+    $peer = policyRuleColleague($this->employee);
+    LeaveRequest::query()->create([
+        ...$this->data,
+        'employee_id' => $peer->id,
+        'total_days' => 1,
+    ]);
+
+    assertPolicyRuleError(
+        submitPolicyRuleFlow($this, $flow, $this->data),
+        $flow,
+        'start_date',
+        'same leave type',
+    );
+})->with(['admin preview', 'api preview']);
 
 test('inactive admin edits and cancellation are not blocked by active business rules', function () {
     $this->policy->update(['minimum_service_months' => 24, 'exclude_rules' => ['department_overlap' => true]]);

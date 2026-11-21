@@ -35,14 +35,29 @@ class UpdateLeavePolicyRequest extends FormRequest
             $excludeRules = trim($excludeRules);
 
             if ($excludeRules === '') {
-                $this->merge(['exclude_rules' => null]);
+                $excludeRules = null;
             } else {
                 $decodedRules = json_decode($excludeRules, true);
 
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decodedRules)) {
-                    $this->merge(['exclude_rules' => $decodedRules]);
+                    $excludeRules = $decodedRules;
                 }
             }
+        }
+
+        if ($this->boolean('exclude_rules_present') && ! $this->exists('exclude_rules')) {
+            $excludeRules = [];
+        }
+
+        if (is_array($excludeRules) || $excludeRules === null) {
+            $policy = $this->route('leave_policy');
+            if ($policy instanceof LeavePolicy && ($this->exists('exclude_rules') || $this->boolean('exclude_rules_present'))) {
+                $knownRules = array_fill_keys(array_keys(config('params.leave_policy.exclusion_rules', [])), true);
+                $existingLegacyRules = array_diff_key($policy->exclude_rules ?? [], $knownRules);
+                $excludeRules = array_replace($existingLegacyRules, $excludeRules ?? []);
+            }
+
+            $this->merge(['exclude_rules' => $excludeRules ?: null]);
         }
 
         $tiers = $this->input('tiers');
@@ -88,7 +103,7 @@ class UpdateLeavePolicyRequest extends FormRequest
             'probation_applicable' => ['nullable', 'boolean'],
             'minimum_service_months' => ['nullable', 'integer', 'min:0'],
             'exclude_rules' => ['nullable', 'array'],
-            'exclude_rules.*' => Rule::forEach(fn (mixed $value, string $attribute): array => $attribute === 'exclude_rules.department_overlap' ? ['boolean'] : ['nullable']),
+            'exclude_rules.*' => Rule::forEach(fn (mixed $value, string $attribute): array => array_key_exists(substr($attribute, strlen('exclude_rules.')), config('params.leave_policy.exclusion_rules', [])) ? ['boolean'] : ['nullable']),
             'tiers' => ['sometimes', 'array'],
             'tiers.*' => ['required', 'array:from_day,to_day,pay_percentage'],
             'tiers.*.from_day' => ['required', 'integer', 'min:1'],
@@ -114,8 +129,10 @@ class UpdateLeavePolicyRequest extends FormRequest
     public function payload(): array
     {
         $validated = $this->validated();
-        if (isset($validated['exclude_rules']['department_overlap'])) {
-            $validated['exclude_rules']['department_overlap'] = (bool) $validated['exclude_rules']['department_overlap'];
+        foreach (array_keys(config('params.leave_policy.exclusion_rules', [])) as $rule) {
+            if (array_key_exists($rule, $validated['exclude_rules'] ?? [])) {
+                $validated['exclude_rules'][$rule] = (bool) $validated['exclude_rules'][$rule];
+            }
         }
 
         $payload = [
