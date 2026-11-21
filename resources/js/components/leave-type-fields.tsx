@@ -87,8 +87,7 @@ export default function LeaveTypeFields({
                             : Object.entries(field.options).map(
                                   ([key, option]) => (
                                       <option key={key} value={key}>
-                                          {option.label} - maximum{' '}
-                                          {option.max_days} days
+                                          {option.label}
                                       </option>
                                   ),
                               )}
