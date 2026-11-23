@@ -55,6 +55,7 @@ class LeaveTemplateController extends Controller
 
         return Inertia::render('leave-templates/show', [
             'template' => $this->payload($leave_template),
+            'companyLogoUrl' => asset('yes_machinery_logo.png'),
         ]);
     }
 

@@ -171,6 +171,7 @@ export default function LeaveRequestsCreate({
     const [employeeDropdownOpen, setEmployeeDropdownOpen] = useState(false);
     const [activeEmployeeIndex, setActiveEmployeeIndex] = useState(0);
     const [employeeSelectionError, setEmployeeSelectionError] = useState('');
+    const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
     const employeeInputRef = useRef<HTMLInputElement>(null);
     const certificateInputRef = useRef<HTMLInputElement>(null);
     const submissionStatus = useRef<'applied' | 'approved'>('applied');
@@ -287,6 +288,7 @@ export default function LeaveRequestsCreate({
     }, [data.employee_id, employees]);
 
     const clearPolicyDependentValues = () => {
+        setHasAttemptedSubmit(false);
         setData('certificate', null);
         setData('handover_person_id', '');
         setData('handover_description', '');
@@ -493,7 +495,7 @@ export default function LeaveRequestsCreate({
         selectedLeaveType,
     ]);
     useEffect(() => {
-        if (!eligibilityPayload) {
+        if (!hasAttemptedSubmit || !eligibilityPayload) {
             return;
         }
 
@@ -554,7 +556,7 @@ export default function LeaveRequestsCreate({
             window.clearTimeout(timer);
             controller.abort();
         };
-    }, [clearErrors, eligibilityPayload, setError]);
+    }, [clearErrors, eligibilityPayload, hasAttemptedSubmit, setError]);
 
     useEffect(() => {
         if (!requiresAttachment && data.certificate) {
@@ -653,6 +655,7 @@ export default function LeaveRequestsCreate({
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
+        setHasAttemptedSubmit(true);
         clearErrors();
         setEmployeeSelectionError('');
 

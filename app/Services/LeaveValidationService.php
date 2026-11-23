@@ -463,9 +463,10 @@ class LeaveValidationService
     private function validateAttachment(LeaveType $leaveType, ?LeavePolicy $policy, Carbon $startDate, Carbon $endDate, float $totalDays, bool $hasFile): bool
     {
         $required = $policy?->requiresAttachmentForDuration($totalDays) ?? false;
+        $documentAfterDays = $policy?->requires_document_after_days;
         $message = $required
-            ? ($policy->requires_document_after_days !== null
-                ? "A supporting document is required for leaves of {$policy->requires_document_after_days} days or more."
+            ? ($documentAfterDays !== null && $documentAfterDays > 0
+                ? "A supporting document is required for leaves of {$documentAfterDays} days or more."
                 : "Company policy requires a supporting document for {$leaveType->leave_name}.")
             : null;
         if ($policy?->requiresWeekendAttachment($startDate, $endDate)) {

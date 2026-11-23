@@ -19,7 +19,6 @@ trait LeaveBusinessRules
             return;
         }
 
-        $this->requiredDetail('local_contact_no', $data['local_contact_no'] ?? null);
         $ticketStatus = $this->requiredDetail('ticket_status', $data['ticket_status'] ?? null);
         if (! in_array($ticketStatus, ['ticket', 'no_ticket'], true)) {
             throw ValidationException::withMessages([

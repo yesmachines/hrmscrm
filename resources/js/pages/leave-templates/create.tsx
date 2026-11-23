@@ -23,10 +23,10 @@ export default function LeaveTemplatesCreate({
     return (
         <>
             <Head title="Add leave template" />
-            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1600px]">
                 <Heading
                     title="Add leave template"
-                    description="Create an HTML template for approved leave PDFs."
+                    description="Create a new leave template"
                 />
                 <Form
                     {...LeaveTemplateController.store.form()}

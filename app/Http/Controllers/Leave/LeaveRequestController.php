@@ -7,6 +7,7 @@ use App\Http\Requests\Leave\LeaveApplicationRequest;
 use App\Http\Requests\Leave\PreviewLeaveTemplateRequest;
 use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
+use App\Models\LeaveRequestGeneratedFile;
 use App\Models\LeaveTemplate;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
@@ -363,6 +364,9 @@ class LeaveRequestController extends Controller
             'generatedPdfUrl' => $generatedPdf
                 ? route('leave-requests.pdf', $leave_request)
                 : null,
+            'viewPdfUrl' => $generatedPdf
+                ? route('leave-requests.pdf.view', $leave_request)
+                : null,
             'pdfNotice' => $leave_request->status === 'approved' && $generatedPdf === null
                 ? ($templateAvailable
                     ? 'This approved request does not have a generated PDF yet. Edit and save it to generate one.'
@@ -376,6 +380,28 @@ class LeaveRequestController extends Controller
 
     public function downloadPdf(LeaveRequest $leave_request): StreamedResponse
     {
+        $generatedPdf = $this->generatedPdfOrFail($leave_request);
+
+        return Storage::disk('public')->download(
+            $generatedPdf->file_path,
+            "leave-request-{$leave_request->id}.pdf",
+        );
+    }
+
+    public function viewPdf(LeaveRequest $leave_request): StreamedResponse
+    {
+        $generatedPdf = $this->generatedPdfOrFail($leave_request);
+
+        return Storage::disk('public')->response(
+            $generatedPdf->file_path,
+            "leave-request-{$leave_request->id}.pdf",
+            ['Content-Type' => 'application/pdf'],
+            'inline',
+        );
+    }
+
+    private function generatedPdfOrFail(LeaveRequest $leave_request): LeaveRequestGeneratedFile
+    {
         abort_unless($leave_request->status === 'approved', 404);
 
         $generatedPdf = $leave_request->generatedFiles()->orderByDesc('id')->first();
@@ -384,10 +410,7 @@ class LeaveRequestController extends Controller
             404,
         );
 
-        return Storage::disk('public')->download(
-            $generatedPdf->file_path,
-            "leave-request-{$leave_request->id}.pdf",
-        );
+        return $generatedPdf;
     }
 
     public function edit(

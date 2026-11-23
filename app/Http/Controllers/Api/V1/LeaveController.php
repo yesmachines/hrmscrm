@@ -341,7 +341,7 @@ class LeaveController extends Controller
                             description: 'JSON-encoded list of task strings, for example ["Cover inbox", "Review approvals"]. Legacy plain-text descriptions are still accepted.',
                         ),
                         new OA\Property(property: 'emergency_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),
-                        new OA\Property(property: 'local_contact_no', type: 'string', description: 'Required for Annual Leave. Digits only, with an optional leading +.'),
+                        new OA\Property(property: 'local_contact_no', type: 'string', description: 'Optional for Annual Leave. If provided, must be 7-20 characters, digits only with an optional leading +.'),
                         new OA\Property(property: 'traveling_outside_country', type: 'boolean', description: 'Required for Annual Leave. When true, destination and travel_contact_no are required.'),
                         new OA\Property(property: 'destination', type: 'string', description: 'Destination of vacation; required for Annual Leave when travelling outside the country.'),
                         new OA\Property(property: 'travel_contact_no', type: 'string', description: 'Digits only, with an optional leading +.'),

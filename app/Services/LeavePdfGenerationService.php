@@ -85,9 +85,13 @@ class LeavePdfGenerationService
             '{{remarks}}' => $this->escape((string) ($values['remarks'] ?? '')),
             '{{local_contact_no}}' => $this->escape((string) ($values['local_contact_no'] ?? '')),
             '{{traveling_outside_country}}' => $this->escape($this->yesNo($values['traveling_outside_country'] ?? null)),
+            '{{travel_yes_checkbox}}' => $this->yesNoCheckbox($values['traveling_outside_country'] ?? null, 'Yes'),
+            '{{travel_no_checkbox}}' => $this->yesNoCheckbox($values['traveling_outside_country'] ?? null, 'No'),
             '{{destination}}' => $this->escape((string) ($values['destination'] ?? '')),
             '{{travel_contact_no}}' => $this->escape((string) ($values['travel_contact_no'] ?? '')),
             '{{ticket_status}}' => $this->escape($ticketStatus),
+            '{{ticket_checkbox}}' => $this->ticketStatusCheckbox($values['ticket_status'] ?? null, 'ticket'),
+            '{{no_ticket_checkbox}}' => $this->ticketStatusCheckbox($values['ticket_status'] ?? null, 'no_ticket'),
             '{{handover_person}}' => $this->escape($handoverEmployee?->user?->name ?? ''),
             '{{handover_description}}' => $this->formatHandoverDescription($values['handover_description'] ?? null),
             '{{employee_signature}}' => $employeeSignature,
@@ -96,7 +100,7 @@ class LeavePdfGenerationService
             '{{handover_receiver_signature}}' => $handoverReceiverSignature,
             '{{approved_by}}' => $this->escape($latestApproval?->approver?->name ?? ''),
             '{{approved_date}}' => $this->escape($this->formatDate($latestApproval?->approved_date)),
-            '{{issue_date}}' => now()->format('d M Y'),
+            '{{issue_date}}' => $this->escape($this->formatDate($leaveRequest?->created_at)),
         ];
 
         return strtr($template->template_code, $replacements);
@@ -196,24 +200,30 @@ class LeavePdfGenerationService
 
     private function formatHandoverDescription(mixed $description): string
     {
-        if (! is_string($description) || trim($description) === '') {
-            return '';
+        $description = is_string($description) ? trim($description) : '';
+        $tasks = $description === '' ? [] : json_decode($description, true);
+        $items = is_array($tasks) && array_is_list($tasks)
+            ? array_values(array_filter($tasks, fn (mixed $task): bool => is_string($task) && trim($task) !== ''))
+            : ($description === '' ? [] : array_values(array_filter(
+                preg_split('/\R/', $description) ?: [$description],
+                fn (string $task): bool => trim($task) !== '',
+            )));
+        $rows = [];
+
+        foreach ($items as $index => $task) {
+            $rows[] = '<tr><td style="width: 8%; border: 1px solid #222; padding: 6px; text-align: center; vertical-align: top;">'
+                .($index + 1)
+                .'</td><td style="border: 1px solid #222; padding: 6px; vertical-align: top;">'
+                .'<span style="color: red;">'.nl2br($this->escape(trim($task))).'</span>'
+                .'</td></tr>';
         }
 
-        $tasks = json_decode($description, true);
-        if (is_array($tasks) && array_is_list($tasks)) {
-            $items = array_filter($tasks, fn (mixed $task): bool => is_string($task) && trim($task) !== '');
-            if ($items === []) {
-                return '';
-            }
-
-            return '<ul>'.implode('', array_map(
-                fn (string $task): string => '<li>'.$this->escape($task).'</li>',
-                $items,
-            )).'</ul>';
+        while (count($rows) < 8) {
+            $rows[] = '<tr><td style="width: 8%; border: 1px solid #222; padding: 6px;">&nbsp;</td>'
+                .'<td style="border: 1px solid #222; padding: 6px;">&nbsp;</td></tr>';
         }
 
-        return nl2br($this->escape($description));
+        return implode('', $rows);
     }
 
     private function formatDate(mixed $date): string
@@ -236,6 +246,31 @@ class LeavePdfGenerationService
         }
 
         return '';
+    }
+
+    private function yesNoCheckbox(mixed $value, string $expected): string
+    {
+        $answer = $this->yesNo($value);
+
+        return $this->checkboxMarkup($answer === $expected);
+    }
+
+    private function ticketStatusCheckbox(mixed $value, string $expected): string
+    {
+        $ticketStatus = match ($value) {
+            'ticket', 'Ticket' => 'ticket',
+            'no_ticket', 'No Ticket' => 'no_ticket',
+            default => '',
+        };
+
+        return $this->checkboxMarkup($ticketStatus === $expected);
+    }
+
+    private function checkboxMarkup(bool $checked): string
+    {
+        return '<span style="display: inline-block; width: 14px; height: 14px; border: 1px solid #222; text-align: center; vertical-align: middle; line-height: 12px; font-family: &quot;DejaVu Sans&quot;, sans-serif; font-size: 12px;">'
+            .($checked ? '&#10003;' : '&nbsp;')
+            .'</span>';
     }
 
     private function escape(string $value): string

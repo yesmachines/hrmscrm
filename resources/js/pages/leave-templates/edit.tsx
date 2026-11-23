@@ -34,10 +34,10 @@ export default function LeaveTemplatesEdit({
     return (
         <>
             <Head title={`Edit ${template.template_name}`} />
-            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1600px]">
                 <Heading
-                    title={`Edit ${template.template_name}`}
-                    description="Update the leave PDF template."
+                    title="Edit leave template"
+                    description="Update template details"
                 />
                 <Form
                     {...LeaveTemplateController.update.form(template.id)}

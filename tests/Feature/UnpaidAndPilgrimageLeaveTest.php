@@ -184,6 +184,21 @@ test('unpaid requests at three days need neither balance nor handover in every f
     expect(LeaveBalance::query()->where('employee_id', $this->employee->id)->exists())->toBeFalse();
 })->with('policy rule flows');
 
+test('zero attachment threshold uses the general policy message', function () {
+    $this->policy->update([
+        'requires_attachment' => true,
+        'requires_document_after_days' => 0,
+    ]);
+
+    submitPolicyRuleFlow($this, 'admin preview', $this->data)
+        ->assertOk()
+        ->assertJsonPath('valid', false)
+        ->assertJsonPath(
+            'errors.certificate.0',
+            'Company policy requires a supporting document for Unpaid Leave.',
+        );
+});
+
 test('required handover descriptions accept task lists and reject empty task lists', function (string $description, bool $valid) {
     $this->policy->update(['requires_handover' => true]);
     $handoverPerson = policyRuleColleague($this->employee);
@@ -308,7 +323,7 @@ test('Annual Leave fields are persisted by admin and API create flows', function
     }
 })->with(['admin', 'api']);
 
-test('Annual Leave requires the local contact number', function () {
+test('Annual Leave local contact number is optional and follows mobile validation', function (string $flow) {
     $annual = LeaveType::query()->create([
         'leave_name' => 'Annual Leave',
         'code' => 'ANNUAL',
@@ -321,11 +336,29 @@ test('Annual Leave requires the local contact number', function () {
         'allow_balance' => false,
     ]);
 
-    $this->postJson('/api/v1/leaves/validate', [
+    $data = [
         ...$this->data,
         'leave_type_id' => $annual->id,
-    ])->assertUnprocessable()->assertJsonValidationErrors('local_contact_no');
-});
+        'local_contact_no' => '',
+        'traveling_outside_country' => false,
+        'ticket_status' => 'no_ticket',
+    ];
+    $validate = fn (array $payload) => $flow === 'admin'
+        ? $this->postJson(route('leave-requests.validate'), $payload)
+        : $this->postJson('/api/v1/leaves/validate', $payload);
+
+    $validate($data)->assertOk();
+    $validate([...$data, 'local_contact_no' => '+1234567'])->assertOk();
+    $validate([...$data, 'local_contact_no' => '123456'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('local_contact_no');
+    $validate([...$data, 'local_contact_no' => '123456789012345678901'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('local_contact_no');
+    $validate([...$data, 'local_contact_no' => '1234abc'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('local_contact_no');
+})->with(['admin', 'api']);
 
 test('API can mark Annual Leave as not travelling and removes destination details', function () {
     $annual = LeaveType::query()->create([

@@ -180,6 +180,7 @@ export default function LeaveRequestsEdit({
     const hasExistingAttachment = Boolean(leaveRequest.files?.length);
 
     const [isCancelling, setIsCancelling] = useState(false);
+    const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
     const {
         data,
@@ -431,7 +432,11 @@ export default function LeaveRequestsEdit({
         ],
     );
     useEffect(() => {
-        if (!eligibilityPayload.start_date || !eligibilityPayload.end_date) {
+        if (
+            !hasAttemptedSubmit ||
+            !eligibilityPayload.start_date ||
+            !eligibilityPayload.end_date
+        ) {
             return;
         }
 
@@ -492,7 +497,7 @@ export default function LeaveRequestsEdit({
             window.clearTimeout(timer);
             controller.abort();
         };
-    }, [clearErrors, eligibilityPayload, setError]);
+    }, [clearErrors, eligibilityPayload, hasAttemptedSubmit, setError]);
 
     const candidateHandoverEmployees = useMemo(() => {
         if (!data.employee_id) {
@@ -549,6 +554,7 @@ export default function LeaveRequestsEdit({
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
+        setHasAttemptedSubmit(true);
 
         clearErrors();
 

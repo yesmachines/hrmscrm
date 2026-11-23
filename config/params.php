@@ -65,9 +65,8 @@ return [
             'local_contact_no' => [
                 'label' => 'Local Contact Number',
                 'type' => 'tel',
-                'required' => true,
-                'rules' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/', 'max:25'],
-                'required_message' => 'A local contact number is required for Annual Leave.',
+                'required' => false,
+                'rules' => ['nullable', 'string', 'min:7', 'max:20', 'regex:/^\+?[0-9]+$/'],
             ],
             'traveling_outside_country' => [
                 'label' => 'Travelling Outside Country',

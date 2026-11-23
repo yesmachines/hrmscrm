@@ -12,6 +12,7 @@ import {
     Pencil,
     Ban,
     Download,
+    Printer,
 } from 'lucide-react';
 import {
     index,
@@ -82,12 +83,14 @@ export default function LeaveRequestShow({
     handoverEmployee,
     fieldDefinitions = [],
     generatedPdfUrl,
+    viewPdfUrl,
     pdfNotice,
 }: {
     leave_request: LeaveRequestDetail;
     handoverEmployee?: HandoverEmployee;
     fieldDefinitions?: LeaveFieldDefinition[];
     generatedPdfUrl?: string | null;
+    viewPdfUrl?: string | null;
     pdfNotice?: string | null;
 }) {
     const handoverDescription = leave_request.details?.find(
@@ -170,6 +173,19 @@ export default function LeaveRequestShow({
                                 Edit
                             </Link>
                         </Button>
+                        {viewPdfUrl &&
+                            leave_request.status === 'approved' && (
+                                <Button variant="outline" asChild>
+                                    <a
+                                        href={viewPdfUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        <Printer className="mr-2 size-4" />
+                                        View / Print PDF
+                                    </a>
+                                </Button>
+                            )}
                         {generatedPdfUrl &&
                             leave_request.status === 'approved' && (
                                 <Button asChild>
@@ -205,6 +221,22 @@ export default function LeaveRequestShow({
 
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                     <div className="col-span-1 space-y-6 md:col-span-2">
+                        {viewPdfUrl &&
+                            leave_request.status === 'approved' && (
+                                <section className="space-y-4 rounded-xl border border-border bg-white p-6 shadow-sm">
+                                    <h3 className="flex items-center gap-2 text-lg font-semibold">
+                                        <FileText className="size-5 text-primary" />
+                                        Generated Leave PDF
+                                    </h3>
+                                    <div className="h-[600px] overflow-hidden rounded-xl border border-border/80 bg-slate-50/60">
+                                        <iframe
+                                            src={viewPdfUrl}
+                                            className="size-full border-0"
+                                            title="Generated leave PDF preview"
+                                        />
+                                    </div>
+                                </section>
+                            )}
                         {/* Request Details */}
                         <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
                             <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-foreground">
