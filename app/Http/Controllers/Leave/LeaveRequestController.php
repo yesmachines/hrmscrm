@@ -331,7 +331,6 @@ class LeaveRequestController extends Controller
         if ($generatedPdf !== null && ! Storage::disk('public')->exists($generatedPdf->file_path)) {
             $generatedPdf = null;
         }
-        $templateAvailable = $leave_request->leaveType?->resolveTemplate($leave_request->employee?->organisation_id) !== null;
 
         $handoverDetail = $leave_request->details->firstWhere('field_key', 'handover_person_id');
         $handoverEmployee = null;
@@ -351,10 +350,10 @@ class LeaveRequestController extends Controller
             'viewPdfUrl' => $generatedPdf
                 ? route('leave-requests.pdf.view', $leave_request)
                 : null,
-            'pdfNotice' => $leave_request->status === 'approved' && $generatedPdf === null
-                ? ($templateAvailable
-                    ? 'This approved request does not have a generated PDF yet. Edit and save it to generate one.'
-                    : 'No active leave template is configured for this leave type.')
+            'pdfNotice' => $leave_request->status === 'approved'
+                && $generatedPdf === null
+                && $leave_request->leaveType?->resolveTemplate($leave_request->employee?->organisation_id) !== null
+                ? 'This approved request does not have a generated PDF yet. Edit and save it to generate one.'
                 : null,
             'fieldDefinitions' => $leave_request->leaveType
                 ? $this->leaveTypeRules->fieldDefinitions($leave_request->leaveType)

@@ -180,6 +180,37 @@ test('annual leave template seeder is idempotent and preserves existing edits', 
         ->and($template->fresh()->template_code)->toBe('<p>Customized template</p>');
 });
 
+test('approved leave only shows a missing PDF notice when an active template is available', function () {
+    $admin = createHrmsLoginUser('admin');
+    $employee = createLeaveTemplateTestEmployee();
+    $leaveType = createLeaveTemplateTestType();
+    $leaveRequest = LeaveRequest::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $leaveType->id,
+        'request_type' => 'fullday',
+        'start_date' => '2026-12-01',
+        'end_date' => '2026-12-01',
+        'total_days' => 1,
+        'status' => 'approved',
+    ]);
+
+    $this->actingAs($admin)
+        ->withoutVite()
+        ->get(route('leave-requests.show', $leaveRequest))
+        ->assertInertia(fn (Assert $page) => $page->where('pdfNotice', null));
+
+    LeaveTemplate::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'template_name' => 'Approved leave',
+        'template_code' => '<p>{{employee_name}}</p>',
+        'status' => 1,
+    ]);
+
+    $this->get(route('leave-requests.show', $leaveRequest))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('pdfNotice', 'This approved request does not have a generated PDF yet. Edit and save it to generate one.'));
+});
+
 test('approved leave generates a PDF that can be downloaded', function () {
     Storage::fake('public');
 
