@@ -197,6 +197,10 @@ export default function LeaveRequestsCreate({
         certificate: null as File | null,
         handover_person_id: '',
         handover_description: '',
+        handover_other_name: '',
+        handover_other_organisation: '',
+        handover_other_designation: '',
+        handover_other_contact_number: '',
         child_birth_date: '',
         due_date: '',
         festival_id: '',
@@ -292,6 +296,10 @@ export default function LeaveRequestsCreate({
         setData('certificate', null);
         setData('handover_person_id', '');
         setData('handover_description', '');
+        setData('handover_other_name', '');
+        setData('handover_other_organisation', '');
+        setData('handover_other_designation', '');
+        setData('handover_other_contact_number', '');
         setData('child_birth_date', '');
         setData('due_date', '');
         setData('festival_id', '');
@@ -310,6 +318,10 @@ export default function LeaveRequestsCreate({
             'certificate',
             'handover_person_id',
             'handover_description',
+            'handover_other_name',
+            'handover_other_organisation',
+            'handover_other_designation',
+            'handover_other_contact_number',
             'child_birth_date',
             'due_date',
             'local_contact_no',
@@ -392,14 +404,25 @@ export default function LeaveRequestsCreate({
             destination: data.destination,
             travel_contact_no: data.travel_contact_no,
             ticket_status: data.ticket_status,
-            handover_person_id: data.handover_person_id,
+            handover_person_id:
+                data.handover_person_id && data.handover_person_id !== 'other'
+                    ? data.handover_person_id
+                    : null,
             handover_description: data.handover_description,
+            handover_other_name: data.handover_other_name,
+            handover_other_organisation: data.handover_other_organisation,
+            handover_other_designation: data.handover_other_designation,
+            handover_other_contact_number: data.handover_other_contact_number,
         }),
         [
             data.destination,
             data.end_date,
             data.handover_description,
             data.handover_person_id,
+            data.handover_other_name,
+            data.handover_other_organisation,
+            data.handover_other_designation,
+            data.handover_other_contact_number,
             data.local_contact_no,
             data.remarks,
             data.request_type,
@@ -469,8 +492,17 @@ export default function LeaveRequestsCreate({
             destination: data.destination || null,
             travel_contact_no: data.travel_contact_no || null,
             ticket_status: data.ticket_status || null,
-            handover_person_id: data.handover_person_id || null,
+            handover_person_id:
+                data.handover_person_id && data.handover_person_id !== 'other'
+                    ? data.handover_person_id
+                    : null,
             handover_description: data.handover_description || null,
+            handover_other_name: data.handover_other_name || null,
+            handover_other_organisation:
+                data.handover_other_organisation || null,
+            handover_other_designation: data.handover_other_designation || null,
+            handover_other_contact_number:
+                data.handover_other_contact_number || null,
             certificate: data.certificate,
         };
     }, [
@@ -487,6 +519,10 @@ export default function LeaveRequestsCreate({
         data.end_date,
         data.handover_description,
         data.handover_person_id,
+        data.handover_other_name,
+        data.handover_other_organisation,
+        data.handover_other_designation,
+        data.handover_other_contact_number,
         data.request_type,
         data.remarks,
         data.start_date,
@@ -580,12 +616,39 @@ export default function LeaveRequestsCreate({
                 setData('handover_description', '');
             }
 
-            clearErrors('handover_person_id', 'handover_description');
+            if (data.handover_other_name) {
+                setData('handover_other_name', '');
+            }
+
+            if (data.handover_other_organisation) {
+                setData('handover_other_organisation', '');
+            }
+
+            if (data.handover_other_designation) {
+                setData('handover_other_designation', '');
+            }
+
+            if (data.handover_other_contact_number) {
+                setData('handover_other_contact_number', '');
+            }
+
+            clearErrors(
+                'handover_person_id',
+                'handover_description',
+                'handover_other_name',
+                'handover_other_organisation',
+                'handover_other_designation',
+                'handover_other_contact_number',
+            );
         }
     }, [
         clearErrors,
         data.handover_description,
         data.handover_person_id,
+        data.handover_other_name,
+        data.handover_other_organisation,
+        data.handover_other_designation,
+        data.handover_other_contact_number,
         requiresHandover,
         setData,
     ]);
@@ -640,13 +703,16 @@ export default function LeaveRequestsCreate({
     const hasApplicantOverlap = selectedEmployee
         ? isEmployeeOnLeave(selectedEmployee.id)
         : false;
+    const isOtherHandover = data.handover_person_id === 'other';
     const isSelectedHandoverOnLeave =
         Boolean(data.handover_person_id) &&
+        data.handover_person_id !== 'other' &&
         isEmployeeOnLeave(Number(data.handover_person_id));
 
     useEffect(() => {
         if (
             data.handover_person_id &&
+            data.handover_person_id !== 'other' &&
             String(data.employee_id) === String(data.handover_person_id)
         ) {
             setData('handover_person_id', '');
@@ -761,6 +827,36 @@ export default function LeaveRequestsCreate({
         }
 
         if (
+            policyRequirements.requiresHandover &&
+            data.handover_person_id === 'other'
+        ) {
+            const externalHandoverFields = [
+                ['handover_other_name', data.handover_other_name],
+                [
+                    'handover_other_organisation',
+                    data.handover_other_organisation,
+                ],
+                ['handover_other_designation', data.handover_other_designation],
+                [
+                    'handover_other_contact_number',
+                    data.handover_other_contact_number,
+                ],
+            ] as const;
+            const missingField = externalHandoverFields.find(
+                ([, value]) => !value.trim(),
+            );
+
+            if (missingField) {
+                setError(
+                    missingField[0],
+                    'This field is required for an external handover contact.',
+                );
+
+                return;
+            }
+        }
+
+        if (
             data.handover_person_id &&
             Number(data.handover_person_id) === selectedEmployee.id
         ) {
@@ -820,6 +916,10 @@ export default function LeaveRequestsCreate({
 
         transform((formData) => ({
             ...formData,
+            handover_person_id:
+                formData.handover_person_id === 'other'
+                    ? ''
+                    : formData.handover_person_id,
             handover_description: normalizeHandoverDescription(
                 formData.handover_description,
             ),
@@ -1367,12 +1467,40 @@ export default function LeaveRequestsCreate({
                                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                             value={data.handover_person_id}
                                             onChange={(e) => {
+                                                const handoverPersonId =
+                                                    e.target.value;
                                                 setData(
                                                     'handover_person_id',
-                                                    e.target.value,
+                                                    handoverPersonId,
                                                 );
+
+                                                if (
+                                                    handoverPersonId !== 'other'
+                                                ) {
+                                                    setData(
+                                                        'handover_other_name',
+                                                        '',
+                                                    );
+                                                    setData(
+                                                        'handover_other_organisation',
+                                                        '',
+                                                    );
+                                                    setData(
+                                                        'handover_other_designation',
+                                                        '',
+                                                    );
+                                                    setData(
+                                                        'handover_other_contact_number',
+                                                        '',
+                                                    );
+                                                }
+
                                                 clearErrors(
                                                     'handover_person_id',
+                                                    'handover_other_name',
+                                                    'handover_other_organisation',
+                                                    'handover_other_designation',
+                                                    'handover_other_contact_number',
                                                 );
                                             }}
                                             required={requiresHandover}
@@ -1381,6 +1509,7 @@ export default function LeaveRequestsCreate({
                                                 Select colleague to handover
                                                 work to...
                                             </option>
+                                            <option value="other">Other</option>
                                             {candidateHandoverEmployees.map(
                                                 (emp) => {
                                                     const onLeave =
@@ -1407,6 +1536,168 @@ export default function LeaveRequestsCreate({
                                                 },
                                             )}
                                         </select>
+
+                                        {isOtherHandover && (
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                <div className="space-y-2">
+                                                    <Label
+                                                        htmlFor={`${handoverPersonSelectId}-other-name`}
+                                                    >
+                                                        Name
+                                                        {isOtherHandover && (
+                                                            <span className="ml-1 text-destructive">
+                                                                *
+                                                            </span>
+                                                        )}
+                                                    </Label>
+                                                    <Input
+                                                        id={`${handoverPersonSelectId}-other-name`}
+                                                        value={
+                                                            data.handover_other_name
+                                                        }
+                                                        required={
+                                                            isOtherHandover &&
+                                                            requiresHandover
+                                                        }
+                                                        onChange={(event) => {
+                                                            setData(
+                                                                'handover_other_name',
+                                                                event.target
+                                                                    .value,
+                                                            );
+                                                            clearErrors(
+                                                                'handover_other_name',
+                                                            );
+                                                        }}
+                                                    />
+                                                    {errors.handover_other_name && (
+                                                        <p className="text-sm text-destructive">
+                                                            {
+                                                                errors.handover_other_name
+                                                            }
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label
+                                                        htmlFor={`${handoverPersonSelectId}-other-organisation`}
+                                                    >
+                                                        Organisation
+                                                        {isOtherHandover && (
+                                                            <span className="ml-1 text-destructive">
+                                                                *
+                                                            </span>
+                                                        )}
+                                                    </Label>
+                                                    <Input
+                                                        id={`${handoverPersonSelectId}-other-organisation`}
+                                                        value={
+                                                            data.handover_other_organisation
+                                                        }
+                                                        required={
+                                                            isOtherHandover &&
+                                                            requiresHandover
+                                                        }
+                                                        onChange={(event) => {
+                                                            setData(
+                                                                'handover_other_organisation',
+                                                                event.target
+                                                                    .value,
+                                                            );
+                                                            clearErrors(
+                                                                'handover_other_organisation',
+                                                            );
+                                                        }}
+                                                    />
+                                                    {errors.handover_other_organisation && (
+                                                        <p className="text-sm text-destructive">
+                                                            {
+                                                                errors.handover_other_organisation
+                                                            }
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label
+                                                        htmlFor={`${handoverPersonSelectId}-other-designation`}
+                                                    >
+                                                        Designation
+                                                        {isOtherHandover && (
+                                                            <span className="ml-1 text-destructive">
+                                                                *
+                                                            </span>
+                                                        )}
+                                                    </Label>
+                                                    <Input
+                                                        id={`${handoverPersonSelectId}-other-designation`}
+                                                        value={
+                                                            data.handover_other_designation
+                                                        }
+                                                        required={
+                                                            isOtherHandover &&
+                                                            requiresHandover
+                                                        }
+                                                        onChange={(event) => {
+                                                            setData(
+                                                                'handover_other_designation',
+                                                                event.target
+                                                                    .value,
+                                                            );
+                                                            clearErrors(
+                                                                'handover_other_designation',
+                                                            );
+                                                        }}
+                                                    />
+                                                    {errors.handover_other_designation && (
+                                                        <p className="text-sm text-destructive">
+                                                            {
+                                                                errors.handover_other_designation
+                                                            }
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label
+                                                        htmlFor={`${handoverPersonSelectId}-other-contact-number`}
+                                                    >
+                                                        Contact number
+                                                        {isOtherHandover && (
+                                                            <span className="ml-1 text-destructive">
+                                                                *
+                                                            </span>
+                                                        )}
+                                                    </Label>
+                                                    <Input
+                                                        id={`${handoverPersonSelectId}-other-contact-number`}
+                                                        type="tel"
+                                                        value={
+                                                            data.handover_other_contact_number
+                                                        }
+                                                        required={
+                                                            isOtherHandover &&
+                                                            requiresHandover
+                                                        }
+                                                        onChange={(event) => {
+                                                            setData(
+                                                                'handover_other_contact_number',
+                                                                event.target
+                                                                    .value,
+                                                            );
+                                                            clearErrors(
+                                                                'handover_other_contact_number',
+                                                            );
+                                                        }}
+                                                    />
+                                                    {errors.handover_other_contact_number && (
+                                                        <p className="text-sm text-destructive">
+                                                            {
+                                                                errors.handover_other_contact_number
+                                                            }
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {isSelectedHandoverOnLeave && (
                                             <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-2.5 text-xs font-medium text-destructive">

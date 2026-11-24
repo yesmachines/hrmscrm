@@ -187,7 +187,7 @@ test('active leave flows enforce the same validation order', function (string $f
     ['annual before service', 'total_days', 'annual limit'],
     ['service before balance', 'leave_type_id', '24 months'],
     ['balance before handover', 'total_days', 'Insufficient leave balance'],
-    ['handover before travel', 'handover_person_id', 'handover person is required'],
+    ['handover before travel', 'handover_other_name', 'required for an external handover contact'],
     ['travel before documents', 'destination', 'Travel destination'],
     ['documents before festival', 'certificate', 'supporting document'],
     ['festival last', 'festival_id', 'Festival selection'],

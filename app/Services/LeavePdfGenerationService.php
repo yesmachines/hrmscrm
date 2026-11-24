@@ -92,7 +92,14 @@ class LeavePdfGenerationService
             '{{ticket_status}}' => $this->escape($ticketStatus),
             '{{ticket_checkbox}}' => $this->ticketStatusCheckbox($values['ticket_status'] ?? null, 'ticket'),
             '{{no_ticket_checkbox}}' => $this->ticketStatusCheckbox($values['ticket_status'] ?? null, 'no_ticket'),
-            '{{handover_person}}' => $this->escape($handoverEmployee?->user?->name ?? ''),
+            '{{handover_person}}' => $this->escape(
+                $handoverEmployee?->user?->name
+                    ?? (string) ($values['handover_other_name'] ?? ''),
+            ),
+            '{{handover_other_name}}' => $this->escape((string) ($values['handover_other_name'] ?? '')),
+            '{{handover_other_organisation}}' => $this->escape((string) ($values['handover_other_organisation'] ?? '')),
+            '{{handover_other_designation}}' => $this->escape((string) ($values['handover_other_designation'] ?? '')),
+            '{{handover_other_contact_number}}' => $this->escape((string) ($values['handover_other_contact_number'] ?? '')),
             '{{handover_description}}' => $this->formatHandoverDescription($values['handover_description'] ?? null),
             '{{employee_signature}}' => $employeeSignature,
             '{{signature}}' => $employeeSignature,

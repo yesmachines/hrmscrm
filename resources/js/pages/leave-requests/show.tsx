@@ -99,6 +99,23 @@ export default function LeaveRequestShow({
     const handoverTasks = parseHandoverTasks(handoverDescription)
         .map((task) => task.trim())
         .filter((task) => task !== '');
+    const externalHandoverDetails = {
+        name: leave_request.details?.find(
+            (detail) => detail.field_key === 'handover_other_name',
+        )?.field_value,
+        organisation: leave_request.details?.find(
+            (detail) => detail.field_key === 'handover_other_organisation',
+        )?.field_value,
+        designation: leave_request.details?.find(
+            (detail) => detail.field_key === 'handover_other_designation',
+        )?.field_value,
+        contactNumber: leave_request.details?.find(
+            (detail) => detail.field_key === 'handover_other_contact_number',
+        )?.field_value,
+    };
+    const hasExternalHandoverDetails = Object.values(
+        externalHandoverDetails,
+    ).some(Boolean);
 
     const handleStatusUpdate = (status: string) => {
         router.put(
@@ -173,19 +190,18 @@ export default function LeaveRequestShow({
                                 Edit
                             </Link>
                         </Button>
-                        {viewPdfUrl &&
-                            leave_request.status === 'approved' && (
-                                <Button variant="outline" asChild>
-                                    <a
-                                        href={viewPdfUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                    >
-                                        <Printer className="mr-2 size-4" />
-                                        View / Print PDF
-                                    </a>
-                                </Button>
-                            )}
+                        {viewPdfUrl && leave_request.status === 'approved' && (
+                            <Button variant="outline" asChild>
+                                <a
+                                    href={viewPdfUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    <Printer className="mr-2 size-4" />
+                                    View / Print PDF
+                                </a>
+                            </Button>
+                        )}
                         {generatedPdfUrl &&
                             leave_request.status === 'approved' && (
                                 <Button asChild>
@@ -221,22 +237,21 @@ export default function LeaveRequestShow({
 
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                     <div className="col-span-1 space-y-6 md:col-span-2">
-                        {viewPdfUrl &&
-                            leave_request.status === 'approved' && (
-                                <section className="space-y-4 rounded-xl border border-border bg-white p-6 shadow-sm">
-                                    <h3 className="flex items-center gap-2 text-lg font-semibold">
-                                        <FileText className="size-5 text-primary" />
-                                        Generated Leave PDF
-                                    </h3>
-                                    <div className="h-[600px] overflow-hidden rounded-xl border border-border/80 bg-slate-50/60">
-                                        <iframe
-                                            src={viewPdfUrl}
-                                            className="size-full border-0"
-                                            title="Generated leave PDF preview"
-                                        />
-                                    </div>
-                                </section>
-                            )}
+                        {viewPdfUrl && leave_request.status === 'approved' && (
+                            <section className="space-y-4 rounded-xl border border-border bg-white p-6 shadow-sm">
+                                <h3 className="flex items-center gap-2 text-lg font-semibold">
+                                    <FileText className="size-5 text-primary" />
+                                    Generated Leave PDF
+                                </h3>
+                                <div className="h-[600px] overflow-hidden rounded-xl border border-border/80 bg-slate-50/60">
+                                    <iframe
+                                        src={viewPdfUrl}
+                                        className="size-full border-0"
+                                        title="Generated leave PDF preview"
+                                    />
+                                </div>
+                            </section>
+                        )}
                         {/* Request Details */}
                         <div className="rounded-xl border border-border bg-white p-6 shadow-sm">
                             <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -369,6 +384,7 @@ export default function LeaveRequestShow({
 
                         {/* Handover Details */}
                         {(Boolean(handoverEmployee) ||
+                            hasExternalHandoverDetails ||
                             Boolean(
                                 leave_request.details?.some(
                                     (d) =>
@@ -399,6 +415,65 @@ export default function LeaveRequestShow({
                                             </p>
                                         </div>
                                     )}
+
+                                    {!handoverEmployee &&
+                                        hasExternalHandoverDetails && (
+                                            <div className="rounded-lg bg-muted/40 p-4">
+                                                <p className="mb-3 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+                                                    Other Handover Contact
+                                                </p>
+                                                <div className="grid gap-3 text-sm sm:grid-cols-2">
+                                                    {externalHandoverDetails.name && (
+                                                        <div>
+                                                            <p className="text-muted-foreground">
+                                                                Name
+                                                            </p>
+                                                            <p className="font-medium text-foreground">
+                                                                {
+                                                                    externalHandoverDetails.name
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {externalHandoverDetails.organisation && (
+                                                        <div>
+                                                            <p className="text-muted-foreground">
+                                                                Organisation
+                                                            </p>
+                                                            <p className="font-medium text-foreground">
+                                                                {
+                                                                    externalHandoverDetails.organisation
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {externalHandoverDetails.designation && (
+                                                        <div>
+                                                            <p className="text-muted-foreground">
+                                                                Designation
+                                                            </p>
+                                                            <p className="font-medium text-foreground">
+                                                                {
+                                                                    externalHandoverDetails.designation
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {externalHandoverDetails.contactNumber && (
+                                                        <div>
+                                                            <p className="text-muted-foreground">
+                                                                Contact number
+                                                            </p>
+                                                            <p className="font-medium text-foreground">
+                                                                {
+                                                                    externalHandoverDetails.contactNumber
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
 
                                     {handoverTasks.length > 0 && (
                                         <div>

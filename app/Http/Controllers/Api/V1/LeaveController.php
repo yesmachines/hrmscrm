@@ -335,6 +335,10 @@ class LeaveController extends Controller
                         new OA\Property(property: 'family_relationship', type: 'string', description: 'Required for Compassionate Leave. Use the key property of an option from the family_relationship field definition in leave metadata. Group A allows up to 5 leave days; Group B allows up to 3 leave days per request.'),
                         new OA\Property(property: 'child_birth_date', type: 'string', format: 'date', description: "Required for Parental Leave. The leave start date must be within six months of the child's birth."),
                         new OA\Property(property: 'handover_person_id', type: 'integer'),
+                        new OA\Property(property: 'handover_other_name', type: 'string'),
+                        new OA\Property(property: 'handover_other_organisation', type: 'string'),
+                        new OA\Property(property: 'handover_other_designation', type: 'string'),
+                        new OA\Property(property: 'handover_other_contact_number', type: 'string'),
                         new OA\Property(
                             property: 'handover_description',
                             type: 'string',
@@ -451,9 +455,29 @@ class LeaveController extends Controller
         // Store handover details if required
         if ($validationService->requiresHandover($leaveType, $policy, $totalDays)) {
             $details = [
-                ['field_name' => 'Handover Person ID', 'field_key' => 'handover_person_id', 'field_value' => (string) $request->input('handover_person_id')],
                 ['field_name' => 'Handover Description', 'field_key' => 'handover_description', 'field_value' => (string) $request->input('handover_description')],
             ];
+
+            if ($request->filled('handover_person_id')) {
+                array_unshift($details, [
+                    'field_name' => 'Handover Person ID',
+                    'field_key' => 'handover_person_id',
+                    'field_value' => (string) $request->input('handover_person_id'),
+                ]);
+            } else {
+                foreach ([
+                    'handover_other_name' => 'Other Handover Name',
+                    'handover_other_organisation' => 'Other Handover Organisation',
+                    'handover_other_designation' => 'Other Handover Designation',
+                    'handover_other_contact_number' => 'Other Handover Contact Number',
+                ] as $fieldKey => $fieldName) {
+                    $details[] = [
+                        'field_name' => $fieldName,
+                        'field_key' => $fieldKey,
+                        'field_value' => (string) $request->input($fieldKey),
+                    ];
+                }
+            }
 
             if ($request->filled('emergency_contact_no')) {
                 $details[] = ['field_name' => 'Emergency Contact No', 'field_key' => 'emergency_contact_no', 'field_value' => (string) $request->input('emergency_contact_no')];
@@ -687,18 +711,19 @@ class LeaveController extends Controller
             }
 
             if ($validationService->requiresHandover($leaveType, $validation['policy'], $validation['total_days'])) {
-                $this->updateLeaveRequestDetail(
-                    $leaveRequest,
-                    'handover_person_id',
-                    'Handover Person ID',
-                    $validationData['handover_person_id'] ?? null,
-                );
-                $this->updateLeaveRequestDetail(
-                    $leaveRequest,
-                    'handover_description',
-                    'Handover Description',
-                    $validationData['handover_description'] ?? null,
-                );
+                $hasEmployeeHandover = ! empty($validationData['handover_person_id']);
+                $handoverFields = [
+                    'handover_person_id' => ['Handover Person ID', $validationData['handover_person_id'] ?? null],
+                    'handover_description' => ['Handover Description', $validationData['handover_description'] ?? null],
+                    'handover_other_name' => ['Other Handover Name', $hasEmployeeHandover ? null : ($validationData['handover_other_name'] ?? null)],
+                    'handover_other_organisation' => ['Other Handover Organisation', $hasEmployeeHandover ? null : ($validationData['handover_other_organisation'] ?? null)],
+                    'handover_other_designation' => ['Other Handover Designation', $hasEmployeeHandover ? null : ($validationData['handover_other_designation'] ?? null)],
+                    'handover_other_contact_number' => ['Other Handover Contact Number', $hasEmployeeHandover ? null : ($validationData['handover_other_contact_number'] ?? null)],
+                ];
+
+                foreach ($handoverFields as $fieldKey => [$fieldName, $value]) {
+                    $this->updateLeaveRequestDetail($leaveRequest, $fieldKey, $fieldName, $value);
+                }
             }
 
             $detailUpdates = [

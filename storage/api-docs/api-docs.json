@@ -1588,19 +1588,62 @@
                                     "handover_person_id": {
                                         "type": "integer"
                                     },
+                                    "handover_other_name": {
+                                        "type": "string"
+                                    },
+                                    "handover_other_organisation": {
+                                        "type": "string"
+                                    },
+                                    "handover_other_designation": {
+                                        "type": "string"
+                                    },
+                                    "handover_other_contact_number": {
+                                        "type": "string"
+                                    },
                                     "handover_description": {
+                                        "description": "JSON-encoded list of task strings, for example [\"Cover inbox\", \"Review approvals\"]. Legacy plain-text descriptions are still accepted.",
                                         "type": "string"
                                     },
                                     "emergency_contact_no": {
                                         "description": "Digits only, with an optional leading +.",
                                         "type": "string"
                                     },
+                                    "local_contact_no": {
+                                        "description": "Optional for Annual Leave. If provided, must be 7-20 characters, digits only with an optional leading +.",
+                                        "type": "string"
+                                    },
+                                    "traveling_outside_country": {
+                                        "description": "Required for Annual Leave. When true, destination and travel_contact_no are required.",
+                                        "type": "boolean"
+                                    },
+                                    "destination": {
+                                        "description": "Destination of vacation; required for Annual Leave when travelling outside the country.",
+                                        "type": "string"
+                                    },
                                     "travel_contact_no": {
                                         "description": "Digits only, with an optional leading +.",
                                         "type": "string"
                                     },
+                                    "ticket_status": {
+                                        "description": "Required for Annual Leave.",
+                                        "type": "string",
+                                        "enum": [
+                                            "ticket",
+                                            "no_ticket"
+                                        ]
+                                    },
                                     "certificate": {
                                         "description": "Supporting document required by the leave policy. Sick Leave also requires it when an active holiday falls within the leave range or on the immediately preceding or following calendar day.",
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "handover_giver_signature": {
+                                        "description": "Optional signature image of the person handing over work.",
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "handover_receiver_signature": {
+                                        "description": "Optional signature image of the person receiving work.",
                                         "type": "string",
                                         "format": "binary"
                                     },

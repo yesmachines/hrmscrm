@@ -954,7 +954,12 @@ test('handover requirement applies only when duration exceeds its configured thr
         'total_days' => 3,
     ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['handover_person_id']);
+        ->assertJsonValidationErrors([
+            'handover_other_name',
+            'handover_other_organisation',
+            'handover_other_designation',
+            'handover_other_contact_number',
+        ]);
 
     $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $leaveType->id,
@@ -1731,7 +1736,12 @@ test('applying leave succeeds when selected handover person is not on leave', fu
             'ticket_status' => 'no_ticket',
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['handover_person_id']);
+        ->assertJsonValidationErrors([
+            'handover_other_name',
+            'handover_other_organisation',
+            'handover_other_designation',
+            'handover_other_contact_number',
+        ]);
 
     $response = $this->withToken($token)->postJson('/api/v1/leaves', [
         'leave_type_id' => $leaveType->id,
@@ -1753,6 +1763,30 @@ test('applying leave succeeds when selected handover person is not on leave', fu
         'leave_request_id' => $leaveId,
         'field_key' => 'handover_person_id',
         'field_value' => (string) $colleague->id,
+    ]);
+
+    $externalResponse = $this->withToken($token)->postJson('/api/v1/leaves', [
+        'leave_type_id' => $leaveType->id,
+        'start_date' => '2026-11-19',
+        'end_date' => '2026-11-20',
+        'total_days' => 2,
+        'local_contact_no' => '+971501234567',
+        'traveling_outside_country' => false,
+        'ticket_status' => 'no_ticket',
+        'remarks' => 'External handover',
+        'handover_description' => 'Coordinate partner coverage',
+        'handover_other_name' => 'Jordan Smith',
+        'handover_other_organisation' => 'Partner Organisation',
+        'handover_other_designation' => 'Operations Lead',
+        'handover_other_contact_number' => '+971501234567',
+    ]);
+
+    $externalResponse->assertCreated();
+    $externalLeaveId = $externalResponse->json('data.id');
+    $this->assertDatabaseHas('leave_request_details', [
+        'leave_request_id' => $externalLeaveId,
+        'field_key' => 'handover_other_name',
+        'field_value' => 'Jordan Smith',
     ]);
 });
 

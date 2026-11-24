@@ -228,8 +228,6 @@ class LeaveRequestController extends Controller
         $status = $requiresApproval ? $validated['status'] : 'approved';
         $requestType = $validation['request_type'];
         $totalDays = $validation['total_days'];
-        $handoverPersonId = $validated['handover_person_id'] ?? null;
-
         $leaveRequest = LeaveRequest::create([
             'employee_id' => $validated['employee_id'],
             'leave_type_id' => $validated['leave_type_id'],
@@ -257,21 +255,7 @@ class LeaveRequestController extends Controller
             'action_on' => now(),
         ]);
 
-        if (! empty($handoverPersonId)) {
-            $leaveRequest->details()->create([
-                'field_name' => 'Handover Person ID',
-                'field_key' => 'handover_person_id',
-                'field_value' => (string) $handoverPersonId,
-            ]);
-
-            if (! empty($validated['handover_description'])) {
-                $leaveRequest->details()->create([
-                    'field_name' => 'Handover Description',
-                    'field_key' => 'handover_description',
-                    'field_value' => (string) $validated['handover_description'],
-                ]);
-            }
-        }
+        $this->syncHandoverDetails($leaveRequest, $validated);
 
         if ($request->hasFile('certificate')) {
             $path = $request->file('certificate')->store('leave-certificates', 'public');
@@ -510,6 +494,10 @@ class LeaveRequestController extends Controller
                 'employee_profile' => $leave_request->employee?->profile(),
                 'handover_person_id' => $handoverDetail?->field_value,
                 'handover_description' => $handoverDescDetail?->field_value,
+                'handover_other_name' => $leave_request->details->firstWhere('field_key', 'handover_other_name')?->field_value,
+                'handover_other_organisation' => $leave_request->details->firstWhere('field_key', 'handover_other_organisation')?->field_value,
+                'handover_other_designation' => $leave_request->details->firstWhere('field_key', 'handover_other_designation')?->field_value,
+                'handover_other_contact_number' => $leave_request->details->firstWhere('field_key', 'handover_other_contact_number')?->field_value,
                 'child_birth_date' => $childBirthDateDetail?->field_value,
                 'due_date' => $leave_request->details->firstWhere('field_key', 'due_date')?->field_value,
                 'family_relationship' => $leave_request->details->firstWhere('field_key', 'family_relationship')?->field_value,
@@ -567,8 +555,6 @@ class LeaveRequestController extends Controller
             }
             $requestType = $validation['request_type'];
             $totalDays = $validation['total_days'];
-            $handoverPersonId = $validated['handover_person_id'] ?? null;
-
             $oldState = [
                 'status' => $leave_request->status,
                 'total_days' => (float) $leave_request->total_days,
@@ -617,24 +603,7 @@ class LeaveRequestController extends Controller
                 'status' => $validated['status'],
             ]);
 
-            // Update details (handover)
-            if (! empty($handoverPersonId)) {
-                $leave_request->details()->updateOrCreate(
-                    ['field_key' => 'handover_person_id'],
-                    ['field_name' => 'Handover Person ID', 'field_value' => (string) $handoverPersonId]
-                );
-
-                if (! empty($validated['handover_description'])) {
-                    $leave_request->details()->updateOrCreate(
-                        ['field_key' => 'handover_description'],
-                        ['field_name' => 'Handover Description', 'field_value' => (string) $validated['handover_description']]
-                    );
-                } else {
-                    $leave_request->details()->where('field_key', 'handover_description')->delete();
-                }
-            } else {
-                $leave_request->details()->whereIn('field_key', ['handover_person_id', 'handover_description'])->delete();
-            }
+            $this->syncHandoverDetails($leave_request, $validated);
 
             $leaveValidationService->syncLeaveTypeDetails($leave_request, $leaveType, $validated);
 
@@ -828,6 +797,40 @@ class LeaveRequestController extends Controller
         return back()->with('success', 'Leave request cancelled successfully. Any deducted balance has been refunded.');
     }
 
+    /**
+     * @param  array<string, mixed>  $values
+     */
+    private function syncHandoverDetails(LeaveRequest $leaveRequest, array $values): void
+    {
+        $hasEmployeeHandover = ! empty($values['handover_person_id']);
+        $fields = [
+            'handover_person_id' => ['Handover Person ID', $values['handover_person_id'] ?? null],
+            'handover_description' => ['Handover Description', $values['handover_description'] ?? null],
+            'handover_other_name' => ['Other Handover Name', $hasEmployeeHandover ? null : ($values['handover_other_name'] ?? null)],
+            'handover_other_organisation' => ['Other Handover Organisation', $hasEmployeeHandover ? null : ($values['handover_other_organisation'] ?? null)],
+            'handover_other_designation' => ['Other Handover Designation', $hasEmployeeHandover ? null : ($values['handover_other_designation'] ?? null)],
+            'handover_other_contact_number' => ['Other Handover Contact Number', $hasEmployeeHandover ? null : ($values['handover_other_contact_number'] ?? null)],
+        ];
+
+        foreach ($fields as $fieldKey => [$fieldName, $value]) {
+            $value = trim((string) ($value ?? ''));
+            if ($value === '') {
+                $leaveRequest->details()->where('field_key', $fieldKey)->delete();
+
+                continue;
+            }
+
+            $leaveRequest->details()->updateOrCreate(
+                ['field_key' => $fieldKey],
+                ['field_name' => $fieldName, 'field_value' => $value],
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $oldState
+     * @param  array<string, mixed>  $newState
+     */
     protected function adjustLeaveBalances(LeaveRequest $leaveRequest, array $oldState, array $newState): void
     {
         $oldStatus = $oldState['status'] ?? null;

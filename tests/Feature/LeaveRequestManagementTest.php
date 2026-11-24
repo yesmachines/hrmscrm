@@ -840,7 +840,12 @@ test('hr leave request documents and handover follow the policy duration thresho
             'status' => 'applied',
         ])
         ->assertRedirect(route('leave-requests.create'))
-        ->assertSessionHasErrors(['handover_person_id']);
+        ->assertSessionHasErrors([
+            'handover_other_name',
+            'handover_other_organisation',
+            'handover_other_designation',
+            'handover_other_contact_number',
+        ]);
 
     $this->actingAs($hrUser)
         ->from(route('leave-requests.create'))
@@ -1319,7 +1324,12 @@ test('hr user can apply leave with valid handover person and it records handover
             'status' => 'applied',
         ])
         ->assertRedirect(route('leave-requests.create'))
-        ->assertSessionHasErrors(['handover_person_id']);
+        ->assertSessionHasErrors([
+            'handover_other_name',
+            'handover_other_organisation',
+            'handover_other_designation',
+            'handover_other_contact_number',
+        ]);
 
     $response = $this->actingAs($hrUser)
         ->post(route('leave-requests.store'), [
@@ -1354,6 +1364,60 @@ test('hr user can apply leave with valid handover person and it records handover
         'field_key' => 'handover_description',
         'field_value' => 'Infrastructure monitoring coverage',
     ]);
+
+    $this->actingAs($hrUser)
+        ->post(route('leave-requests.store'), [
+            'employee_id' => $applicant->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date' => '2026-10-19',
+            'end_date' => '2026-10-20',
+            'total_days' => 2,
+            'status' => 'applied',
+            'handover_description' => 'Coordinate external service coverage',
+            'handover_other_name' => 'Jordan Smith',
+            'handover_other_organisation' => 'Partner Organisation',
+            'handover_other_designation' => 'Operations Lead',
+            'handover_other_contact_number' => '+971501234567',
+        ])
+        ->assertRedirect(route('leave-requests.index'));
+
+    $externalHandoverLeave = LeaveRequest::query()
+        ->where('employee_id', $applicant->id)
+        ->whereDate('start_date', '2026-10-19')
+        ->firstOrFail();
+
+    foreach ([
+        'handover_other_name' => 'Jordan Smith',
+        'handover_other_organisation' => 'Partner Organisation',
+        'handover_other_designation' => 'Operations Lead',
+        'handover_other_contact_number' => '+971501234567',
+    ] as $fieldKey => $fieldValue) {
+        $this->assertDatabaseHas('leave_request_details', [
+            'leave_request_id' => $externalHandoverLeave->id,
+            'field_key' => $fieldKey,
+            'field_value' => $fieldValue,
+        ]);
+    }
+
+    $this->actingAs($hrUser)
+        ->withoutVite()
+        ->get(route('leave-requests.edit', $externalHandoverLeave))
+        ->assertInertia(fn ($page) => $page
+            ->where('leaveRequest.handover_person_id', null)
+            ->where('leaveRequest.handover_other_name', 'Jordan Smith')
+            ->where('leaveRequest.handover_other_organisation', 'Partner Organisation')
+            ->where('leaveRequest.handover_other_designation', 'Operations Lead')
+            ->where('leaveRequest.handover_other_contact_number', '+971501234567'));
+
+    $this->actingAs($hrUser)
+        ->withoutVite()
+        ->get(route('leave-requests.show', $externalHandoverLeave))
+        ->assertInertia(fn ($page) => $page
+            ->where('handoverEmployee', null)
+            ->where('leave_request.details', fn ($details) => collect($details)->contains(
+                fn ($detail) => $detail['field_key'] === 'handover_other_name'
+                    && $detail['field_value'] === 'Jordan Smith',
+            )));
 });
 
 test('hr user cannot apply pilgrimage leave for non-muslim employee', function () {

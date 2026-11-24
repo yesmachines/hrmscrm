@@ -399,10 +399,31 @@ class LeaveValidationService
     {
         $handoverId = $data['handover_person_id'] ?? null;
         $required = $this->requiresHandover($leaveType, $policy, $totalDays);
-        if ($required && empty($handoverId)) {
-            throw ValidationException::withMessages(['handover_person_id' => ['A handover person is required for this leave type.']]);
-        }
         if (empty($handoverId)) {
+            if ($required) {
+                $errors = [];
+                foreach ([
+                    'handover_other_name',
+                    'handover_other_organisation',
+                    'handover_other_designation',
+                    'handover_other_contact_number',
+                ] as $field) {
+                    if (empty(trim((string) ($data[$field] ?? '')))) {
+                        $errors[$field] = ['This field is required for an external handover contact.'];
+                    }
+                }
+
+                if ($errors !== []) {
+                    throw ValidationException::withMessages($errors);
+                }
+
+                if (! $this->hasHandoverTasks($data['handover_description'] ?? null)) {
+                    throw ValidationException::withMessages([
+                        'handover_description' => ['At least one non-empty handover task is required.'],
+                    ]);
+                }
+            }
+
             return;
         }
         if ((int) $handoverId === (int) $employee->id) {

@@ -32,6 +32,10 @@ class PreviewLeaveTemplateRequest extends FormRequest
             'values.ticket_status' => ['nullable', 'string'],
             'values.handover_person_id' => ['nullable', 'integer', 'exists:salescrm.employees,id'],
             'values.handover_description' => ['nullable', 'string'],
+            'values.handover_other_name' => ['nullable', 'string', 'max:255'],
+            'values.handover_other_organisation' => ['nullable', 'string', 'max:255'],
+            'values.handover_other_designation' => ['nullable', 'string', 'max:255'],
+            'values.handover_other_contact_number' => ['nullable', 'string', 'regex:/^\+?[0-9]+$/', 'max:30'],
         ];
     }
 }
