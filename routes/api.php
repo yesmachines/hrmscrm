@@ -114,6 +114,10 @@ Route::middleware(['auth:sanctum', 'role:hr,admin'])->prefix('v1/hr/wfh')->group
     Route::post('schedules', [WorkFromHomeController::class, 'store'])->name('api.v1.hr.wfh.schedules.store');
     Route::patch('schedules/{schedule}/status', [WorkFromHomeController::class, 'updateStatus'])
         ->name('api.v1.hr.wfh.schedules.update-status');
+    Route::get('requests', [WorkFromHomeController::class, 'requestsIndex'])->name('api.v1.hr.wfh.requests.index');
+    Route::get('requests/{id}', [WorkFromHomeController::class, 'requestsShow'])->name('api.v1.hr.wfh.requests.show');
+    Route::post('requests/{id}/approve', [WorkFromHomeController::class, 'approveRequest'])->name('api.v1.hr.wfh.requests.approve');
+    Route::post('requests/{id}/reject', [WorkFromHomeController::class, 'rejectRequest'])->name('api.v1.hr.wfh.requests.reject');
 });
 
 // HR APIs

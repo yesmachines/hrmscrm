@@ -353,3 +353,81 @@ test('WFH requests enforce notice period, schedule dates, and department conflic
 
     expect(LeaveRequest::query()->where('leave_type_id', $leaveType->id)->count())->toBe(1);
 });
+
+test('hr can list, view, approve, and reject WFH requests through the API', function () {
+    $hrUser = createHrmsLoginUser('hr');
+    [$user, $employee] = createWorkFromHomeEmployee(105);
+    $leaveType = createWorkFromHomeLeaveType();
+    $startDate = nextWorkFromHomeWeekday(now()->startOfDay()->addDays(4));
+    $schedule = createWorkFromHomeSchedule(
+        $employee,
+        3,
+        $startDate,
+        $startDate->copy()->addDays(30),
+        (int) $hrUser->id,
+    );
+    $token = $user->createToken('test')->plainTextToken;
+    [$firstStart, $firstEnd] = workFromHomeDateRange($startDate, 1);
+    $nextStart = nextWorkFromHomeWeekday($startDate->copy()->addDay());
+    [$secondStart, $secondEnd] = workFromHomeDateRange($nextStart, 1);
+
+    foreach ([[$firstStart, $firstEnd], [$secondStart, $secondEnd]] as [$start, $end]) {
+        $this->withToken($token)->postJson('/api/v1/leaves', [
+            'leave_type_id' => $leaveType->id,
+            'start_date' => $start,
+            'end_date' => $end,
+            'request_type' => 'fullday',
+            'remarks' => 'Working from home.',
+        ])->assertCreated();
+    }
+
+    $requests = LeaveRequest::query()->where('employee_id', $employee->id)->orderBy('id')->get();
+    $hrToken = $hrUser->createToken('test')->plainTextToken;
+    Auth::forgetGuards();
+
+    $this->withToken($hrToken)
+        ->getJson(route('api.v1.hr.wfh.requests.index', ['status' => 'applied']))
+        ->assertOk()
+        ->assertJsonPath('requests.total', 2)
+        ->assertJsonPath('requests.data.0.wfh_schedule_id', $schedule->id);
+
+    $this->withToken($hrToken)
+        ->getJson(route('api.v1.hr.wfh.requests.show', $requests[0]->id))
+        ->assertOk()
+        ->assertJsonPath('request.status', 'applied')
+        ->assertJsonCount(1, 'histories');
+
+    $this->withToken($hrToken)
+        ->postJson(route('api.v1.hr.wfh.requests.approve', $requests[0]->id), ['remarks' => 'Approved.'])
+        ->assertOk()
+        ->assertJsonPath('request.status', 'approved');
+
+    $this->withToken($hrToken)
+        ->postJson(route('api.v1.hr.wfh.requests.reject', $requests[1]->id), [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['remarks']);
+
+    $this->withToken($hrToken)
+        ->postJson(route('api.v1.hr.wfh.requests.reject', $requests[1]->id), ['remarks' => 'No coverage.'])
+        ->assertOk()
+        ->assertJsonPath('request.status', 'rejected');
+
+    $this->withToken($hrToken)
+        ->postJson(route('api.v1.hr.wfh.requests.approve', $requests[1]->id))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['status']);
+
+    $balance = app(WorkFromHomeService::class)->balanceForSchedule($schedule);
+    expect((float) $balance->pending)->toBe(0.0)
+        ->and((float) $balance->used)->toBe(1.0)
+        ->and((float) $balance->balance)->toBe(2.0);
+
+    $this->withToken($hrToken)
+        ->getJson(route('api.v1.hr.wfh.requests.show', 999999))
+        ->assertNotFound();
+
+    Auth::forgetGuards();
+    $this->withToken($token)
+        ->getJson(route('api.v1.hr.wfh.requests.index'))
+        ->assertForbidden();
+});

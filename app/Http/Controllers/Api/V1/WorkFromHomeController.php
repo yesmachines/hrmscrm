@@ -4,12 +4,19 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Leave\StoreWorkFromHomeScheduleRequest;
+use App\Models\LeaveHistory;
+use App\Models\LeaveRequest;
 use App\Models\SalesCrm\Employee;
 use App\Models\WorkFromHomeSchedule;
+use App\Services\LeavePdfGenerationService;
+use App\Services\LeaveValidationService;
 use App\Services\WorkFromHomeService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
 #[OA\Schema(
@@ -30,7 +37,7 @@ use OpenApi\Attributes as OA;
 #[OA\Get(
     path: '/api/v1/hr/wfh/requests',
     summary: 'List all employee WFH requests (HR/Admin)',
-    description: 'NOT YET IMPLEMENTED - planned contract. Lists WFH requests (Work From Home leave type) of all employees. Today HR manages these requests in the CRM Leave module.',
+    description: 'Lists WFH requests (Work From Home leave type) of all employees. Today HR manages these requests in the CRM Leave module.',
     security: [['sanctum' => []]],
     tags: ['Work From Home'],
     parameters: [
@@ -69,7 +76,7 @@ use OpenApi\Attributes as OA;
 #[OA\Get(
     path: '/api/v1/hr/wfh/requests/{id}',
     summary: 'Get a WFH request with its history (HR/Admin)',
-    description: 'NOT YET IMPLEMENTED - planned contract. Returns the request with its approval and history entries from the Leave module history tables.',
+    description: 'Returns the request with its approval and history entries from the Leave module history tables.',
     security: [['sanctum' => []]],
     tags: ['Work From Home'],
     parameters: [
@@ -106,7 +113,7 @@ use OpenApi\Attributes as OA;
 #[OA\Post(
     path: '/api/v1/hr/wfh/requests/{id}/approve',
     summary: 'Approve a WFH request (HR/Admin)',
-    description: 'NOT YET IMPLEMENTED - planned contract. Approves an applied request. Pending days move to used days against the schedule allowance. Fails if the schedule is inactive.',
+    description: 'Approves an applied request. Pending days move to used days against the schedule allowance. Fails if the schedule is inactive.',
     security: [['sanctum' => []]],
     tags: ['Work From Home'],
     parameters: [
@@ -141,7 +148,7 @@ use OpenApi\Attributes as OA;
 #[OA\Post(
     path: '/api/v1/hr/wfh/requests/{id}/reject',
     summary: 'Reject a WFH request (HR/Admin)',
-    description: 'NOT YET IMPLEMENTED - planned contract. Rejects an applied request. Its pending days are released back to the schedule.',
+    description: 'Rejects an applied request. Its pending days are released back to the schedule.',
     security: [['sanctum' => []]],
     tags: ['Work From Home'],
     parameters: [
@@ -250,6 +257,199 @@ class WorkFromHomeController extends Controller
             'message' => 'WFH schedule status updated successfully.',
             'schedule' => $this->scheduleData($schedule),
         ]);
+    }
+
+    public function requestsIndex(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'employee_id' => ['nullable', 'integer', 'exists:salescrm.employees,id'],
+            'status' => ['nullable', Rule::in(['applied', 'approved', 'rejected', 'cancelled'])],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $requests = $this->workFromHomeRequests()
+            ->with(['employee.user:id,name', 'details'])
+            ->when(isset($filters['employee_id']), fn ($query) => $query->where('employee_id', $filters['employee_id']))
+            ->when(isset($filters['status']), fn ($query) => $query->where('status', $filters['status']))
+            ->when(isset($filters['start_date']), fn ($query) => $query->whereDate('end_date', '>=', $filters['start_date']))
+            ->when(isset($filters['end_date']), fn ($query) => $query->whereDate('start_date', '<=', $filters['end_date']))
+            ->orderByDesc('id')
+            ->paginate(15);
+
+        return response()->json([
+            'success' => true,
+            'requests' => $requests->through(fn (LeaveRequest $leaveRequest): array => $this->requestData($leaveRequest)),
+        ]);
+    }
+
+    public function requestsShow(int $id): JsonResponse
+    {
+        $leaveRequest = $this->findWorkFromHomeRequest($id, ['histories']);
+
+        if ($leaveRequest === null) {
+            return $this->requestNotFound();
+        }
+
+        return response()->json([
+            'success' => true,
+            'request' => $this->requestData($leaveRequest),
+            'histories' => $leaveRequest->histories
+                ->sortByDesc('action_on')
+                ->values()
+                ->map(fn (LeaveHistory $history): array => [
+                    'action_type' => $history->action_type,
+                    'remarks' => $history->remarks,
+                    'action_on' => $history->action_on?->toIso8601String(),
+                ]),
+        ]);
+    }
+
+    public function approveRequest(Request $request, int $id, LeaveValidationService $leaveValidationService): JsonResponse
+    {
+        $validated = $request->validate(['remarks' => ['nullable', 'string']]);
+
+        return $this->decideRequest($request, $id, 'approved', $validated['remarks'] ?? null, $leaveValidationService);
+    }
+
+    public function rejectRequest(Request $request, int $id, LeaveValidationService $leaveValidationService): JsonResponse
+    {
+        $validated = $request->validate(['remarks' => ['required', 'string']]);
+
+        return $this->decideRequest($request, $id, 'rejected', $validated['remarks'], $leaveValidationService);
+    }
+
+    private function decideRequest(
+        Request $request,
+        int $id,
+        string $status,
+        ?string $remarks,
+        LeaveValidationService $leaveValidationService,
+    ): JsonResponse {
+        $leaveRequest = DB::transaction(function () use ($request, $id, $status, $remarks, $leaveValidationService): ?LeaveRequest {
+            $leaveRequest = $this->workFromHomeRequests()->whereKey($id)->lockForUpdate()->first();
+
+            if ($leaveRequest === null) {
+                return null;
+            }
+
+            if ($leaveRequest->status !== 'applied') {
+                throw ValidationException::withMessages([
+                    'status' => ['Only applied WFH requests can be '.$status.'.'],
+                ]);
+            }
+
+            $scheduleId = $this->workFromHomeService->scheduleIdForRequest($leaveRequest);
+            if ($status === 'approved') {
+                $validation = $leaveValidationService->validateApplication(
+                    Employee::query()->findOrFail($leaveRequest->employee_id),
+                    $leaveValidationService->dataForUpdate($leaveRequest, []),
+                    $leaveRequest->files()->exists(),
+                    (int) $leaveRequest->id,
+                    true,
+                    false,
+                );
+                $schedule = $validation['wfh_schedule'] ?? null;
+                if ($schedule !== null) {
+                    $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $schedule);
+                    $scheduleId = (int) $schedule->id;
+                }
+            }
+
+            $this->workFromHomeService->applyRequestBalanceTransition(
+                $leaveRequest,
+                $leaveRequest->status,
+                (float) $leaveRequest->total_days,
+                $this->workFromHomeService->scheduleIdForRequest($leaveRequest),
+                $status,
+                (float) $leaveRequest->total_days,
+                $scheduleId,
+            );
+
+            $leaveRequest->update(['status' => $status]);
+            $leaveRequest->histories()->create([
+                'action_type' => $status,
+                'remarks' => $remarks,
+                'done_by' => $request->user()->id,
+                'action_on' => now(),
+            ]);
+            $leaveRequest->approvals()->create([
+                'approval_level' => 'Final',
+                'approver_id' => $request->user()->id,
+                'remarks' => $remarks,
+                'approved_date' => now(),
+            ]);
+
+            return $leaveRequest;
+        });
+
+        if ($leaveRequest === null) {
+            return $this->requestNotFound();
+        }
+
+        if ($status === 'approved') {
+            app(LeavePdfGenerationService::class)->generateIfAvailable($leaveRequest, $request->user()->id);
+        }
+
+        $leaveRequest->load(['employee.user:id,name', 'details']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'WFH request '.$status.' successfully.',
+            'request' => $this->requestData($leaveRequest),
+        ]);
+    }
+
+    /**
+     * @return Builder<LeaveRequest>
+     */
+    private function workFromHomeRequests(): Builder
+    {
+        return LeaveRequest::query()->whereHas(
+            'leaveType',
+            fn (Builder $query) => $query->where('code', WorkFromHomeService::LEAVE_TYPE_CODE),
+        );
+    }
+
+    /**
+     * @param  list<string>  $relations
+     */
+    private function findWorkFromHomeRequest(int $id, array $relations = []): ?LeaveRequest
+    {
+        return $this->workFromHomeRequests()
+            ->with(['employee.user:id,name', 'details', ...$relations])
+            ->find($id);
+    }
+
+    private function requestNotFound(): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => 'WFH request not found.',
+        ], 404);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function requestData(LeaveRequest $leaveRequest): array
+    {
+        $scheduleId = $leaveRequest->details
+            ->firstWhere('field_key', WorkFromHomeService::SCHEDULE_DETAIL_KEY)?->field_value;
+
+        return [
+            'id' => $leaveRequest->id,
+            'employee_id' => $leaveRequest->employee_id,
+            'employee_name' => $leaveRequest->employee?->user?->name,
+            'wfh_schedule_id' => is_numeric($scheduleId) ? (int) $scheduleId : null,
+            'start_date' => $leaveRequest->start_date?->toDateString(),
+            'end_date' => $leaveRequest->end_date?->toDateString(),
+            'request_type' => $leaveRequest->request_type,
+            'total_days' => (float) $leaveRequest->total_days,
+            'status' => $leaveRequest->status,
+            'remarks' => $leaveRequest->remarks,
+        ];
     }
 
     /**
