@@ -180,7 +180,7 @@ test('annual leave template seeder is idempotent and preserves existing edits', 
         ->and($template->fresh()->template_code)->toBe('<p>Customized template</p>');
 });
 
-test('approved leave only shows a missing PDF notice when an active template is available', function () {
+test('approved leave shows the appropriate notice when no PDF is available', function () {
     $admin = createHrmsLoginUser('admin');
     $employee = createLeaveTemplateTestEmployee();
     $leaveType = createLeaveTemplateTestType();
@@ -197,7 +197,8 @@ test('approved leave only shows a missing PDF notice when an active template is 
     $this->actingAs($admin)
         ->withoutVite()
         ->get(route('leave-requests.show', $leaveRequest))
-        ->assertInertia(fn (Assert $page) => $page->where('pdfNotice', null));
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('pdfNotice', 'No active leave template is configured for this leave type.'));
 
     LeaveTemplate::query()->create([
         'leave_type_id' => $leaveType->id,

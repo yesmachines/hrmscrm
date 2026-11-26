@@ -1,4 +1,4 @@
-import { Eye, LoaderCircle } from 'lucide-react';
+import { AlertTriangle, Eye, LoaderCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -103,7 +103,7 @@ export default function LeaveTemplatePreview({
         }
     }
 
-    if (!employeeId || !leaveTypeId || !templateAvailable) {
+    if (!employeeId || !leaveTypeId) {
         return null;
     }
 
@@ -123,7 +123,7 @@ export default function LeaveTemplatePreview({
                     type="button"
                     variant="outline"
                     onClick={previewTemplate}
-                    disabled={loading}
+                    disabled={!templateAvailable || loading}
                 >
                     {loading ? (
                         <LoaderCircle className="mr-2 size-4 animate-spin" />
@@ -133,6 +133,17 @@ export default function LeaveTemplatePreview({
                     {loading ? 'Loading preview...' : 'Preview template'}
                 </Button>
             </div>
+
+            {!templateAvailable && (
+                <p
+                    className="flex items-start gap-2 text-sm text-amber-800"
+                    role="status"
+                >
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    No active leave template is configured for this leave type
+                    and organisation.
+                </p>
+            )}
 
             {currentError && (
                 <p className="text-sm text-destructive" role="alert">
