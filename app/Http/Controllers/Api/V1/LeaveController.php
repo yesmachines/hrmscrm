@@ -962,12 +962,10 @@ class LeaveController extends Controller
         );
     }
 
-    /**
-     * Get details of a single leave request for the authenticated employee.
-     */
     #[OA\Get(
         path: '/api/v1/leaves/{id}',
         summary: 'Get leave request details',
+        description: 'Get details of a single leave request for the authenticated employee.',
         security: [['sanctum' => []]],
         tags: ['Leave Management'],
         parameters: [
@@ -979,19 +977,40 @@ class LeaveController extends Controller
             new OA\Response(response: 404, description: 'Leave request not found'),
         ]
     )]
-    public function show(Request $request, int|string $id)
+    #[OA\Get(
+        path: '/api/v1/hr/leaves/{id}',
+        summary: 'Get non-WFH leave request details for HR review',
+        description: 'HR, Admin, and Finance users can retrieve a non-WFH leave request for any employee.',
+        security: [['sanctum' => []]],
+        tags: ['HR Leave'],
+        parameters: [
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave request details retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'HR, Admin, or Finance role required'),
+            new OA\Response(response: 404, description: 'Leave request not found'),
+        ]
+    )]
+    public function show(Request $request, int|string $id): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
             return $this->errorResponse('Unauthenticated.', 401);
         }
 
-        $employee = Employee::where('user_id', $user->id)->first();
-        if (! $employee) {
-            return $this->errorResponse('Employee record not found.', 404);
+        $leaveRequests = $this->leaveRequests($request);
+        if (! $request->routeIs('api.v1.hr.leaves.show')) {
+            $employee = Employee::where('user_id', $user->id)->first();
+            if (! $employee) {
+                return $this->errorResponse('Employee record not found.', 404);
+            }
+
+            $leaveRequests->where('employee_id', $employee->id);
         }
 
-        $leaveRequest = $this->leaveRequests($request)->with([
+        $leaveRequest = $leaveRequests->with([
             'leaveType:id,leave_name,code,is_paid,requires_approval',
             'files',
             'details',
@@ -1003,9 +1022,7 @@ class LeaveController extends Controller
                 $query->orderBy('approved_date', 'asc');
             },
             'approvals.approver:id,name,email',
-        ])
-            ->where('employee_id', $employee->id)
-            ->find($id);
+        ])->find($id);
 
         if (! $leaveRequest) {
             return $this->errorResponse('Leave request not found.', 404);
