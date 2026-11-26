@@ -24,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
@@ -895,6 +896,70 @@ class LeaveController extends Controller
         }
 
         return $this->successPaginatedResponse($leaveRequests, 'leave_requests', 'Success', 200, $extra);
+    }
+
+    /**
+     * List non-WFH leave requests across employees for HR review.
+     */
+    #[OA\Get(
+        path: '/api/v1/hr/leaves',
+        summary: 'List all non-WFH leave requests for HR review',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        parameters: [
+            new OA\Parameter(name: 'employee_id', in: 'query', schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'employee_name', in: 'query', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string', enum: ['applied', 'approved', 'rejected', 'cancelled'])),
+            new OA\Parameter(name: 'start_date', in: 'query', description: 'Requests ending on or after this date', schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'end_date', in: 'query', description: 'Requests starting on or before this date', schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'page', in: 'query', schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Paginated non-WFH leave requests retrieved successfully'),
+            new OA\Response(response: 403, description: 'HR, Admin, or Finance role required'),
+            new OA\Response(response: 422, description: 'Invalid filters'),
+        ]
+    )]
+    public function hrIndex(Request $request): JsonResponse
+    {
+        $filters = $request->validate([
+            'employee_id' => ['nullable', 'integer', 'exists:salescrm.employees,id'],
+            'employee_name' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', Rule::in(config('params.leave_request.statuses'))],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+        $employeeIdsByName = isset($filters['employee_name'])
+            ? Employee::query()
+                ->whereHas('user', fn (Builder $query) => $query->where('name', 'like', '%'.$filters['employee_name'].'%'))
+                ->pluck('id')
+            : null;
+
+        $leaveRequests = LeaveRequest::query()
+            ->with([
+                'employee:id,user_id,employee_code,image_url',
+                'employee.user:id,name',
+                'leaveType:id,leave_name,is_paid,code',
+            ])
+            ->whereHas(
+                'leaveType',
+                fn (Builder $query) => $query->where('code', '!=', WorkFromHomeService::LEAVE_TYPE_CODE),
+            )
+            ->when(isset($filters['employee_id']), fn (Builder $query) => $query->where('employee_id', $filters['employee_id']))
+            ->when($employeeIdsByName !== null, fn (Builder $query) => $query->whereIn('employee_id', $employeeIdsByName))
+            ->when(isset($filters['status']), fn (Builder $query) => $query->where('status', $filters['status']))
+            ->when(isset($filters['start_date']), fn (Builder $query) => $query->whereDate('end_date', '>=', $filters['start_date']))
+            ->when(isset($filters['end_date']), fn (Builder $query) => $query->whereDate('start_date', '<=', $filters['end_date']))
+            ->orderByDesc('id')
+            ->paginate(15)
+            ->withQueryString();
+
+        return $this->successPaginatedResponse(
+            $leaveRequests,
+            'leave_requests',
+            'Leave requests retrieved successfully.',
+        );
     }
 
     /**

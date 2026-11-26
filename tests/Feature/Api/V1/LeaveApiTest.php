@@ -39,7 +39,7 @@ beforeEach(function () {
     ]);
 });
 
-test('only HR can use the general leave decision and on-behalf routes', function () {
+test('HR, admin, and finance can use the HR leave api while employees cannot', function () {
     $paths = [
         route('api.v1.hr.leaves.apply'),
         route('api.v1.hr.leaves.approve', 1),
@@ -51,17 +51,99 @@ test('only HR can use the general leave decision and on-behalf routes', function
     }
     $this->getJson(route('api.v1.hr.leaves.meta'))->assertUnauthorized();
     $this->postJson(route('api.v1.hr.leaves.validate'))->assertUnauthorized();
+    $this->getJson(route('api.v1.hr.leaves.index'))->assertUnauthorized();
 
-    foreach (['admin', 'finance', 'employee'] as $role) {
-        $user = $role === 'employee' ? SalesCrmUser::factory()->create() : createHrmsLoginUser($role);
+    foreach (['hr', 'admin', 'finance'] as $role) {
+        $user = createHrmsLoginUser($role);
         $this->withToken($user->createToken('test')->plainTextToken);
-        foreach ($paths as $path) {
-            Auth::forgetGuards();
-            $this->postJson($path)->assertForbidden();
-        }
-        $this->getJson(route('api.v1.hr.leaves.meta'))->assertForbidden();
-        $this->postJson(route('api.v1.hr.leaves.validate'))->assertForbidden();
+        $this->getJson(route('api.v1.hr.leaves.index'))->assertOk();
+        $this->getJson(route('api.v1.hr.leaves.meta'))->assertUnprocessable();
+        $this->postJson(route('api.v1.hr.leaves.validate'))->assertUnprocessable();
+        $this->postJson(route('api.v1.hr.leaves.apply'))->assertUnprocessable();
+        $this->postJson(route('api.v1.hr.leaves.approve', 999999))->assertNotFound();
+        $this->postJson(route('api.v1.hr.leaves.reject', 999999), ['remarks' => 'Not found'])->assertNotFound();
     }
+
+    $employee = SalesCrmUser::factory()->create();
+    $this->withToken($employee->createToken('test')->plainTextToken);
+    foreach ($paths as $path) {
+        Auth::forgetGuards();
+        $this->postJson($path)->assertForbidden();
+    }
+    $this->getJson(route('api.v1.hr.leaves.meta'))->assertForbidden();
+    $this->postJson(route('api.v1.hr.leaves.validate'))->assertForbidden();
+    $this->getJson(route('api.v1.hr.leaves.index'))->assertForbidden();
+});
+
+test('HR leave listing returns all non-WFH requests and filters by employee, status, and dates', function () {
+    $finance = createHrmsLoginUser('finance');
+    $createEmployee = function (string $name, string $employeeNumber): Employee {
+        $user = SalesCrmUser::factory()->create(['name' => $name]);
+
+        return Employee::query()->create([
+            'user_id' => $user->id,
+            'emp_num' => $employeeNumber,
+            'organisation_id' => 1,
+            'designation' => 'Engineer',
+            'division' => 'Technology',
+            'status' => 1,
+            'has_report' => false,
+        ]);
+    };
+    $firstEmployee = $createEmployee('Jamie Rivers', 'EMP-HR-LIST-01');
+    $secondEmployee = $createEmployee('Morgan Lane', 'EMP-HR-LIST-02');
+    $regularType = LeaveType::query()->create([
+        'leave_name' => 'Annual Leave',
+        'code' => 'ANNUAL',
+        'is_paid' => true,
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    $wfhType = LeaveType::query()->create([
+        'leave_name' => 'Work From Home',
+        'code' => 'WFH',
+        'is_paid' => true,
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    $createRequest = function (Employee $employee, LeaveType $type, string $status, string $date): LeaveRequest {
+        return LeaveRequest::query()->create([
+            'employee_id' => $employee->id,
+            'leave_type_id' => $type->id,
+            'start_date' => $date,
+            'end_date' => $date,
+            'request_type' => 'fullday',
+            'total_days' => 1,
+            'status' => $status,
+        ]);
+    };
+    $applied = $createRequest($firstEmployee, $regularType, 'applied', '2026-10-10');
+    $approved = $createRequest($secondEmployee, $regularType, 'approved', '2026-11-15');
+    $createRequest($firstEmployee, $wfhType, 'applied', '2026-10-12');
+
+    $this->withToken($finance->createToken('test')->plainTextToken);
+    $this->getJson(route('api.v1.hr.leaves.index'))
+        ->assertOk()
+        ->assertJsonCount(2, 'data.leave_requests')
+        ->assertJsonPath('data.leave_requests.0.id', $approved->id)
+        ->assertJsonPath('data.leave_requests.0.employee.user.name', 'Morgan Lane')
+        ->assertJsonPath('data.leave_requests.1.id', $applied->id)
+        ->assertJsonPath('data.leave_requests.1.employee.user.name', 'Jamie Rivers');
+
+    $this->getJson(route('api.v1.hr.leaves.index', ['status' => 'applied']))
+        ->assertOk()->assertJsonCount(1, 'data.leave_requests')
+        ->assertJsonPath('data.leave_requests.0.id', $applied->id);
+    $this->getJson(route('api.v1.hr.leaves.index', ['employee_id' => $secondEmployee->id]))
+        ->assertOk()->assertJsonCount(1, 'data.leave_requests')
+        ->assertJsonPath('data.leave_requests.0.id', $approved->id);
+    $this->getJson(route('api.v1.hr.leaves.index', ['employee_name' => 'Jamie']))
+        ->assertOk()->assertJsonCount(1, 'data.leave_requests')
+        ->assertJsonPath('data.leave_requests.0.employee_id', $firstEmployee->id);
+    $this->getJson(route('api.v1.hr.leaves.index', ['start_date' => '2026-11-01', 'end_date' => '2026-11-30']))
+        ->assertOk()->assertJsonCount(1, 'data.leave_requests')
+        ->assertJsonPath('data.leave_requests.0.id', $approved->id);
+    $this->getJson(route('api.v1.hr.leaves.index', ['status' => 'invalid']))
+        ->assertUnprocessable()->assertJsonValidationErrors(['status']);
 });
 
 test('HR can apply on behalf and decide regular leave without consuming another request reservation', function () {
