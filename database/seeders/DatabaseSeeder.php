@@ -23,10 +23,10 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call([
-            SalesCrmRoleSeeder::class,
             OrganisationSeeder::class,
             EventSeeder::class,
             WorkFromHomeSeeder::class,
+            LeaveTemplateSeeder::class,
         ]);
     }
 }

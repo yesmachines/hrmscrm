@@ -114,7 +114,12 @@ export default function LeaveTypeFormFields({
                         id="code"
                         name="code"
                         required
-                        defaultValue={defaults.code ?? ''}
+                        autoCapitalize="characters"
+                        defaultValue={(defaults.code ?? '').toUpperCase()}
+                        onChange={(event) => {
+                            event.currentTarget.value =
+                                event.currentTarget.value.toUpperCase();
+                        }}
                     />
                 </Field>
 
@@ -186,7 +191,6 @@ export default function LeaveTypeFormFields({
                         fallback="1"
                     />
                 </Field>
-
             </div>
         </section>
     );

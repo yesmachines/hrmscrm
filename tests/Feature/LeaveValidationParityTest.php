@@ -10,11 +10,14 @@ use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Organisation;
+use App\Models\SalesCrm\Country;
 use App\Models\SalesCrm\Employee;
 use App\Services\LeaveTypeRules;
 use App\Services\LeaveValidationService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -358,6 +361,137 @@ test('unknown configured validators fail explicitly instead of silently bypassin
         ->toThrow(LogicException::class, 'Unknown leave validator');
 });
 
+test('duration excludes employee-inapplicable holidays and every date of applicable holiday ranges', function () {
+    $employeeCountry = Country::query()->firstOrCreate(
+        ['code' => 'HOL-EMP'],
+        ['name' => 'Holiday Employee Country', 'status' => 1],
+    );
+    $otherCountry = Country::query()->firstOrCreate(
+        ['code' => 'HOL-OTHER'],
+        ['name' => 'Other Holiday Country', 'status' => 1],
+    );
+    $this->profile->update(['nationality' => $employeeCountry->name]);
+
+    $foreignHoliday = Festival::query()->create([
+        'name' => 'Foreign Country Holiday',
+        'type' => 'holiday',
+        'shortcode' => 'FCH',
+        'start_date' => '2027-04-07',
+        'end_date' => '2027-04-07',
+        'is_active' => true,
+    ]);
+    DB::table('festival_nationality')->insert([
+        'festival_id' => $foreignHoliday->id,
+        'country_id' => $otherCountry->id,
+    ]);
+    Festival::query()->create([
+        'name' => 'Applicable Holiday Range',
+        'type' => 'holiday',
+        'shortcode' => 'AHR',
+        'start_date' => '2027-04-08',
+        'end_date' => '2027-04-09',
+        'is_active' => true,
+    ]);
+
+    $validation = app(LeaveValidationService::class)->validateApplication($this->employee, [
+        ...$this->data,
+        'ticket_status' => 'no_ticket',
+        'traveling_outside_country' => false,
+        'start_date' => '2027-04-05',
+        'end_date' => '2027-04-09',
+    ]);
+
+    expect($validation['total_days'])->toBe(3.0);
+});
+
+test('holiday dates on weekends are not subtracted twice from duration', function () {
+    Festival::query()->create([
+        'name' => 'Weekend Holiday',
+        'type' => 'holiday',
+        'shortcode' => 'WHD',
+        'start_date' => '2027-04-10',
+        'end_date' => '2027-04-11',
+        'is_active' => true,
+    ]);
+
+    $validation = app(LeaveValidationService::class)->validateApplication($this->employee, [
+        ...$this->data,
+        'ticket_status' => 'no_ticket',
+        'traveling_outside_country' => false,
+        'start_date' => '2027-04-09',
+        'end_date' => '2027-04-12',
+    ]);
+
+    expect($validation['total_days'])->toBe(2.0);
+});
+
+test('holiday policy blocks requests that include or are adjacent to applicable holidays', function (string $startDate, string $endDate) {
+    $this->policy->update(['exclude_rules' => ['holiday' => true]]);
+    Festival::query()->create([
+        'name' => 'Policy Holiday Range',
+        'type' => 'holiday',
+        'shortcode' => 'PHR',
+        'start_date' => '2027-04-07',
+        'end_date' => '2027-04-08',
+        'is_active' => true,
+    ]);
+
+    expect(fn () => app(LeaveValidationService::class)->validateApplication($this->employee, [
+        ...$this->data,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+    ]))->toThrow(ValidationException::class, 'applicable holiday');
+})->with([
+    ['2027-04-07', '2027-04-07'],
+    ['2027-04-06', '2027-04-06'],
+    ['2027-04-09', '2027-04-09'],
+]);
+
+test('weekend policy blocks requests that include or are adjacent to weekends', function (string $startDate, string $endDate) {
+    $this->policy->update(['exclude_rules' => ['weekend' => true]]);
+
+    expect(fn () => app(LeaveValidationService::class)->validateApplication($this->employee, [
+        ...$this->data,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+    ]))->toThrow(ValidationException::class, 'weekend');
+})->with([
+    ['2027-04-10', '2027-04-10'],
+    ['2027-04-09', '2027-04-09'],
+    ['2027-04-12', '2027-04-12'],
+]);
+
+test('holiday-adjusted total days are persisted by admin and API requests', function (string $flow) {
+    Festival::query()->create([
+        'name' => 'Persisted Duration Holiday',
+        'type' => 'holiday',
+        'shortcode' => 'PDH',
+        'start_date' => '2027-04-07',
+        'end_date' => '2027-04-07',
+        'is_active' => true,
+    ]);
+    $data = [
+        ...$this->data,
+        'ticket_status' => 'no_ticket',
+        'traveling_outside_country' => false,
+        'start_date' => '2027-04-05',
+        'end_date' => '2027-04-09',
+    ];
+
+    if ($flow === 'admin') {
+        $this->post(route('leave-requests.store'), $data)->assertRedirect(route('leave-requests.index'));
+    } else {
+        $this->postJson('/api/v1/leaves', $data)->assertCreated();
+    }
+
+    $leaveRequest = LeaveRequest::query()
+        ->where('employee_id', $this->employee->id)
+        ->where('leave_type_id', $this->leaveType->id)
+        ->firstOrFail();
+
+    expect((float) $leaveRequest->total_days)->toBe(4.0);
+})->with(['admin', 'api']);
+
 test('sick holiday certificates are enforced across admin and API flows', function (string $flow, string $holidayDate, bool $hasCertificate) {
     Storage::fake('public');
     $this->leaveType->update(['code' => 'SICK']);
@@ -367,6 +501,9 @@ test('sick holiday certificates are enforced across admin and API flows', functi
         'religion' => 'Hinduism',
     ]);
     $data = $this->data;
+    if ($holidayDate === '2027-04-05') {
+        $data['start_date'] = $data['end_date'] = '2027-04-06';
+    }
     $existing = in_array($flow, ['admin update', 'admin approve', 'api update'], true)
         ? LeaveRequest::query()->create([...$data, 'total_days' => 1])
         : null;
@@ -440,6 +577,8 @@ test('sick holiday checking respects calendar boundaries and configuration', fun
             break;
         case 'different leave':
             $this->leaveType->update(['code' => 'ANNUAL']);
+            $this->data['ticket_status'] = 'no_ticket';
+            $this->data['traveling_outside_country'] = false;
             break;
         case 'disabled':
             config(['params.leave_type.special_rules.SICK.requires_holiday_document' => false]);
@@ -447,6 +586,7 @@ test('sick holiday checking respects calendar boundaries and configuration', fun
         case 'multi day holiday':
             $attributes['start_date'] = '2027-03-30';
             $attributes['end_date'] = '2027-04-07';
+            $this->data['start_date'] = $this->data['end_date'] = '2027-04-08';
             break;
         case 'null end date':
             $attributes['end_date'] = null;

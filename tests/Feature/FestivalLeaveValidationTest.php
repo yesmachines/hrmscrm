@@ -103,6 +103,7 @@ test('festival rules are consistent across admin and API entry points', function
             break;
         case 'holiday':
             $this->festival->update(['type' => 'holiday']);
+            $data['start_date'] = $data['end_date'] = '2027-03-31';
             break;
         case 'religion':
             $this->profile->update(['religion' => 'Hindu']);

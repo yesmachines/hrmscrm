@@ -60,6 +60,7 @@ class UpdateLeaveTypeRequest extends FormRequest
             'code' => [
                 'required',
                 'string',
+                'uppercase',
                 'max:255',
                 Rule::unique('leave_types', 'code')->ignore($leaveType->id),
             ],

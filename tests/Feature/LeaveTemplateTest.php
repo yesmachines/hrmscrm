@@ -1,12 +1,16 @@
 <?php
 
+use App\Models\Festival;
 use App\Models\LeaveRequest;
 use App\Models\LeaveTemplate;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use App\Services\LeavePdfGenerationService;
-use Database\Seeders\AnnualLeaveTemplateSeeder;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Database\Seeders\LeaveTemplateSeeder;
+use Database\Seeders\LeaveTypeSeeder;
+use Database\Seeders\WorkFromHomeSeeder;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -142,42 +146,308 @@ test('leave template preview fills values and escapes handover tasks', function 
         ->and($html)->not->toContain('&#974');
 });
 
-test('annual leave template seeder is idempotent and preserves existing edits', function () {
+test('leave template seeder refreshes non-Annual defaults and preserves Annual edits', function () {
+    (new LeaveTypeSeeder)->run();
+    (new WorkFromHomeSeeder)->run();
+
+    $leaveTypeNames = config('params.leave_type.names');
+    $seeder = new LeaveTemplateSeeder;
+    $seeder->run();
+
+    expect(LeaveTemplate::query()->count())->toBe(count($leaveTypeNames));
+
+    foreach ($leaveTypeNames as $code => $name) {
+        $leaveType = LeaveType::query()->where('code', $code)->firstOrFail();
+        $template = LeaveTemplate::query()
+            ->where('leave_type_id', $leaveType->id)
+            ->whereNull('organisation_id')
+            ->firstOrFail();
+
+        expect($template->status)->toBe(1)
+            ->and($template->template_code)->toContain('{{leave_type_choices}}')
+            ->and($template->template_code)->toContain('class="leave-declaration"');
+
+        if ($code !== 'ANNUAL') {
+            expect($template->template_name)
+                ->toBe("{$name} Form")
+                ->and($template->template_code)
+                ->toContain("font-family: 'Times New Roman', serif; font-size: 15px;")
+                ->toContain('padding: 20px;')
+                ->toContain('border: 1px solid #222; padding: 6px;')
+                ->toContain('LEAVE REQUEST AND HANDOVER FORM')
+                ->toContain('Approval of leave:')
+                ->toContain('Declaration:')
+                ->toContain('HANDOVER DETAILS')
+                ->toContain('color: #16a34a;')
+                ->toContain('color: red;')
+                ->not->toContain('{{request_type}}')
+                ->not->toContain('{{approved_by}}')
+                ->not->toContain('{{handover_other_organisation}}');
+        }
+    }
+
+    $annualType = LeaveType::query()->where('code', 'ANNUAL')->firstOrFail();
+    $annualTemplate = LeaveTemplate::query()
+        ->where('leave_type_id', $annualType->id)
+        ->whereNull('organisation_id')
+        ->firstOrFail();
+
+    expect($annualTemplate->template_name)->toBe('Annual Leave and Handover Form 2026')
+        ->and($annualTemplate->template_code)->toContain('{{employee_name}}')
+        ->and($annualTemplate->template_code)->toContain('{{handover_description}}')
+        ->and($annualTemplate->template_code)->toContain('class="leave-declaration"')
+        ->and($annualTemplate->template_code)->toContain('min-height: 45px;')
+        ->and($annualTemplate->template_code)->toContain('height: 67px;')
+        ->and($annualTemplate->template_code)->toContain('{{ticket_checkbox}}')
+        ->and($annualTemplate->template_code)->toContain('YORK ENGINEERING SOLUTIONS FZC')
+        ->and($annualTemplate->template_code)->not->toContain('{{company_name}}')
+        ->and($annualTemplate->template_code)->not->toContain('Paternity Leave')
+        ->and($annualTemplate->template_code)->not->toContain('Other ______________________________');
+    expect(substr_count($annualTemplate->template_code, '{{remarks}}'))->toBe(1);
+    expect(substr_count($annualTemplate->template_code, '{{employee_signature}}'))->toBe(2);
+
+    $maternityType = LeaveType::query()->where('code', 'MATERNITY')->firstOrFail();
+    $maternityTemplate = LeaveTemplate::query()->where('leave_type_id', $maternityType->id)->firstOrFail();
+    expect($maternityTemplate->template_code)
+        ->toContain('<tr><td colspan="2" style="border: 1px solid #222; padding: 7px;"><strong>Expected Due Date:</strong> <span style="color: red;">{{due_date}}</span></td></tr>')
+        ->not->toContain('{{child_birth_date}}')
+        ->not->toContain('{{ticket_checkbox}}');
+
+    $sickType = LeaveType::query()->where('code', 'SICK')->firstOrFail();
+    $sickTemplate = LeaveTemplate::query()
+        ->where('leave_type_id', $sickType->id)
+        ->whereNull('organisation_id')
+        ->firstOrFail();
+    $sickTemplate->update([
+        'template_name' => "{$leaveTypeNames['SICK']} Request and Handover Form",
+        'template_code' => '<p>Customized Sick template</p>',
+    ]);
+    $seeder->run();
+
+    expect($sickTemplate->fresh()->template_name)->toBe("{$leaveTypeNames['SICK']} Form")
+        ->and($sickTemplate->fresh()->template_code)
+        ->toContain("font-family: 'Times New Roman', serif; font-size: 15px;")
+        ->not->toContain('<p>Customized Sick template</p>');
+
+    $wfhType = LeaveType::query()->where('code', 'WFH')->firstOrFail();
+    $wfhTemplate = LeaveTemplate::query()->where('leave_type_id', $wfhType->id)->firstOrFail();
+    expect($wfhTemplate->template_code)
+        ->not->toContain('{{due_date}}')
+        ->not->toContain('{{family_relationship}}');
+
+    $annualTemplate->update([
+        'template_code' => '<p>Custom layout</p><strong>Reason for requested leave:</strong><br />Annual Leave<br />Paternity Leave<br />Other ______________________________</td>',
+    ]);
+    $seeder->run();
+
+    expect($annualTemplate->fresh()->template_code)
+        ->toContain('<p>Custom layout</p>')
+        ->toContain('{{leave_type_choices}}')
+        ->not->toContain('Paternity Leave');
+
+    $annualTemplate->update(['template_code' => '<p>Customized Annual template</p>']);
+    $seeder->run();
+
+    expect(LeaveTemplate::query()->count())->toBe(count($leaveTypeNames))
+        ->and($annualTemplate->fresh()->template_code)->toBe('<p>Customized Annual template</p>');
+});
+
+test('leave template seeder groups compacted legacy Annual declaration markup', function () {
+    (new LeaveTypeSeeder)->run();
+    (new WorkFromHomeSeeder)->run();
+
+    $seeder = new LeaveTemplateSeeder;
+    $seeder->run();
+
+    $annualType = LeaveType::query()->where('code', 'ANNUAL')->firstOrFail();
+    $annualTemplate = LeaveTemplate::query()
+        ->where('leave_type_id', $annualType->id)
+        ->whereNull('organisation_id')
+        ->firstOrFail();
+    $legacyDeclarationBlock = <<<'HTML'
+<p style="margin: 4px 0 0; font-weight: bold; text-decoration: underline;">Declaration:</p>
+<p style="margin: 0; font-size: 13px; line-height: 1.3;">
+  I hereby declare that I will remain available for any emergency queries as required by the company and can be reached through any designated contact method. I will also promptly inform the company in the event of any personal emergency that may affect my availability.
+  <strong>Signature:</strong>
+</p>
+<div style="page-break-inside: avoid; margin: 0; padding: 0;"><div style="margin: 0; padding: 0; line-height: 1;"><span style="color: #16a34a;">{{employee_signature}}</span></div><div style="margin: 0; padding: 0; line-height: 1;">______________________________</div></div>
+HTML;
+    $templateCode = preg_replace(
+        '~<table class="leave-declaration"[^>]*>.*?</table>~s',
+        $legacyDeclarationBlock,
+        $annualTemplate->template_code,
+        1,
+        $replacementCount,
+    );
+
+    expect($replacementCount)->toBe(1);
+
+    if ($templateCode === null) {
+        throw new RuntimeException('Could not create the compacted legacy Annual declaration fixture.');
+    }
+
+    $annualTemplate->update(['template_code' => $templateCode]);
+    $seeder->run();
+
+    expect($annualTemplate->fresh()->template_code)
+        ->toContain('class="leave-declaration"')
+        ->toContain('break-inside: avoid;');
+});
+
+test('leave template seeder restores spacing on a compacted Annual template without replacing edits', function () {
+    (new LeaveTypeSeeder)->run();
+    (new WorkFromHomeSeeder)->run();
+
+    $seeder = new LeaveTemplateSeeder;
+    $seeder->run();
+
+    $annualType = LeaveType::query()->where('code', 'ANNUAL')->firstOrFail();
+    $annualTemplate = LeaveTemplate::query()
+        ->where('leave_type_id', $annualType->id)
+        ->whereNull('organisation_id')
+        ->firstOrFail();
+    $replaceFirstOccurrence = static function (string $subject, string $search, string $replacement): string {
+        $position = strpos($subject, $search);
+
+        return $position === false
+            ? $subject
+            : substr_replace($subject, $replacement, $position, strlen($search));
+    };
+    $templateCode = str_replace(
+        'LEAVE REQUEST AND HANDOVER FORM',
+        'LEAVE REQUEST AND HANDOVER FORM - Customized',
+        $annualTemplate->template_code,
+    );
+    $templateCode = $replaceFirstOccurrence($templateCode, 'margin-bottom: 14px;', 'margin-bottom: 8px;');
+    $templateCode = $replaceFirstOccurrence($templateCode, 'margin: 0 0 12px; text-align: center;', 'margin: 0 0 10px; text-align: center;');
+    $templateCode = str_replace(
+        '<td colspan="2" style="border: 1px solid #222; padding: 7px; line-height: 1.5;">',
+        '<td colspan="2" style="border: 1px solid #222; padding: 7px; line-height: 1.4;">',
+        $templateCode,
+    );
+    $templateCode = $replaceFirstOccurrence($templateCode, 'min-height: 45px;', 'min-height: 40px;');
+    $templateCode = $replaceFirstOccurrence($templateCode, 'margin-bottom: 9px;', 'margin-bottom: 8px;');
+    $templateCode = $replaceFirstOccurrence($templateCode, 'margin-bottom: 9px;', 'margin-bottom: 8px;');
+    $templateCode = $replaceFirstOccurrence($templateCode, 'margin-bottom: 9px;', 'margin-bottom: 12px;');
+    $templateCode = str_replace('height: 67px;', 'height: 65px;', $templateCode);
+    $templateCode = str_replace(
+        '<tr><td colspan="3" style="height: 40px;',
+        '<tr><td colspan="3" style="height: 38px;',
+        $templateCode,
+    );
+    $templateCode = $replaceFirstOccurrence(
+        $templateCode,
+        '<p style="margin: 0; font-size: 13px; line-height: 1.35;">',
+        '<p style="margin: 0; font-size: 13px; line-height: 1.3;">',
+    );
+    $annualTemplate->update(['template_code' => $templateCode]);
+
+    $seeder->run();
+
+    expect($annualTemplate->fresh()->template_code)
+        ->toContain('LEAVE REQUEST AND HANDOVER FORM - Customized')
+        ->toContain('margin-bottom: 14px;')
+        ->toContain('margin: 0 0 12px; text-align: center;')
+        ->toContain('line-height: 1.5;')
+        ->toContain('{{end_date}}</span><br />')
+        ->toContain('min-height: 45px;')
+        ->toContain('height: 67px;')
+        ->toContain('height: 40px;')
+        ->toContain('<p style="margin: 0; font-size: 13px; line-height: 1.35;">');
+});
+
+test('leave template rendering fills type-specific values and external handover names', function () {
+    $employee = createLeaveTemplateTestEmployee();
     $leaveType = LeaveType::query()->create([
-        'leave_name' => 'Annual Leave',
-        'code' => 'ANNUAL',
-        'is_paid' => true,
+        'leave_name' => 'Maternity Leave',
+        'code' => 'MATERNITY',
+        'status' => 1,
         'requires_approval' => true,
+    ]);
+    $festival = Festival::query()->create([
+        'name' => 'National Day',
+        'shortcode' => 'NATIONAL-DAY',
+    ]);
+    $template = LeaveTemplate::query()->create([
+        'leave_type_id' => $leaveType->id,
+        'template_name' => 'Specific fields template',
+        'template_code' => '{{leave_type_choices}}|{{due_date}}|{{child_birth_date}}|{{family_relationship}}|{{festival_name}}|{{handover_person}}',
         'status' => 1,
     ]);
 
-    $seeder = new AnnualLeaveTemplateSeeder;
-    $seeder->run();
+    $html = app(LeavePdfGenerationService::class)->render($template, $employee, [
+        'due_date' => '2026-12-02',
+        'child_birth_date' => '2026-11-01',
+        'family_relationship' => 'mother',
+        'festival_id' => $festival->id,
+        'handover_other_name' => 'External Contact',
+        'handover_other_organisation' => 'External Company',
+        'handover_other_designation' => 'External Role',
+        'handover_other_contact_number' => '+971501234567',
+    ]);
 
+    expect($html)
+        ->toContain('Maternity Leave')
+        ->toContain('>&#10003;</span>')
+        ->toContain('02 Dec 2026')
+        ->toContain('01 Nov 2026')
+        ->toContain('Mother')
+        ->toContain('National Day')
+        ->toContain('External Contact')
+        ->not->toContain('External Company')
+        ->not->toContain('External Role')
+        ->not->toContain('+971501234567');
+});
+
+test('annual leave PDF keeps the declaration on page one and handover on page two', function () {
+    (new LeaveTypeSeeder)->run();
+    (new WorkFromHomeSeeder)->run();
+    (new LeaveTemplateSeeder)->run();
+
+    $leaveType = LeaveType::query()->where('code', 'ANNUAL')->firstOrFail();
     $template = LeaveTemplate::query()
         ->where('leave_type_id', $leaveType->id)
         ->whereNull('organisation_id')
         ->firstOrFail();
+    $employee = createLeaveTemplateTestEmployee();
 
-    expect($template->status)->toBe(1)
-        ->and($template->template_code)->toContain('{{employee_name}}')
-        ->and($template->template_code)->toContain('{{handover_description}}')
-        ->and($template->template_code)->toContain('{{ticket_checkbox}}')
-        ->and($template->template_code)->toContain('YORK ENGINEERING SOLUTIONS FZC')
-        ->and($template->template_code)->not->toContain('{{company_name}}')
-        ->and($template->template_code)->not->toContain('{{leave_type}}')
-        ->and($template->template_code)->toContain('&#10003;')
-        ->and($template->template_code)->toContain('font-family: &quot;DejaVu Sans&quot;, sans-serif;')
-        ->and($template->template_code)->toContain('font-size: 12px;')
-        ->and($template->template_code)->not->toContain('&#974');
-    expect(substr_count($template->template_code, '{{remarks}}'))->toBe(1);
-    expect(substr_count($template->template_code, '{{employee_signature}}'))->toBe(2);
+    Storage::fake('public');
 
-    $template->update(['template_code' => '<p>Customized template</p>']);
-    $seeder->run();
+    $logoContent = file_get_contents(public_path('yes_machinery_logo.png'));
+    if (! is_string($logoContent)) {
+        throw new RuntimeException('Could not read the logo image fixture.');
+    }
 
-    expect(LeaveTemplate::query()->count())->toBe(1)
-        ->and($template->fresh()->template_code)->toBe('<p>Customized template</p>');
+    Storage::disk('public')->put('signatures/template-test.png', $logoContent);
+
+    $html = app(LeavePdfGenerationService::class)->render($template, $employee, [
+        'start_date' => '2026-12-01',
+        'end_date' => '2026-12-15',
+        'total_days' => 15,
+        'local_contact_no' => '+971501234567',
+        'traveling_outside_country' => true,
+        'destination' => 'United Kingdom',
+        'travel_contact_no' => '+971501234567',
+        'ticket_status' => 'ticket',
+        'signature_path' => 'signatures/template-test.png',
+    ]);
+    $pdfHtml = '<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <style>
+        @page { margin: 0.6cm 1.2cm; }
+        body { font-family: "DejaVu Sans", sans-serif; }
+        p, div, span, table { max-width: 100% !important; }
+        p { margin-right: 0 !important; padding-right: 0 !important; width: auto !important; }
+    </style>
+</head>
+<body>'.$html.'</body>
+</html>';
+    $pdf = Pdf::loadHTML($pdfHtml)->setPaper('a4', 'portrait');
+    $pdf->render();
+
+    expect($pdf->getDomPDF()->getCanvas()->get_page_count())->toBe(2);
 });
 
 test('approved leave shows the appropriate notice when no PDF is available', function () {

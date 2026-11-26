@@ -460,6 +460,37 @@ test('leave type gender and religion are validated against configured options an
         ->and($leaveType->fresh()->religion)->toBe('Hinduism');
 });
 
+test('leave type codes must be uppercase when created or updated', function () {
+    $admin = createHrmsLoginUser('admin');
+
+    $this->actingAs($admin)
+        ->from(route('leave-types.create'))
+        ->post(route('leave-types.store'), [
+            'leave_name' => 'Lowercase Leave',
+            'code' => 'lowercase',
+        ])
+        ->assertRedirect(route('leave-types.create'))
+        ->assertSessionHasErrors('code');
+
+    $leaveType = LeaveType::query()->create([
+        'leave_name' => 'Existing Leave',
+        'code' => 'EXISTING',
+        'status' => 1,
+        'requires_approval' => true,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('leave-types.edit', $leaveType))
+        ->put(route('leave-types.update', $leaveType), [
+            'leave_name' => 'Existing Leave',
+            'code' => 'lowercase',
+        ])
+        ->assertRedirect(route('leave-types.edit', $leaveType))
+        ->assertSessionHasErrors('code');
+
+    expect($leaveType->fresh()->code)->toBe('EXISTING');
+});
+
 test('festival forms use configured religion options and retain legacy religions', function () {
     $admin = createHrmsLoginUser('admin');
     $religionOptions = collect(config('params.leave_type.religion_options'))

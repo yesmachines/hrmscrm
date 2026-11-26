@@ -10,6 +10,18 @@ return [
         'total_experience',
     ],
     'leave_type' => [
+        'names' => [
+            'ANNUAL' => 'Annual Leave',
+            'SICK' => 'Sick Leave',
+            'COMPASSIONATE' => 'Compassionate Leave',
+            'FESTIVAL' => 'Festival Leave',
+            'MATERNITY' => 'Maternity Leave',
+            'COMPENSATORY' => 'Compensatory Leave',
+            'PARENTAL' => 'Parental Leave',
+            'UNPAID' => 'Unpaid Leave',
+            'PILGRIMAGE' => 'Pilgrimage Leave',
+            'WFH' => 'Work From Home',
+        ],
         // Organisation-specific limits remain in leave_policies; these are shared special rules.
         'parental_birth_window_months' => 6,
         'festival_name_match' => 'Festival',
@@ -189,13 +201,13 @@ return [
             ],
             'holiday' => [
                 'label' => 'Holiday',
-                'description' => 'Saved with the policy; validation behavior is not implemented yet.',
-                'implemented' => false,
+                'description' => 'Blocks requests that include or are immediately adjacent to an employee-applicable active holiday. Holiday dates are excluded from duration for all policies.',
+                'implemented' => true,
             ],
             'weekend' => [
                 'label' => 'Weekend',
-                'description' => 'Saved with the policy; validation behavior is not implemented yet.',
-                'implemented' => false,
+                'description' => 'Blocks requests that include a weekend or are immediately adjacent to one. Weekend dates are excluded from duration for all policies.',
+                'implemented' => true,
             ],
         ],
     ],

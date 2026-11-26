@@ -27,8 +27,9 @@ class LeaveValidationService
 
     /**
      * Shared order for every active admin/API submission, edit, preview and approval:
-     * type, dates/duration, overlap, profile, special details, policy limits/department overlap,
-     * balance availability, handover, travel, documents, festival eligibility/usage.
+     * type, dates/duration and policy date exclusions, overlap, profile, special details,
+     * policy limits/department overlap, balance availability, handover, travel, documents,
+     * festival eligibility/usage.
      * Rejected/cancelled edits validate dates without reapplying eligibility.
      * Per-type checks live in LeaveBusinessRules; configurable values remain in params.leave_type.
      *
@@ -56,14 +57,14 @@ class LeaveValidationService
         }
 
         $policy = $leaveType->policyForOrganisation($employee->organisation_id);
-        [$startDate, $endDate, $requestType, $totalDays] = $this->validateDates($data);
+        $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
+        [$startDate, $endDate, $requestType, $totalDays] = $this->validateDates($data, $policy, $profile, $isActiveRequest);
         $attachmentRequired = false;
         $remarks = $data['remarks'] ?? null;
         $workFromHomeSchedule = null;
 
         if ($isActiveRequest) {
             $this->validateOverlap($employee, $startDate, $endDate, $ignoreLeaveRequestId);
-            $profile = EmployeeProfile::query()->where('employee_id', $employee->id)->first();
             $profileGender = $profile !== null ? $profile->gender : null;
             $this->leaveTypeEligibilityService->assertEligible(
                 $leaveType,
@@ -320,7 +321,7 @@ class LeaveValidationService
      * @param  array<string, mixed>  $data
      * @return array{Carbon, Carbon, string, float}
      */
-    private function validateDates(array $data): array
+    private function validateDates(array $data, ?LeavePolicy $policy, ?EmployeeProfile $profile, bool $isActiveRequest): array
     {
         if (empty($data['start_date']) || empty($data['end_date'])) {
             throw ValidationException::withMessages(['start_date' => ['Start date and end date are required.']]);
@@ -337,17 +338,63 @@ class LeaveValidationService
         if ($requestType !== 'fullday' && ! $startDate->isSameDay($endDate)) {
             throw ValidationException::withMessages(['request_type' => ['Half-day leave must start and end on the same date.']]);
         }
+
+        $blocksHolidayRequests = $isActiveRequest && ($policy?->blocksRequestsOnOrNearHolidays() ?? false);
+        $holidayRangeStart = $startDate->copy();
+        $holidayRangeEnd = $endDate->copy();
+        if ($blocksHolidayRequests) {
+            $holidayRangeStart->subDay();
+            $holidayRangeEnd->addDay();
+        }
+        $holidayDates = $this->festivalLeaveService->holidayDatesForEmployee($profile, $holidayRangeStart, $holidayRangeEnd);
+
+        if ($blocksHolidayRequests && $holidayDates !== []) {
+            throw ValidationException::withMessages([
+                'start_date' => ['Leave cannot be requested on or immediately adjacent to an applicable holiday.'],
+            ]);
+        }
+
+        if (
+            $isActiveRequest
+            && ($policy?->blocksRequestsOnOrNearWeekends() ?? false)
+            && $this->containsWeekendOrAdjacentDate($startDate, $endDate)
+        ) {
+            throw ValidationException::withMessages([
+                'start_date' => ['Leave cannot be requested on a weekend or on the day immediately before or after a weekend.'],
+            ]);
+        }
+
         if ($requestType !== 'fullday' && ! $this->leaveDurationCalculator->isWeekday($startDate)) {
             throw ValidationException::withMessages(['request_type' => ['Half-day leave must be on a weekday.']]);
         }
         $totalDays = $requestType === 'fullday'
-            ? (float) $this->leaveDurationCalculator->countWeekdays($startDate, $endDate)
-            : 0.5;
+            ? (float) $this->leaveDurationCalculator->countWeekdays($startDate, $endDate, $holidayDates)
+            : (in_array($startDate->toDateString(), $holidayDates, true) ? 0.0 : 0.5);
         if ($totalDays < 0.5) {
             throw ValidationException::withMessages(['total_days' => ['Leave duration must be at least 0.5 days.']]);
         }
 
         return [$startDate, $endDate, $requestType, $totalDays];
+    }
+
+    private function containsWeekendOrAdjacentDate(Carbon $startDate, Carbon $endDate): bool
+    {
+        $date = $startDate->copy()->startOfDay();
+        $lastDate = $endDate->copy()->startOfDay();
+
+        while ($date->lte($lastDate)) {
+            if (
+                ! $this->leaveDurationCalculator->isWeekday($date)
+                || ! $this->leaveDurationCalculator->isWeekday($date->copy()->subDay())
+                || ! $this->leaveDurationCalculator->isWeekday($date->copy()->addDay())
+            ) {
+                return true;
+            }
+
+            $date->addDay();
+        }
+
+        return false;
     }
 
     private function validateOverlap(Employee $employee, Carbon $startDate, Carbon $endDate, ?int $ignoreLeaveRequestId): void

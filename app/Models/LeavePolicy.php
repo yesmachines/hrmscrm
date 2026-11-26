@@ -72,6 +72,16 @@ class LeavePolicy extends Model
         return ($this->exclude_rules['department_overlap'] ?? false) === true;
     }
 
+    public function blocksRequestsOnOrNearHolidays(): bool
+    {
+        return ($this->exclude_rules['holiday'] ?? false) === true;
+    }
+
+    public function blocksRequestsOnOrNearWeekends(): bool
+    {
+        return ($this->exclude_rules['weekend'] ?? false) === true;
+    }
+
     public function requiresWeekendAttachment(Carbon $startDate, Carbon $endDate): bool
     {
         if (! $this->requires_weekend_document) {

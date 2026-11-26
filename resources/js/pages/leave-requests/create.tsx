@@ -595,7 +595,7 @@ export default function LeaveRequestsCreate({
     }, [clearErrors, eligibilityPayload, hasAttemptedSubmit, setError]);
 
     useEffect(() => {
-        if (!requiresAttachment && data.certificate) {
+        if (!requiresAttachment && !errors.certificate && data.certificate) {
             setData('certificate', null);
 
             if (certificateInputRef.current) {
@@ -604,7 +604,7 @@ export default function LeaveRequestsCreate({
 
             clearErrors('certificate');
         }
-    }, [clearErrors, data.certificate, requiresAttachment, setData]);
+    }, [clearErrors, data.certificate, errors.certificate, requiresAttachment, setData]);
 
     useEffect(() => {
         if (!requiresHandover) {
@@ -1755,7 +1755,7 @@ export default function LeaveRequestsCreate({
                             )}
 
                             {/* Document / Certificate Attachment */}
-                            {requiresAttachment && (
+                            {(requiresAttachment || errors.certificate) && (
                                 <div className="space-y-2">
                                     <Label
                                         htmlFor={certificateId}
@@ -1777,14 +1777,13 @@ export default function LeaveRequestsCreate({
                                             const file =
                                                 e.target.files?.[0] || null;
                                             setData('certificate', file);
-                                            clearErrors('certificate');
                                         }}
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         Accepted formats: PDF, JPG, PNG, DOC,
                                         DOCX up to 10MB.
                                     </p>
-                                    {errors.certificate && (
+                                    {errors.certificate && !data.certificate && (
                                         <p className="text-sm text-destructive">
                                             {errors.certificate}
                                         </p>

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Festival;
 use App\Models\LeaveRequest;
 use App\Models\LeaveRequestGeneratedFile;
 use App\Models\LeaveTemplate;
@@ -16,6 +17,8 @@ use Throwable;
 
 class LeavePdfGenerationService
 {
+    private const LEAVE_TYPE_CHOICES_PLACEHOLDER = '{{leave_type_choices}}';
+
     public function resolveTemplate(LeaveType $leaveType, ?int $organisationId): ?LeaveTemplate
     {
         return $leaveType->resolveTemplate($organisationId);
@@ -31,6 +34,7 @@ class LeavePdfGenerationService
         ?LeaveRequest $leaveRequest = null,
     ): string {
         $employee->loadMissing(['user', 'department', 'organisation']);
+        $template->loadMissing('leaveType');
         $profile = $employee->profile();
 
         if ($leaveRequest !== null) {
@@ -46,6 +50,16 @@ class LeavePdfGenerationService
                 ],
                 $values,
             );
+        }
+
+        $leaveType = $leaveRequest?->leaveType ?? $template->leaveType;
+        $festivalId = $this->positiveIntegerOrNull($values['festival_id'] ?? null, 'festival_id');
+        $festivalName = $festivalId === null
+            ? ''
+            : Festival::query()->whereKey($festivalId)->value('name');
+
+        if ($festivalId !== null && ! is_string($festivalName)) {
+            throw new RuntimeException('Cannot render leave PDF because the selected festival was not found.');
         }
 
         $handoverEmployee = isset($values['handover_person_id'])
@@ -84,6 +98,10 @@ class LeavePdfGenerationService
             '{{request_type}}' => $this->escape($requestType),
             '{{remarks}}' => $this->escape((string) ($values['remarks'] ?? '')),
             '{{local_contact_no}}' => $this->escape((string) ($values['local_contact_no'] ?? '')),
+            '{{due_date}}' => $this->escape($this->formatDate($values['due_date'] ?? null)),
+            '{{child_birth_date}}' => $this->escape($this->formatDate($values['child_birth_date'] ?? null)),
+            '{{family_relationship}}' => $this->escape($this->familyRelationshipLabel($values['family_relationship'] ?? null)),
+            '{{festival_name}}' => $this->escape($festivalName),
             '{{traveling_outside_country}}' => $this->escape($this->yesNo($values['traveling_outside_country'] ?? null)),
             '{{travel_yes_checkbox}}' => $this->yesNoCheckbox($values['traveling_outside_country'] ?? null, 'Yes'),
             '{{travel_no_checkbox}}' => $this->yesNoCheckbox($values['traveling_outside_country'] ?? null, 'No'),
@@ -109,6 +127,14 @@ class LeavePdfGenerationService
             '{{approved_date}}' => $this->escape($this->formatDate($latestApproval?->approved_date)),
             '{{issue_date}}' => $this->escape($this->formatDate($leaveRequest?->created_at)),
         ];
+
+        if (str_contains($template->template_code, self::LEAVE_TYPE_CHOICES_PLACEHOLDER)) {
+            if ($leaveType === null) {
+                throw new RuntimeException('Cannot render leave type choices without a leave type.');
+            }
+
+            $replacements[self::LEAVE_TYPE_CHOICES_PLACEHOLDER] = $this->leaveTypeChoices($leaveType);
+        }
 
         return strtr($template->template_code, $replacements);
     }
@@ -148,6 +174,7 @@ class LeavePdfGenerationService
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <style>
+        @page { margin: 0.6cm 1.2cm; }
         body { font-family: "DejaVu Sans", sans-serif; }
         p, div, span, table { max-width: 100% !important; }
         p { margin-right: 0 !important; padding-right: 0 !important; width: auto !important; }
@@ -175,6 +202,75 @@ class LeavePdfGenerationService
 
             throw $exception;
         }
+    }
+
+    private function leaveTypeChoices(LeaveType $selectedLeaveType): string
+    {
+        $leaveTypeNames = config('params.leave_type.names');
+
+        if (! is_array($leaveTypeNames)) {
+            throw new RuntimeException('Cannot render leave type choices because no leave type names are configured.');
+        }
+
+        if (! array_key_exists($selectedLeaveType->code, $leaveTypeNames)) {
+            $leaveTypeNames[$selectedLeaveType->code] = $selectedLeaveType->leave_name;
+        }
+
+        $rows = [];
+
+        foreach (array_chunk($leaveTypeNames, 2, true) as $typePair) {
+            $cells = [];
+
+            foreach ($typePair as $code => $name) {
+                if (! is_string($code) || ! is_string($name) || $name === '') {
+                    throw new RuntimeException('Cannot render leave type choices because a configured leave type name is invalid.');
+                }
+
+                $cells[] = '<td style="width: 50%; border: 1px solid #222; padding: 2px 5px; line-height: 1.2;">'
+                    .$this->checkboxMarkup($code === $selectedLeaveType->code)
+                    .' '.$this->escape($name)
+                    .'</td>';
+            }
+
+            if (count($cells) === 1) {
+                $cells[] = '<td style="width: 50%; border: 1px solid #222; padding: 2px 5px; line-height: 1.2;">&nbsp;</td>';
+            }
+
+            $rows[] = '<tr>'.implode('', $cells).'</tr>';
+        }
+
+        return '<table style="width: 100%; border-collapse: collapse;"><tbody>'.implode('', $rows).'</tbody></table>';
+    }
+
+    private function familyRelationshipLabel(mixed $relationship): string
+    {
+        if (! is_string($relationship) || $relationship === '') {
+            return '';
+        }
+
+        $relationships = config('params.leave_type.compassionate_relationships', []);
+        $definition = is_array($relationships) ? ($relationships[$relationship] ?? null) : null;
+
+        return is_array($definition) && is_string($definition['label'] ?? null)
+            ? $definition['label']
+            : $relationship;
+    }
+
+    private function positiveIntegerOrNull(mixed $value, string $field): ?int
+    {
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            return null;
+        }
+
+        if (
+            (! is_int($value) && ! is_string($value))
+            || ! ctype_digit((string) $value)
+            || (int) $value < 1
+        ) {
+            throw new RuntimeException("Cannot render leave PDF because [{$field}] is invalid.");
+        }
+
+        return (int) $value;
     }
 
     private function companyLogoDataUri(): string

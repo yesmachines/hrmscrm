@@ -170,15 +170,62 @@ class FestivalLeaveService
     }
 
     /**
-     * @param  Collection<int, \stdClass>  $festivals
-     * @return Collection<int, \stdClass>
+     * @return list<string>
+     */
+    public function holidayDatesForEmployee(?EmployeeProfile $profile, Carbon $startDate, Carbon $endDate): array
+    {
+        if ($profile === null) {
+            return [];
+        }
+
+        $holidays = Festival::query()
+            ->where('type', 'holiday')
+            ->where('is_active', true)
+            ->whereDate('start_date', '<=', $endDate->toDateString())
+            ->where(function ($query) use ($startDate) {
+                $query->whereDate('end_date', '>=', $startDate->toDateString())
+                    ->orWhere(function ($query) use ($startDate) {
+                        $query->whereNull('end_date')
+                            ->whereDate('start_date', '>=', $startDate->toDateString());
+                    });
+            })
+            ->get(['id', 'religion', 'start_date', 'end_date']);
+
+        $rangeStart = $startDate->copy()->startOfDay();
+        $rangeEnd = $endDate->copy()->startOfDay();
+        $holidayDates = [];
+
+        foreach ($this->filterEligible($holidays, $profile) as $holiday) {
+            if ($holiday->start_date === null) {
+                continue;
+            }
+
+            $holidayStart = Carbon::parse($holiday->start_date)->startOfDay();
+            $holidayEnd = Carbon::parse($holiday->end_date ?? $holiday->start_date)->startOfDay();
+            $firstDate = $holidayStart->gt($rangeStart) ? $holidayStart : $rangeStart->copy();
+            $lastDate = $holidayEnd->lt($rangeEnd) ? $holidayEnd : $rangeEnd->copy();
+
+            for ($date = $firstDate->copy(); $date->lte($lastDate); $date->addDay()) {
+                $holidayDates[$date->toDateString()] = true;
+            }
+        }
+
+        $dates = array_keys($holidayDates);
+        sort($dates);
+
+        return $dates;
+    }
+
+    /**
+     * @param  Collection<int, Festival|\stdClass>  $festivals
+     * @return Collection<int, Festival|\stdClass>
      */
     public function filterEligible(Collection $festivals, ?EmployeeProfile $profile): Collection
     {
         $countryIds = $this->countryIdsForProfiles(collect([$profile])->filter())->first() ?? [];
         $festivalCountries = $this->festivalCountryIds($festivals);
 
-        return $festivals->filter(fn (\stdClass $festival): bool => $this->religionMatches($festival->religion, $profile)
+        return $festivals->filter(fn (Festival|\stdClass $festival): bool => $this->religionMatches($festival->religion, $profile)
             && $this->nationalityMatches($festivalCountries->get($festival->id, []), $countryIds));
     }
 

@@ -54,7 +54,7 @@ class StoreLeaveTypeRequest extends FormRequest
     {
         return [
             'leave_name' => ['required', 'string', 'max:255'],
-            'code' => ['required', 'string', 'max:255', 'unique:leave_types,code'],
+            'code' => ['required', 'string', 'uppercase', 'max:255', 'unique:leave_types,code'],
             'is_paid' => ['nullable', 'boolean'],
             'requires_approval' => ['nullable', 'boolean'],
             'gender' => ['nullable', 'string', Rule::in(array_keys(config('params.leave_type.gender_options', [])))],
