@@ -58,7 +58,7 @@ class LeaveController extends Controller
         summary: 'Get leave application metadata for the selected employee (HR only)',
         description: 'Same response as employee leave metadata, excluding WFH. Eligibility, balances, policies and field definitions are for the selected employee.',
         security: [['sanctum' => []]],
-        tags: ['Leave Management'],
+        tags: ['HR Leave'],
         parameters: [new OA\Parameter(name: 'employee_id', in: 'query', required: true, schema: new OA\Schema(type: 'integer'))],
         responses: [
             new OA\Response(response: 200, description: 'Leave metadata retrieved successfully'),
@@ -174,7 +174,7 @@ class LeaveController extends Controller
                 ],
             ),
         )),
-        tags: ['Leave Management'],
+        tags: ['HR Leave'],
         responses: [
             new OA\Response(response: 200, description: 'Leave request is valid'),
             new OA\Response(response: 403, description: 'HR role required'),
@@ -905,7 +905,7 @@ class LeaveController extends Controller
         path: '/api/v1/hr/leaves',
         summary: 'List all non-WFH leave requests for HR review',
         security: [['sanctum' => []]],
-        tags: ['Leave Management'],
+        tags: ['HR Leave'],
         parameters: [
             new OA\Parameter(name: 'employee_id', in: 'query', schema: new OA\Schema(type: 'integer')),
             new OA\Parameter(name: 'employee_name', in: 'query', schema: new OA\Schema(type: 'string')),

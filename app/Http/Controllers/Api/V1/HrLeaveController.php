@@ -40,7 +40,7 @@ class HrLeaveController extends Controller
                 ],
             ),
         )),
-        tags: ['Leave Management'],
+        tags: ['HR Leave'],
         responses: [
             new OA\Response(response: 201, description: 'Leave submitted on behalf of the employee'),
             new OA\Response(response: 403, description: 'HR role required'),
@@ -70,7 +70,7 @@ class HrLeaveController extends Controller
         summary: 'Approve an applied non-WFH leave request (HR only)',
         security: [['sanctum' => []]],
         requestBody: new OA\RequestBody(content: new OA\JsonContent(properties: [new OA\Property(property: 'remarks', type: 'string')])),
-        tags: ['Leave Management'],
+        tags: ['HR Leave'],
         parameters: [new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))],
         responses: [
             new OA\Response(response: 200, description: 'Leave approved'),
@@ -94,7 +94,7 @@ class HrLeaveController extends Controller
             required: ['remarks'],
             properties: [new OA\Property(property: 'remarks', type: 'string')],
         )),
-        tags: ['Leave Management'],
+        tags: ['HR Leave'],
         parameters: [new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer'))],
         responses: [
             new OA\Response(response: 200, description: 'Leave rejected'),
