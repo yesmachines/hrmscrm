@@ -122,7 +122,8 @@ Route::middleware(['auth:sanctum', 'role:hr,admin'])->prefix('v1/hr/wfh')->group
     Route::post('requests/{id}/reject', [WorkFromHomeController::class, 'rejectRequest'])->name('api.v1.hr.wfh.requests.reject');
 });
 
-Route::middleware(['auth:sanctum', 'role:hr'])->prefix('v1/hr/leaves')->name('api.v1.hr.leaves.')->group(function () {
+Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr/leaves')->name('api.v1.hr.leaves.')->group(function () {
+    Route::get('', [LeaveController::class, 'hrIndex'])->name('index');
     Route::get('meta', [LeaveController::class, 'meta'])->name('meta');
     Route::post('validate', [LeaveController::class, 'validateForm'])->name('validate');
     Route::get('festivals', [LeaveController::class, 'festivals'])->name('festivals');
@@ -156,11 +157,11 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
     Route::get('ideas', [IdeaController::class, 'index'])->name('api.v1.hr.ideas.index');
     Route::post('ideas', [IdeaController::class, 'store'])->name('api.v1.hr.ideas.store');
 
-    // Leaves
-    Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.hr.leaves.index');
-    Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.hr.leaves.store');
-    Route::match(['put', 'patch'], 'leaves/{id}', [LeaveController::class, 'update'])->name('api.v1.hr.leaves.update');
-    Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.hr.leaves.show');
+    // // Leaves
+    // Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.hr.leaves.index');
+    // Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.hr.leaves.store');
+    // Route::match(['put', 'patch'], 'leaves/{id}', [LeaveController::class, 'update'])->name('api.v1.hr.leaves.update');
+    // Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.hr.leaves.show');
 
     // Documents
     Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.hr.documents.categories');
