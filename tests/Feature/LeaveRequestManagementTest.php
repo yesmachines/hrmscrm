@@ -3,6 +3,7 @@
 use App\Models\EmployeeProfile;
 use App\Models\Festival;
 use App\Models\LeaveBalance;
+use App\Models\LeaveBalanceTransaction;
 use App\Models\LeaveHistory;
 use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
@@ -1663,7 +1664,11 @@ test('hr user can cancel an approved leave request and balance is refunded', fun
     $balance->refresh();
     // 3 days should be refunded: used = 5 - 3 = 2, balance = 15 + 3 = 18
     expect((float) $balance->used)->toBe(2.0)
-        ->and((float) $balance->balance)->toBe(18.0);
+        ->and((float) $balance->balance)->toBe(18.0)
+        ->and(LeaveBalanceTransaction::query()
+            ->where('leave_request_id', $leave->id)
+            ->where('transaction_type', 'used_decreased')
+            ->value('quantity'))->toBe(3.0);
 
     $this->assertDatabaseHas('leave_histories', [
         'leave_request_id' => $leave->id,
@@ -1785,7 +1790,8 @@ test('hr user editing status from applied to approved deducts leave balance', fu
         'allocated' => 12,
         'carried_forward' => 0,
         'used' => 1,
-        'balance' => 11,
+        'balance' => 8,
+        'pending' => 3,
     ]);
 
     $leave = LeaveRequest::query()->create([
@@ -1817,5 +1823,9 @@ test('hr user editing status from applied to approved deducts leave balance', fu
     $balance->refresh();
     // 3 days deducted: used = 1 + 3 = 4, balance = 11 - 3 = 8
     expect((float) $balance->used)->toBe(4.0)
-        ->and((float) $balance->balance)->toBe(8.0);
+        ->and((float) $balance->balance)->toBe(8.0)
+        ->and(LeaveBalanceTransaction::query()
+            ->where('leave_request_id', $leave->id)
+            ->pluck('transaction_type')
+            ->all())->toEqualCanonicalizing(['pending_decreased', 'used_increased']);
 });

@@ -1,25 +1,61 @@
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ArrowLeft, Save } from 'lucide-react';
-import { index, update } from '@/actions/App/Http/Controllers/Leave/LeaveBalanceController';
+import {
+    index,
+    update,
+} from '@/actions/App/Http/Controllers/Leave/LeaveBalanceController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { dashboard } from '@/routes';
 
-export default function LeaveBalancesEdit({ leave_balance, employees, leaveTypes }: { leave_balance: any, employees: any[], leaveTypes: any[] }) {
+type LeaveBalanceRecord = {
+    id: number;
+    year: number;
+    allocated: number;
+    carried_forward: number;
+    used: number;
+    pending: number;
+    encashed: number;
+    earned: number;
+    employee: {
+        user: { name: string } | null;
+        emp_num?: string | null;
+        employee_code: string | null;
+    } | null;
+    leave_type: {
+        leave_name: string;
+    } | null;
+};
+
+export default function LeaveBalancesEdit({
+    leave_balance,
+}: {
+    leave_balance: LeaveBalanceRecord;
+}) {
     const { data, setData, put, processing, errors } = useForm({
-        employee_id: leave_balance.employee_id,
-        leave_type_id: leave_balance.leave_type_id,
-        year: leave_balance.year.toString(),
         allocated: leave_balance.allocated.toString(),
         carried_forward: leave_balance.carried_forward.toString(),
         used: leave_balance.used.toString(),
         pending: leave_balance.pending.toString(),
         encashed: leave_balance.encashed.toString(),
         earned: leave_balance.earned.toString(),
-        balance: leave_balance.balance.toString(),
+        remarks: '',
     });
+    const { errors: pageErrors } = usePage().props;
+
+    const calculatedBalance =
+        Number(data.allocated || 0) +
+        Number(data.carried_forward || 0) +
+        Number(data.earned || 0) -
+        Number(data.used || 0) -
+        Number(data.pending || 0) -
+        Number(data.encashed || 0);
+    const employeeIdentifier =
+        leave_balance.employee?.employee_code ??
+        leave_balance.employee?.emp_num;
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -30,7 +66,7 @@ export default function LeaveBalancesEdit({ leave_balance, employees, leaveTypes
         <>
             <Head title="Edit Leave Balance" />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1200px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1200px]">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" size="icon" asChild>
                         <Link href={index.url()}>
@@ -45,76 +81,87 @@ export default function LeaveBalancesEdit({ leave_balance, employees, leaveTypes
 
                 <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
                     <form onSubmit={submit} className="space-y-6">
+                        <p className="text-sm text-muted-foreground">
+                            Balance identity cannot be changed. Component
+                            adjustments are recorded in the transaction history
+                            with your reason.
+                        </p>
+                        {(pageErrors.balance || pageErrors.total_days) && (
+                            <p
+                                className="text-sm text-destructive"
+                                role="alert"
+                            >
+                                {pageErrors.balance ?? pageErrors.total_days}
+                            </p>
+                        )}
                         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <div className="space-y-2">
-                                <Label htmlFor="employee_id">Employee</Label>
-                                <select
-                                    id="employee_id"
-                                    value={data.employee_id}
-                                    onChange={(e) => setData('employee_id', e.target.value)}
-                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    <option value="">Select Employee</option>
-                                    {employees.map((emp) => (
-                                        <option key={emp.id} value={emp.id}>
-                                            {emp.user?.name ?? 'Unknown'}
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.employee_id && <p className="text-sm text-destructive">{errors.employee_id}</p>}
+                                <Label>Employee</Label>
+                                <p className="pt-2 text-sm text-foreground">
+                                    {leave_balance.employee?.user?.name ??
+                                        'Unknown'}
+                                    {employeeIdentifier
+                                        ? ` (${employeeIdentifier})`
+                                        : ''}
+                                </p>
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="leave_type_id">Leave Type</Label>
-                                <select
-                                    id="leave_type_id"
-                                    value={data.leave_type_id}
-                                    onChange={(e) => setData('leave_type_id', e.target.value)}
-                                    className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    <option value="">Select Leave Type</option>
-                                    {leaveTypes.map((type) => (
-                                        <option key={type.id} value={type.id}>
-                                            {type.leave_name}
-                                        </option>
-                                    ))}
-                                </select>
-                                {errors.leave_type_id && <p className="text-sm text-destructive">{errors.leave_type_id}</p>}
+                                <Label>Leave Type</Label>
+                                <p className="pt-2 text-sm text-foreground">
+                                    {leave_balance.leave_type?.leave_name ??
+                                        'Unknown'}
+                                </p>
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="year">Year</Label>
-                                <Input
-                                    id="year"
-                                    type="number"
-                                    value={data.year}
-                                    onChange={(e) => setData('year', e.target.value)}
-                                />
-                                {errors.year && <p className="text-sm text-destructive">{errors.year}</p>}
+                                <Label>Year</Label>
+                                <p className="pt-2 text-sm text-foreground">
+                                    {leave_balance.year}
+                                </p>
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="allocated">Allocated Days</Label>
+                                <Label htmlFor="allocated">
+                                    Allocated Days
+                                </Label>
                                 <Input
                                     id="allocated"
                                     type="number"
                                     step="0.5"
                                     value={data.allocated}
-                                    onChange={(e) => setData('allocated', e.target.value)}
+                                    onChange={(e) =>
+                                        setData('allocated', e.target.value)
+                                    }
                                 />
-                                {errors.allocated && <p className="text-sm text-destructive">{errors.allocated}</p>}
+                                {errors.allocated && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.allocated}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="carried_forward">Carried Forward</Label>
+                                <Label htmlFor="carried_forward">
+                                    Carried Forward
+                                </Label>
                                 <Input
                                     id="carried_forward"
                                     type="number"
                                     step="0.5"
                                     value={data.carried_forward}
-                                    onChange={(e) => setData('carried_forward', e.target.value)}
+                                    onChange={(e) =>
+                                        setData(
+                                            'carried_forward',
+                                            e.target.value,
+                                        )
+                                    }
                                 />
-                                {errors.carried_forward && <p className="text-sm text-destructive">{errors.carried_forward}</p>}
+                                {errors.carried_forward && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.carried_forward}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -124,21 +171,35 @@ export default function LeaveBalancesEdit({ leave_balance, employees, leaveTypes
                                     type="number"
                                     step="0.5"
                                     value={data.used}
-                                    onChange={(e) => setData('used', e.target.value)}
+                                    onChange={(e) =>
+                                        setData('used', e.target.value)
+                                    }
                                 />
-                                {errors.used && <p className="text-sm text-destructive">{errors.used}</p>}
+                                {errors.used && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.used}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="pending">Pending Approval</Label>
+                                <Label htmlFor="pending">
+                                    Pending Approval
+                                </Label>
                                 <Input
                                     id="pending"
                                     type="number"
                                     step="0.5"
                                     value={data.pending}
-                                    onChange={(e) => setData('pending', e.target.value)}
+                                    onChange={(e) =>
+                                        setData('pending', e.target.value)
+                                    }
                                 />
-                                {errors.pending && <p className="text-sm text-destructive">{errors.pending}</p>}
+                                {errors.pending && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.pending}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -148,9 +209,15 @@ export default function LeaveBalancesEdit({ leave_balance, employees, leaveTypes
                                     type="number"
                                     step="0.5"
                                     value={data.encashed}
-                                    onChange={(e) => setData('encashed', e.target.value)}
+                                    onChange={(e) =>
+                                        setData('encashed', e.target.value)
+                                    }
                                 />
-                                {errors.encashed && <p className="text-sm text-destructive">{errors.encashed}</p>}
+                                {errors.encashed && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.encashed}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -160,22 +227,47 @@ export default function LeaveBalancesEdit({ leave_balance, employees, leaveTypes
                                     type="number"
                                     step="0.5"
                                     value={data.earned}
-                                    onChange={(e) => setData('earned', e.target.value)}
+                                    onChange={(e) =>
+                                        setData('earned', e.target.value)
+                                    }
                                 />
-                                {errors.earned && <p className="text-sm text-destructive">{errors.earned}</p>}
+                                {errors.earned && (
+                                    <p className="text-sm text-destructive">
+                                        {errors.earned}
+                                    </p>
+                                )}
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="balance">Current Balance</Label>
+                                <Label htmlFor="calculated_balance">
+                                    Calculated Available Balance
+                                </Label>
                                 <Input
-                                    id="balance"
+                                    id="calculated_balance"
                                     type="number"
-                                    step="0.5"
-                                    value={data.balance}
-                                    onChange={(e) => setData('balance', e.target.value)}
+                                    value={calculatedBalance.toFixed(2)}
+                                    readOnly
                                 />
-                                {errors.balance && <p className="text-sm text-destructive">{errors.balance}</p>}
                             </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="remarks">
+                                Reason for adjustment
+                            </Label>
+                            <Textarea
+                                id="remarks"
+                                value={data.remarks}
+                                onChange={(e) =>
+                                    setData('remarks', e.target.value)
+                                }
+                                required
+                            />
+                            {errors.remarks && (
+                                <p className="text-sm text-destructive">
+                                    {errors.remarks}
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex justify-end">

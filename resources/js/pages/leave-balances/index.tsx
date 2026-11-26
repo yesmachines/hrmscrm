@@ -1,6 +1,12 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Pencil, Trash2, Plus } from 'lucide-react';
-import { index, create, edit, destroy } from '@/actions/App/Http/Controllers/Leave/LeaveBalanceController';
+import { Pencil, Trash2, Plus, History } from 'lucide-react';
+import {
+    index,
+    create,
+    edit,
+    destroy,
+    transactions,
+} from '@/actions/App/Http/Controllers/Leave/LeaveBalanceController';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
@@ -32,10 +38,21 @@ type PaginatedBalances = {
     links: { url: string | null; label: string; active: boolean }[];
 };
 
-export default function LeaveBalancesIndex({ balances }: { balances: PaginatedBalances }) {
+export default function LeaveBalancesIndex({
+    balances,
+}: {
+    balances: PaginatedBalances;
+}) {
     const handleDelete = (id: number) => {
         if (confirm('Are you sure you want to delete this leave balance?')) {
-            router.delete(destroy.url(id));
+            router.delete(destroy.url(id), {
+                onError: (errors) => {
+                    window.alert(
+                        errors.balance ??
+                            'This leave balance could not be deleted because it has related history.',
+                    );
+                },
+            });
         }
     };
 
@@ -43,7 +60,7 @@ export default function LeaveBalancesIndex({ balances }: { balances: PaginatedBa
         <>
             <Head title="Leave Balances" />
 
-            <div className="mx-auto flex w-full max-w-full 2xl:max-w-[1600px] flex-1 flex-col gap-6 p-6 md:p-8">
+            <div className="mx-auto flex w-full max-w-full flex-1 flex-col gap-6 p-6 md:p-8 2xl:max-w-[1600px]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         title="Leave Balances"
@@ -57,19 +74,31 @@ export default function LeaveBalancesIndex({ balances }: { balances: PaginatedBa
                     </Button>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm overflow-x-auto">
+                <div className="overflow-hidden overflow-x-auto rounded-2xl border border-border bg-white shadow-sm">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                         <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                             <tr>
-                                <th className="px-4 py-3 font-medium">Employee</th>
-                                <th className="px-4 py-3 font-medium">Leave Type</th>
+                                <th className="px-4 py-3 font-medium">
+                                    Employee
+                                </th>
+                                <th className="px-4 py-3 font-medium">
+                                    Leave Type
+                                </th>
                                 <th className="px-4 py-3 font-medium">Year</th>
-                                <th className="px-4 py-3 font-medium">Allocated</th>
+                                <th className="px-4 py-3 font-medium">
+                                    Allocated
+                                </th>
                                 <th className="px-4 py-3 font-medium">C/F</th>
                                 <th className="px-4 py-3 font-medium">Used</th>
-                                <th className="px-4 py-3 font-medium">Pending</th>
-                                <th className="px-4 py-3 font-medium">Balance</th>
-                                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                                <th className="px-4 py-3 font-medium">
+                                    Pending
+                                </th>
+                                <th className="px-4 py-3 font-medium">
+                                    Balance
+                                </th>
+                                <th className="px-4 py-3 text-right font-medium">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -90,14 +119,15 @@ export default function LeaveBalancesIndex({ balances }: { balances: PaginatedBa
                                     >
                                         <td className="px-4 py-3">
                                             <div className="font-medium text-foreground">
-                                                {row.employee?.user?.name ?? 'Unknown'}
+                                                {row.employee?.user?.name ??
+                                                    'Unknown'}
                                             </div>
                                             <div className="text-xs text-muted-foreground">
                                                 {row.employee?.employee_code ||
                                                     row.employee?.emp_num}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 text-foreground font-medium">
+                                        <td className="px-4 py-3 font-medium text-foreground">
                                             {row.leave_type?.leave_name}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
@@ -120,12 +150,39 @@ export default function LeaveBalancesIndex({ balances }: { balances: PaginatedBa
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <div className="flex justify-end gap-2">
-                                                <Button variant="ghost" size="icon" asChild>
-                                                    <Link href={edit.url(row.id)}>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    asChild
+                                                >
+                                                    <Link
+                                                        href={edit.url(row.id)}
+                                                    >
                                                         <Pencil className="size-4" />
                                                     </Link>
                                                 </Button>
-                                                <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDelete(row.id)}>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    asChild
+                                                >
+                                                    <Link
+                                                        href={transactions.url(
+                                                            row.id,
+                                                        )}
+                                                        aria-label="View balance transactions"
+                                                    >
+                                                        <History className="size-4" />
+                                                    </Link>
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                    onClick={() =>
+                                                        handleDelete(row.id)
+                                                    }
+                                                >
                                                     <Trash2 className="size-4" />
                                                 </Button>
                                             </div>

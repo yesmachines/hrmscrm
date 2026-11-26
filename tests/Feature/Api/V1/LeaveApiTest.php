@@ -2,6 +2,7 @@
 
 use App\Models\EmployeeProfile;
 use App\Models\LeaveBalance;
+use App\Models\LeaveBalanceTransaction;
 use App\Models\LeaveHistory;
 use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
@@ -298,7 +299,11 @@ test('employee leave type without approval is auto-approved and deducts balance 
     $balance->refresh();
     expect((float) $balance->used)->toBe(3.0)
         ->and((float) $balance->balance)->toBe(7.0)
-        ->and((float) $balance->pending)->toBe(0.0);
+        ->and((float) $balance->pending)->toBe(0.0)
+        ->and((float) LeaveBalanceTransaction::query()
+            ->where('leave_request_id', $leaveRequest->id)
+            ->where('transaction_type', 'used_increased')
+            ->value('quantity'))->toBe(2.0);
 });
 
 test('employee can update their own applied leave request without changing its leave type', function () {

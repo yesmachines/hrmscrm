@@ -19,6 +19,8 @@ class WorkFromHomeService
 
     public const SCHEDULE_DETAIL_KEY = 'wfh_schedule_id';
 
+    public function __construct(private readonly LeaveBalanceService $leaveBalanceService) {}
+
     public function isWorkFromHomeType(LeaveType $leaveType): bool
     {
         return $leaveType->code === self::LEAVE_TYPE_CODE;
@@ -48,22 +50,32 @@ class WorkFromHomeService
                 'created_by' => $createdBy,
             ]);
 
-            $this->adjustBalance($schedule, 'allocated', (float) $schedule->working_days);
-            $this->adjustBalance($schedule, 'balance', (float) $schedule->working_days);
+            $this->adjustBalance(
+                $schedule,
+                'allocated',
+                (float) $schedule->working_days,
+                $createdBy,
+                null,
+                "WFH schedule #{$schedule->id} created.",
+                true,
+            );
 
             return $schedule;
         });
     }
 
-    public function updateScheduleStatus(WorkFromHomeSchedule $schedule, int $status): WorkFromHomeSchedule
-    {
+    public function updateScheduleStatus(
+        WorkFromHomeSchedule $schedule,
+        int $status,
+        ?int $actorId = null,
+    ): WorkFromHomeSchedule {
         if (! in_array($status, [0, 1], true)) {
             throw ValidationException::withMessages([
                 'status' => ['The selected WFH schedule status is invalid.'],
             ]);
         }
 
-        return DB::transaction(function () use ($schedule, $status): WorkFromHomeSchedule {
+        return DB::transaction(function () use ($schedule, $status, $actorId): WorkFromHomeSchedule {
             $schedule = WorkFromHomeSchedule::query()
                 ->whereKey($schedule->id)
                 ->lockForUpdate()
@@ -90,8 +102,15 @@ class WorkFromHomeService
             $unusedDays = max(0, (float) $schedule->working_days - $usedDays);
             $balanceAdjustment = $status === 0 ? -$unusedDays : $unusedDays;
 
-            $this->adjustBalance($schedule, 'allocated', $balanceAdjustment);
-            $this->adjustBalance($schedule, 'balance', $balanceAdjustment);
+            $this->adjustBalance(
+                $schedule,
+                'allocated',
+                $balanceAdjustment,
+                $actorId,
+                null,
+                "WFH schedule #{$schedule->id} was ".($status === 1 ? 'reactivated.' : 'deactivated.'),
+                $balanceAdjustment > 0,
+            );
 
             $schedule->update(['status' => $status]);
 
@@ -183,67 +202,88 @@ class WorkFromHomeService
         string $newStatus,
         float $newDays,
         ?int $newScheduleId,
+        ?int $actorId = null,
     ): void {
-        $leaveRequest->loadMissing('leaveType');
-        if ($leaveRequest->leaveType === null || ! $this->isWorkFromHomeType($leaveRequest->leaveType)) {
-            return;
-        }
+        DB::transaction(function () use (
+            $leaveRequest,
+            $oldStatus,
+            $oldDays,
+            $oldScheduleId,
+            $newStatus,
+            $newDays,
+            $newScheduleId,
+            $actorId,
+        ): void {
+            $lockedRequest = LeaveRequest::query()
+                ->whereKey($leaveRequest->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if (in_array($oldStatus, ['applied', 'approved'], true) && $oldScheduleId === null) {
-            $oldScheduleId = $this->scheduleIdForRequest($leaveRequest);
-        }
-
-        $oldSchedule = $oldScheduleId === null
-            ? null
-            : WorkFromHomeSchedule::query()->find($oldScheduleId);
-
-        if (in_array($oldStatus, ['applied', 'approved'], true) && $oldSchedule === null) {
-            throw ValidationException::withMessages([
-                'status' => ['The WFH schedule for this request could not be found.'],
-            ]);
-        }
-        if ($oldSchedule !== null && (int) $oldSchedule->employee_id !== (int) $leaveRequest->employee_id) {
-            throw ValidationException::withMessages([
-                'status' => ['The WFH schedule does not belong to this employee.'],
-            ]);
-        }
-
-        $newSchedule = in_array($newStatus, ['applied', 'approved'], true)
-            ? WorkFromHomeSchedule::query()->find($newScheduleId)
-            : null;
-        if (in_array($newStatus, ['applied', 'approved'], true) && $newSchedule === null) {
-            throw ValidationException::withMessages([
-                'status' => ['An active WFH schedule is required for this request.'],
-            ]);
-        }
-        if ($newSchedule !== null && (int) $newSchedule->employee_id !== (int) $leaveRequest->employee_id) {
-            throw ValidationException::withMessages([
-                'status' => ['The WFH schedule does not belong to this employee.'],
-            ]);
-        }
-        if ($newStatus === 'approved' && ($newSchedule === null || $newSchedule->status !== 1)) {
-            throw ValidationException::withMessages([
-                'status' => ['A request on an inactive WFH schedule cannot be approved.'],
-            ]);
-        }
-
-        if ($oldStatus === 'applied') {
-            $this->adjustBalance($oldSchedule, 'pending', -$oldDays);
-        } elseif ($oldStatus === 'approved') {
-            $this->adjustBalance($oldSchedule, 'used', -$oldDays);
-            if ($oldSchedule->status === 1) {
-                $this->adjustBalance($oldSchedule, 'balance', $oldDays);
-            } else {
-                $this->adjustBalance($oldSchedule, 'allocated', -$oldDays);
+            if ($oldStatus !== '' && $lockedRequest->status !== $oldStatus) {
+                throw ValidationException::withMessages([
+                    'status' => ['This leave request was already updated. Refresh the page and try again.'],
+                ]);
             }
-        }
 
-        if ($newStatus === 'applied') {
-            $this->adjustBalance($newSchedule, 'pending', $newDays);
-        } elseif ($newStatus === 'approved') {
-            $this->adjustBalance($newSchedule, 'used', $newDays);
-            $this->adjustBalance($newSchedule, 'balance', -$newDays);
-        }
+            $lockedRequest->loadMissing('leaveType');
+            if ($lockedRequest->leaveType === null || ! $this->isWorkFromHomeType($lockedRequest->leaveType)) {
+                return;
+            }
+
+            if (in_array($oldStatus, ['applied', 'approved'], true) && $oldScheduleId === null) {
+                $oldScheduleId = $this->scheduleIdForRequest($lockedRequest);
+            }
+
+            $oldSchedule = $oldScheduleId === null
+                ? null
+                : WorkFromHomeSchedule::query()->whereKey($oldScheduleId)->lockForUpdate()->first();
+
+            if (in_array($oldStatus, ['applied', 'approved'], true) && $oldSchedule === null) {
+                throw ValidationException::withMessages([
+                    'status' => ['The WFH schedule for this request could not be found.'],
+                ]);
+            }
+            if ($oldSchedule !== null && (int) $oldSchedule->employee_id !== (int) $lockedRequest->employee_id) {
+                throw ValidationException::withMessages([
+                    'status' => ['The WFH schedule does not belong to this employee.'],
+                ]);
+            }
+
+            $newSchedule = in_array($newStatus, ['applied', 'approved'], true)
+                ? WorkFromHomeSchedule::query()->whereKey($newScheduleId)->lockForUpdate()->first()
+                : null;
+            if (in_array($newStatus, ['applied', 'approved'], true) && $newSchedule === null) {
+                throw ValidationException::withMessages([
+                    'status' => ['An active WFH schedule is required for this request.'],
+                ]);
+            }
+            if ($newSchedule !== null && (int) $newSchedule->employee_id !== (int) $lockedRequest->employee_id) {
+                throw ValidationException::withMessages([
+                    'status' => ['The WFH schedule does not belong to this employee.'],
+                ]);
+            }
+            if ($newStatus === 'approved' && ($newSchedule === null || $newSchedule->status !== 1)) {
+                throw ValidationException::withMessages([
+                    'status' => ['A request on an inactive WFH schedule cannot be approved.'],
+                ]);
+            }
+
+            $remarks = "WFH leave request #{$lockedRequest->id}: {$oldStatus} to {$newStatus}.";
+            if ($oldStatus === 'applied') {
+                $this->adjustBalance($oldSchedule, 'pending', -$oldDays, $actorId, $lockedRequest, $remarks);
+            } elseif ($oldStatus === 'approved') {
+                $this->adjustBalance($oldSchedule, 'used', -$oldDays, $actorId, $lockedRequest, $remarks);
+                if ($oldSchedule->status !== 1) {
+                    $this->adjustBalance($oldSchedule, 'allocated', -$oldDays, $actorId, $lockedRequest, $remarks);
+                }
+            }
+
+            if ($newStatus === 'applied') {
+                $this->adjustBalance($newSchedule, 'pending', $newDays, $actorId, $lockedRequest, $remarks);
+            } elseif ($newStatus === 'approved') {
+                $this->adjustBalance($newSchedule, 'used', $newDays, $actorId, $lockedRequest, $remarks);
+            }
+        });
     }
 
     public function balanceYear(WorkFromHomeSchedule $schedule): int
@@ -362,40 +402,31 @@ class WorkFromHomeService
         }
     }
 
-    private function adjustBalance(WorkFromHomeSchedule $schedule, string $field, float $amount): void
-    {
+    private function adjustBalance(
+        WorkFromHomeSchedule $schedule,
+        string $field,
+        float $amount,
+        ?int $actorId = null,
+        ?LeaveRequest $leaveRequest = null,
+        string $remarks = 'WFH balance adjustment.',
+        bool $createIfMissing = false,
+    ): void {
         if (abs($amount) < 0.00001) {
             return;
         }
 
         $leaveType = $this->workFromHomeLeaveType();
-        $balance = LeaveBalance::query()
-            ->where('employee_id', $schedule->employee_id)
-            ->where('leave_type_id', $leaveType->id)
-            ->where('year', $this->balanceYear($schedule))
-            ->lockForUpdate()
-            ->first();
-
-        if ($balance === null) {
-            if ($amount < 0) {
-                throw new LogicException('The WFH balance row is missing for an existing schedule.');
-            }
-
-            $balance = new LeaveBalance([
-                'employee_id' => $schedule->employee_id,
-                'leave_type_id' => $leaveType->id,
-                'year' => $this->balanceYear($schedule),
-            ]);
-        }
-
-        $current = (float) ($balance->{$field} ?? 0);
-        $updated = $current + $amount;
-        if ($updated < -0.00001) {
-            throw new LogicException("The WFH {$field} balance cannot become negative.");
-        }
-
-        $balance->{$field} = max(0, $updated);
-        $balance->save();
+        $this->leaveBalanceService->adjustComponent(
+            (int) $schedule->employee_id,
+            (int) $leaveType->id,
+            $this->balanceYear($schedule),
+            $field,
+            $amount,
+            $actorId,
+            $leaveRequest?->id,
+            $remarks,
+            $createIfMissing,
+        );
     }
 
     public function balanceForSchedule(WorkFromHomeSchedule $schedule): ?LeaveBalance

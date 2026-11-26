@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\LeaveBalanceTransaction;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
@@ -119,7 +120,11 @@ test('hr can create a WFH schedule and allocate its working days', function () {
     $balance = app(WorkFromHomeService::class)->balanceForSchedule($schedule);
 
     expect((float) $balance->allocated)->toBe(3.0)
-        ->and((float) $balance->balance)->toBe(3.0);
+        ->and((float) $balance->balance)->toBe(3.0)
+        ->and((float) LeaveBalanceTransaction::query()
+            ->where('leave_balance_id', $balance->id)
+            ->where('transaction_type', 'allocated_increased')
+            ->value('quantity'))->toBe(3.0);
 
     $this->withToken($hrToken)
         ->postJson(route('api.v1.hr.wfh.schedules.store'), [
@@ -189,7 +194,11 @@ test('employee WFH requests count actual days against the schedule allowance', f
     $leaveRequest = LeaveRequest::query()->where('employee_id', $employee->id)->firstOrFail();
     expect((float) $leaveRequest->total_days)->toBe(1.0)
         ->and($leaveRequest->details()->where('field_key', 'wfh_schedule_id')->value('field_value'))
-        ->toBe((string) $schedule->id);
+        ->toBe((string) $schedule->id)
+        ->and((float) LeaveBalanceTransaction::query()
+            ->where('leave_request_id', $leaveRequest->id)
+            ->where('transaction_type', 'pending_increased')
+            ->value('quantity'))->toBe(1.0);
 
     $nextStart = nextWorkFromHomeWeekday($startDate->copy()->addDay());
     [$secondStart, $secondEnd] = workFromHomeDateRange($nextStart, 3);
@@ -260,7 +269,15 @@ test('approval and schedule status changes update WFH balances by requested days
     $balance = app(WorkFromHomeService::class)->balanceForSchedule($schedule);
     expect((float) $balance->pending)->toBe(1.0)
         ->and((float) $balance->used)->toBe(2.0)
-        ->and((float) $balance->balance)->toBe(1.0);
+        ->and((float) $balance->balance)->toBe(1.0)
+        ->and(LeaveBalanceTransaction::query()
+            ->where('leave_request_id', $firstRequest->id)
+            ->pluck('transaction_type')
+            ->all())->toEqualCanonicalizing([
+                'pending_increased',
+                'pending_decreased',
+                'used_increased',
+            ]);
 
     app(WorkFromHomeService::class)->updateScheduleStatus($schedule, 0);
     $balance->refresh();

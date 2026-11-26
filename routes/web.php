@@ -101,6 +101,8 @@ Route::middleware(['auth', EnsureHrmsLoginRole::class])->group(function () {
         Route::patch('wfh-schedules/{schedule}/status', [WorkFromHomeController::class, 'updateStatus'])
             ->name('wfh-schedules.update-status');
     });
+    Route::get('leave-balances/{leave_balance}/transactions', [LeaveBalanceController::class, 'transactions'])
+        ->name('leave-balances.tr ansactions');
     Route::resource('leave-balances', LeaveBalanceController::class);
     Route::resource('leave-histories', LeaveHistoryController::class);
 

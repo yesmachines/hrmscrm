@@ -250,7 +250,11 @@ class WorkFromHomeController extends Controller
             'status' => ['required', 'integer', Rule::in([0, 1])],
         ]);
 
-        $schedule = $this->workFromHomeService->updateScheduleStatus($schedule, (int) $validated['status']);
+        $schedule = $this->workFromHomeService->updateScheduleStatus(
+            $schedule,
+            (int) $validated['status'],
+            $request->user()?->id,
+        );
 
         return response()->json([
             'success' => true,

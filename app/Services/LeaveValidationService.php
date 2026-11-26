@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Concerns\LeaveBusinessRules;
 use App\Models\EmployeeProfile;
-use App\Models\LeaveBalance;
 use App\Models\LeavePolicy;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
@@ -23,6 +22,7 @@ class LeaveValidationService
         private readonly FestivalLeaveService $festivalLeaveService,
         private readonly LeaveTypeRules $leaveTypeRules,
         private readonly WorkFromHomeService $workFromHomeService,
+        private readonly LeaveBalanceService $leaveBalanceService,
     ) {}
 
     /**
@@ -33,7 +33,7 @@ class LeaveValidationService
      * Per-type checks live in LeaveBusinessRules; configurable values remain in params.leave_type.
      *
      * @param  array<string, mixed>  $data
-     * @return array{leave_type: LeaveType, policy: ?LeavePolicy, start_date: Carbon, end_date: Carbon, request_type: string, total_days: float, attachment_required: bool, remarks: ?string, wfh_schedule: ?WorkFromHomeSchedule}
+     * @return array{leave_type: LeaveType, policy: ?LeavePolicy, start_date: Carbon, end_date: Carbon, request_type: string, total_days: float, days_by_year: array<int, float>, attachment_required: bool, remarks: ?string, wfh_schedule: ?WorkFromHomeSchedule}
      */
     public function validateApplication(
         Employee $employee,
@@ -56,7 +56,7 @@ class LeaveValidationService
         }
 
         $policy = $leaveType->policyForOrganisation($employee->organisation_id);
-        [$startDate, $endDate, $requestType, $totalDays] = $this->validateDates($data);
+        [$startDate, $endDate, $requestType, $totalDays, $daysByYear] = $this->validateDates($data);
         $attachmentRequired = false;
         $remarks = $data['remarks'] ?? null;
         $workFromHomeSchedule = null;
@@ -82,9 +82,17 @@ class LeaveValidationService
                     $enforceWfhNoticePeriod,
                 );
             } else {
-                $this->validatePolicyEligibility($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
+                $this->validatePolicyEligibility(
+                    $employee,
+                    $leaveType,
+                    $policy,
+                    $startDate,
+                    $totalDays,
+                    $ignoreLeaveRequestId,
+                    $daysByYear,
+                );
                 $this->validateDepartmentOverlap($employee, $leaveType, $policy, $startDate, $endDate, $ignoreLeaveRequestId);
-                $this->validateBalance($employee, $leaveType, $policy, $startDate, $totalDays, $ignoreLeaveRequestId);
+                $this->validateBalance($employee, $leaveType, $policy, $daysByYear, $ignoreLeaveRequestId);
             }
             $this->validateHandover($employee, $leaveType, $policy, $data, $startDate, $endDate, $totalDays);
             $this->validateTravel($data);
@@ -105,6 +113,7 @@ class LeaveValidationService
             'end_date' => $endDate,
             'request_type' => $requestType,
             'total_days' => $totalDays,
+            'days_by_year' => $daysByYear,
             'attachment_required' => $attachmentRequired,
             'remarks' => $remarks,
             'wfh_schedule' => $workFromHomeSchedule,
@@ -173,6 +182,7 @@ class LeaveValidationService
         Carbon $startDate,
         float $totalDays,
         ?int $ignoreLeaveRequestId = null,
+        ?array $requestedDaysByYear = null,
     ): void {
         $usage = LeaveRequest::query()
             ->where('employee_id', $employee->id)
@@ -189,16 +199,38 @@ class LeaveValidationService
         $internalLimit = $this->leaveTypeRules->definition($leaveType)['internal_annual_limit'] ?? null;
         $annualLimit = $internalLimit ?? $policy?->annual_limit;
         if ($annualLimit !== null) {
-            $usedDays = (float) (clone $usage)->whereYear('start_date', $startDate->year)->sum('total_days');
-            if (($usedDays + $totalDays) > $annualLimit) {
+            $requestedDaysByYear ??= [$startDate->year => $totalDays];
+            $usedDaysByYear = [];
+
+            foreach ((clone $usage)->get(['start_date', 'end_date', 'request_type']) as $leaveRequest) {
+                $requestDaysByYear = $this->leaveDurationCalculator->allocateByCalendarYear(
+                    Carbon::parse($leaveRequest->start_date),
+                    Carbon::parse($leaveRequest->end_date ?? $leaveRequest->start_date),
+                    $leaveRequest->request_type ?? 'fullday',
+                );
+
+                foreach ($requestDaysByYear as $year => $days) {
+                    $usedDaysByYear[$year] = ($usedDaysByYear[$year] ?? 0.0) + $days;
+                }
+            }
+
+            foreach ($requestedDaysByYear as $year => $requestedDays) {
+                $usedDays = (float) ($usedDaysByYear[$year] ?? 0.0);
+                if ($usedDays + $requestedDays <= $annualLimit) {
+                    continue;
+                }
+
                 if ($internalLimit !== null) {
                     throw ValidationException::withMessages([
                         'total_days' => ['This leave request exceeds the permitted allowance. Please contact HR.'],
                     ]);
                 }
+
                 $remaining = max(0, $annualLimit - $usedDays);
                 throw ValidationException::withMessages([
-                    'total_days' => ["This request exceeds your annual limit of {$annualLimit} days for {$leaveType->leave_name}. You have {$remaining} days remaining this year."],
+                    'total_days' => [
+                        "This request exceeds your annual limit of {$annualLimit} days for {$leaveType->leave_name} in {$year}. You have {$remaining} days remaining.",
+                    ],
                 ]);
             }
         }
@@ -318,7 +350,7 @@ class LeaveValidationService
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{Carbon, Carbon, string, float}
+     * @return array{Carbon, Carbon, string, float, array<int, float>}
      */
     private function validateDates(array $data): array
     {
@@ -340,14 +372,13 @@ class LeaveValidationService
         if ($requestType !== 'fullday' && ! $this->leaveDurationCalculator->isWeekday($startDate)) {
             throw ValidationException::withMessages(['request_type' => ['Half-day leave must be on a weekday.']]);
         }
-        $totalDays = $requestType === 'fullday'
-            ? (float) $this->leaveDurationCalculator->countWeekdays($startDate, $endDate)
-            : 0.5;
+        $daysByYear = $this->leaveDurationCalculator->allocateByCalendarYear($startDate, $endDate, $requestType);
+        $totalDays = round(array_sum($daysByYear), 2);
         if ($totalDays < 0.5) {
             throw ValidationException::withMessages(['total_days' => ['Leave duration must be at least 0.5 days.']]);
         }
 
-        return [$startDate, $endDate, $requestType, $totalDays];
+        return [$startDate, $endDate, $requestType, $totalDays, $daysByYear];
     }
 
     private function validateOverlap(Employee $employee, Carbon $startDate, Carbon $endDate, ?int $ignoreLeaveRequestId): void
@@ -366,32 +397,20 @@ class LeaveValidationService
         }
     }
 
-    private function validateBalance(Employee $employee, LeaveType $leaveType, ?LeavePolicy $policy, Carbon $startDate, float $totalDays, ?int $ignoreLeaveRequestId): void
-    {
-        if (! $this->leaveTypeRules->allowsBalance($leaveType, $policy)) {
-            return;
-        }
-        $balance = LeaveBalance::query()
-            ->where('leave_type_id', $leaveType->id)
-            ->where('employee_id', $employee->id)
-            ->where('year', $startDate->year)
-            ->first();
-        $available = $balance ? (float) $balance->balance : 0.0;
-        if ($ignoreLeaveRequestId !== null) {
-            $existing = LeaveRequest::query()
-                ->where('employee_id', $employee->id)
-                ->where('leave_type_id', $leaveType->id)
-                ->whereYear('start_date', $startDate->year)
-                ->where('status', 'approved')
-                ->find($ignoreLeaveRequestId);
-            // An approved edit can reuse the days already deducted for this request.
-            $available += $existing ? (float) $existing->total_days : 0.0;
-        }
-        // if ($available < $totalDays) {
-        //     throw ValidationException::withMessages([
-        //         'total_days' => ["Insufficient leave balance for {$leaveType->leave_name}. Available: {$available} days, requested: {$totalDays} days."],
-        //     ]);
-        // }
+    private function validateBalance(
+        Employee $employee,
+        LeaveType $leaveType,
+        ?LeavePolicy $policy,
+        array $daysByYear,
+        ?int $ignoreLeaveRequestId,
+    ): void {
+        $this->leaveBalanceService->assertAvailable(
+            $employee,
+            $leaveType,
+            $policy,
+            $daysByYear,
+            $ignoreLeaveRequestId,
+        );
     }
 
     /** @param array<string, mixed> $data */

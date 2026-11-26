@@ -48,6 +48,11 @@ class LeaveRequest extends Model
         return $this->hasMany(LeaveHistory::class);
     }
 
+    public function balanceTransactions(): HasMany
+    {
+        return $this->hasMany(LeaveBalanceTransaction::class);
+    }
+
     public function files(): HasMany
     {
         return $this->hasMany(LeaveRequestFile::class);

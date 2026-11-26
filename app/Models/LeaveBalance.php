@@ -4,8 +4,10 @@ namespace App\Models;
 
 use App\Models\SalesCrm\Employee;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
@@ -43,6 +45,26 @@ class LeaveBalance extends Model
         ];
     }
 
+    protected function balance(): Attribute
+    {
+        return Attribute::make(
+            get: fn (mixed $value, array $attributes): float => $this->calculatedBalance(),
+        );
+    }
+
+    public function calculatedBalance(): float
+    {
+        return round(
+            (float) $this->allocated
+                + (float) $this->carried_forward
+                + (float) $this->earned
+                - (float) $this->used
+                - (float) $this->pending
+                - (float) $this->encashed,
+            2,
+        );
+    }
+
     public function leaveType(): BelongsTo
     {
         return $this->belongsTo(LeaveType::class);
@@ -51,5 +73,10 @@ class LeaveBalance extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(LeaveBalanceTransaction::class);
     }
 }

@@ -12,6 +12,7 @@ use App\Models\LeaveRequestFile;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Services\FestivalLeaveService;
+use App\Services\LeaveBalanceService;
 use App\Services\LeavePdfGenerationService;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveTypeRules;
@@ -29,6 +30,7 @@ class LeaveController extends Controller
 {
     public function __construct(
         private readonly FestivalLeaveService $festivalLeaveService,
+        private readonly LeaveBalanceService $leaveBalanceService,
         private readonly LeaveTypeRules $leaveTypeRules,
         private readonly WorkFromHomeService $workFromHomeService,
         private readonly LeavePdfGenerationService $leavePdfGenerationService,
@@ -396,26 +398,72 @@ class LeaveController extends Controller
         $requiresApproval = (bool) $leaveType->requires_approval;
         $initialStatus = $requiresApproval ? 'applied' : 'approved';
 
-        $leaveRequest = LeaveRequest::create([
-            'employee_id' => $employee->id,
-            'leave_type_id' => $leaveType->id,
-            'request_type' => $requestType,
-            'start_date' => $startDate->toDateString(),
-            'end_date' => $endDate->toDateString(),
-            'total_days' => $totalDays,
-            'remarks' => $remarks,
-            'status' => $initialStatus,
-            'created_by' => $user->id,
-        ]);
+        $workFromHomeSchedule = $validation['wfh_schedule'];
 
-        $leaveRequest->histories()->create([
-            'action_type' => $initialStatus,
-            'remarks' => $requiresApproval
-                ? 'Leave application submitted via API.'
-                : 'Automatically approved because this leave type does not require approval.',
-            'done_by' => $user->id,
-            'action_on' => now(),
-        ]);
+        try {
+            $leaveRequest = DB::transaction(function () use (
+                $employee,
+                $leaveType,
+                $requestType,
+                $startDate,
+                $endDate,
+                $totalDays,
+                $remarks,
+                $initialStatus,
+                $user,
+                $requiresApproval,
+                $workFromHomeSchedule,
+                $validation,
+            ): LeaveRequest {
+                $leaveRequest = LeaveRequest::create([
+                    'employee_id' => $employee->id,
+                    'leave_type_id' => $leaveType->id,
+                    'request_type' => $requestType,
+                    'start_date' => $startDate->toDateString(),
+                    'end_date' => $endDate->toDateString(),
+                    'total_days' => $totalDays,
+                    'remarks' => $remarks,
+                    'status' => $initialStatus,
+                    'created_by' => $user->id,
+                ]);
+
+                $historyRemarks = $requiresApproval
+                    ? 'Leave application submitted via API.'
+                    : 'Automatically approved because this leave type does not require approval.';
+
+                $leaveRequest->histories()->create([
+                    'action_type' => $initialStatus,
+                    'remarks' => $historyRemarks,
+                    'done_by' => $user->id,
+                    'action_on' => now(),
+                ]);
+
+                if ($workFromHomeSchedule !== null) {
+                    $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $workFromHomeSchedule);
+                    $this->workFromHomeService->applyRequestBalanceTransition(
+                        $leaveRequest,
+                        '',
+                        0,
+                        null,
+                        $initialStatus,
+                        $totalDays,
+                        (int) $workFromHomeSchedule->id,
+                        (int) $user->id,
+                    );
+                } else {
+                    $this->leaveBalanceService->recordNewRequest(
+                        $leaveRequest,
+                        $validation['days_by_year'],
+                        (int) $user->id,
+                        $historyRemarks,
+                    );
+                }
+
+                return $leaveRequest;
+            });
+        } catch (ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
+        }
 
         if ($request->hasFile('certificate')) {
             $path = $request->file('certificate')->store('leave-certificates', 'public');
@@ -499,38 +547,6 @@ class LeaveController extends Controller
         }
 
         $validationService->syncLeaveTypeDetails($leaveRequest, $leaveType, $validated);
-
-        $workFromHomeSchedule = $validation['wfh_schedule'];
-        if ($workFromHomeSchedule !== null) {
-            $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $workFromHomeSchedule);
-            $this->workFromHomeService->applyRequestBalanceTransition(
-                $leaveRequest,
-                '',
-                0,
-                null,
-                $initialStatus,
-                $totalDays,
-                (int) $workFromHomeSchedule->id,
-            );
-        } elseif ($this->leaveTypeRules->allowsBalance($leaveType, $policy)) {
-            // Update pending balance if balance tracking enabled
-            $currentYear = $startDate->year;
-            $balance = LeaveBalance::where('leave_type_id', $leaveType->id)
-                ->where('employee_id', $employee->id)
-                ->where('year', $currentYear)
-                ->first();
-
-            if ($balance) {
-                if ($initialStatus === 'approved') {
-                    $balance->used = (float) $balance->used + $totalDays;
-                    $balance->balance = max(0.0, (float) $balance->balance - $totalDays);
-                } else {
-                    $balance->pending = (float) $balance->pending + $totalDays;
-                }
-
-                $balance->save();
-            }
-        }
 
         if ($initialStatus === 'approved') {
             $this->leavePdfGenerationService->generateIfAvailable($leaveRequest, (int) $user->id);
@@ -644,142 +660,126 @@ class LeaveController extends Controller
             $validation['remarks'] = $leaveRequest->remarks;
         }
 
-        $oldYear = $leaveRequest->start_date->year;
-        $newYear = $validation['start_date']->year;
-        $oldTotalDays = (float) $leaveRequest->total_days;
-        $balanceTrackingEnabled = $this->leaveTypeRules->allowsBalance($leaveType, $validation['policy']);
         $oldScheduleId = $this->workFromHomeService->isWorkFromHomeType($leaveType)
             ? $this->workFromHomeService->scheduleIdForRequest($leaveRequest)
             : null;
         $workFromHomeSchedule = $validation['wfh_schedule'];
 
-        DB::transaction(function () use (
-            $request,
-            $user,
-            $leaveRequest,
-            $validation,
-            $validationData,
-            $validationService,
-            $leaveType,
-            $balanceTrackingEnabled,
-            $oldYear,
-            $newYear,
-            $oldTotalDays,
-            $oldScheduleId,
-            $workFromHomeSchedule,
-        ): void {
-            $leaveRequest->update([
-                'start_date' => $validation['start_date']->toDateString(),
-                'end_date' => $validation['end_date']->toDateString(),
-                'request_type' => $validation['request_type'],
-                'total_days' => $validation['total_days'],
-                'remarks' => $validation['remarks'],
-            ]);
-
-            if ($workFromHomeSchedule !== null) {
-                $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $workFromHomeSchedule);
-                $this->workFromHomeService->applyRequestBalanceTransition(
-                    $leaveRequest,
-                    'applied',
-                    $oldTotalDays,
-                    $oldScheduleId,
-                    'applied',
-                    (float) $validation['total_days'],
-                    (int) $workFromHomeSchedule->id,
-                );
-            } elseif ($balanceTrackingEnabled) {
-                $pendingChanges = [$oldYear => -$oldTotalDays];
-                $pendingChanges[$newYear] = ($pendingChanges[$newYear] ?? 0.0) + $validation['total_days'];
-
-                foreach ($pendingChanges as $year => $change) {
-                    if ($change === 0.0) {
-                        continue;
-                    }
-
-                    $balance = LeaveBalance::query()
-                        ->where('employee_id', $leaveRequest->employee_id)
-                        ->where('leave_type_id', $leaveRequest->leave_type_id)
-                        ->where('year', $year)
-                        ->lockForUpdate()
-                        ->first();
-
-                    if ($balance) {
-                        $balance->pending = max(0, (float) $balance->pending + $change);
-                        $balance->save();
-                    }
-                }
-            }
-
-            if ($validationService->requiresHandover($leaveType, $validation['policy'], $validation['total_days'])) {
-                $hasEmployeeHandover = ! empty($validationData['handover_person_id']);
-                $handoverFields = [
-                    'handover_person_id' => ['Handover Person ID', $validationData['handover_person_id'] ?? null],
-                    'handover_description' => ['Handover Description', $validationData['handover_description'] ?? null],
-                    'handover_other_name' => ['Other Handover Name', $hasEmployeeHandover ? null : ($validationData['handover_other_name'] ?? null)],
-                    'handover_other_organisation' => ['Other Handover Organisation', $hasEmployeeHandover ? null : ($validationData['handover_other_organisation'] ?? null)],
-                    'handover_other_designation' => ['Other Handover Designation', $hasEmployeeHandover ? null : ($validationData['handover_other_designation'] ?? null)],
-                    'handover_other_contact_number' => ['Other Handover Contact Number', $hasEmployeeHandover ? null : ($validationData['handover_other_contact_number'] ?? null)],
-                ];
-
-                foreach ($handoverFields as $fieldKey => [$fieldName, $value]) {
-                    $this->updateLeaveRequestDetail($leaveRequest, $fieldKey, $fieldName, $value);
-                }
-            }
-
-            $detailUpdates = [
-                'emergency_contact_no' => ['Emergency Contact No', 'emergency_contact_no'],
-                'travel_contact_no' => ['Travel Contact No', 'travel_contact_no'],
-                'destination' => ['Destination', 'destination'],
-                'declaration' => ['Declaration', 'declaration_text'],
-            ];
-
-            foreach ($detailUpdates as $input => [$label, $key]) {
-                if ($request->exists($input)) {
-                    $this->updateLeaveRequestDetail(
+        try {
+            DB::transaction(function () use (
+                $request,
+                $user,
+                $leaveRequest,
+                $validation,
+                $validationData,
+                $validationService,
+                $leaveType,
+                $oldScheduleId,
+                $workFromHomeSchedule,
+            ): void {
+                if ($workFromHomeSchedule !== null) {
+                    $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $workFromHomeSchedule);
+                    $this->workFromHomeService->applyRequestBalanceTransition(
                         $leaveRequest,
-                        $key,
-                        $label,
-                        $request->input($input),
+                        'applied',
+                        (float) $leaveRequest->total_days,
+                        $oldScheduleId,
+                        'applied',
+                        (float) $validation['total_days'],
+                        (int) $workFromHomeSchedule->id,
+                        (int) $user->id,
+                    );
+                } else {
+                    $this->leaveBalanceService->transitionRequest(
+                        $leaveRequest,
+                        'applied',
+                        $validation['days_by_year'],
+                        (int) $user->id,
+                        'Leave request updated via API.',
                     );
                 }
 
-            }
-
-            $validationService->syncLeaveTypeDetails($leaveRequest, $leaveType, $validationData);
-
-            if ($request->exists('traveling_outside_country') && $leaveType->code !== 'ANNUAL') {
-                if ($request->boolean('traveling_outside_country')) {
-                    $this->updateLeaveRequestDetail($leaveRequest, 'traveling_outside_country', 'Traveling Outside Country', 'Yes');
-                } else {
-                    $leaveRequest->details()
-                        ->whereIn('field_key', ['traveling_outside_country', 'destination', 'travel_contact_no'])
-                        ->delete();
-                    $this->updateLeaveRequestDetail($leaveRequest, 'declaration_signed', 'Declaration Signed', 'Yes');
-                }
-            }
-
-            if ($request->hasFile('certificate')) {
-                $path = $request->file('certificate')->store('leave-certificates', 'public');
-                $leaveRequest->files()->create([
-                    'file_path' => $path,
-                    'uploaded_by' => $user->id,
-                    'uploaded_date' => now(),
+                $leaveRequest->update([
+                    'start_date' => $validation['start_date']->toDateString(),
+                    'end_date' => $validation['end_date']->toDateString(),
+                    'request_type' => $validation['request_type'],
+                    'total_days' => $validation['total_days'],
+                    'remarks' => $validation['remarks'],
                 ]);
-            }
 
-            if ($request->hasFile('signature')) {
-                $signaturePath = $request->file('signature')->store('leave-signatures', 'public');
-                $this->updateLeaveRequestDetail($leaveRequest, 'signature_path', 'Signature', $signaturePath);
-            }
-            $this->storeHandoverSignatures($leaveRequest, $request);
+                if ($validationService->requiresHandover($leaveType, $validation['policy'], $validation['total_days'])) {
+                    $hasEmployeeHandover = ! empty($validationData['handover_person_id']);
+                    $handoverFields = [
+                        'handover_person_id' => ['Handover Person ID', $validationData['handover_person_id'] ?? null],
+                        'handover_description' => ['Handover Description', $validationData['handover_description'] ?? null],
+                        'handover_other_name' => ['Other Handover Name', $hasEmployeeHandover ? null : ($validationData['handover_other_name'] ?? null)],
+                        'handover_other_organisation' => ['Other Handover Organisation', $hasEmployeeHandover ? null : ($validationData['handover_other_organisation'] ?? null)],
+                        'handover_other_designation' => ['Other Handover Designation', $hasEmployeeHandover ? null : ($validationData['handover_other_designation'] ?? null)],
+                        'handover_other_contact_number' => ['Other Handover Contact Number', $hasEmployeeHandover ? null : ($validationData['handover_other_contact_number'] ?? null)],
+                    ];
 
-            $leaveRequest->histories()->create([
-                'action_type' => 'applied',
-                'remarks' => 'Leave request updated via API.',
-                'done_by' => $user->id,
-                'action_on' => now(),
-            ]);
-        });
+                    foreach ($handoverFields as $fieldKey => [$fieldName, $value]) {
+                        $this->updateLeaveRequestDetail($leaveRequest, $fieldKey, $fieldName, $value);
+                    }
+                }
+
+                $detailUpdates = [
+                    'emergency_contact_no' => ['Emergency Contact No', 'emergency_contact_no'],
+                    'travel_contact_no' => ['Travel Contact No', 'travel_contact_no'],
+                    'destination' => ['Destination', 'destination'],
+                    'declaration' => ['Declaration', 'declaration_text'],
+                ];
+
+                foreach ($detailUpdates as $input => [$label, $key]) {
+                    if ($request->exists($input)) {
+                        $this->updateLeaveRequestDetail(
+                            $leaveRequest,
+                            $key,
+                            $label,
+                            $request->input($input),
+                        );
+                    }
+
+                }
+
+                $validationService->syncLeaveTypeDetails($leaveRequest, $leaveType, $validationData);
+
+                if ($request->exists('traveling_outside_country') && $leaveType->code !== 'ANNUAL') {
+                    if ($request->boolean('traveling_outside_country')) {
+                        $this->updateLeaveRequestDetail($leaveRequest, 'traveling_outside_country', 'Traveling Outside Country', 'Yes');
+                    } else {
+                        $leaveRequest->details()
+                            ->whereIn('field_key', ['traveling_outside_country', 'destination', 'travel_contact_no'])
+                            ->delete();
+                        $this->updateLeaveRequestDetail($leaveRequest, 'declaration_signed', 'Declaration Signed', 'Yes');
+                    }
+                }
+
+                if ($request->hasFile('certificate')) {
+                    $path = $request->file('certificate')->store('leave-certificates', 'public');
+                    $leaveRequest->files()->create([
+                        'file_path' => $path,
+                        'uploaded_by' => $user->id,
+                        'uploaded_date' => now(),
+                    ]);
+                }
+
+                if ($request->hasFile('signature')) {
+                    $signaturePath = $request->file('signature')->store('leave-signatures', 'public');
+                    $this->updateLeaveRequestDetail($leaveRequest, 'signature_path', 'Signature', $signaturePath);
+                }
+                $this->storeHandoverSignatures($leaveRequest, $request);
+
+                $leaveRequest->histories()->create([
+                    'action_type' => 'applied',
+                    'remarks' => 'Leave request updated via API.',
+                    'done_by' => $user->id,
+                    'action_on' => now(),
+                ]);
+            });
+        } catch (ValidationException $e) {
+            return $this->errorResponse($e->getMessage(), 422, $e->errors());
+        }
 
         return $this->successResponse(
             $leaveRequest->fresh()->load(['files', 'details', 'leaveType']),
