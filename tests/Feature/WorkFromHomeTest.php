@@ -6,6 +6,7 @@ use App\Models\SalesCrm\Employee;
 use App\Models\SalesCrm\User as SalesCrmUser;
 use App\Models\WorkFromHomeSchedule;
 use App\Services\WorkFromHomeService;
+use App\Support\SalesCrmRoles;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Auth;
@@ -430,4 +431,129 @@ test('hr can list, view, approve, and reject WFH requests through the API', func
     $this->withToken($token)
         ->getJson(route('api.v1.hr.wfh.requests.index'))
         ->assertForbidden();
+});
+
+test('HR can apply and apply and approve WFH on behalf of an employee', function () {
+    $hr = createHrmsLoginUser('hr');
+    [$user, $employee] = createWorkFromHomeEmployee(107);
+    createWorkFromHomeLeaveType();
+    $regularType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL',
+        'is_paid' => true,
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    $start = nextWorkFromHomeWeekday(now()->startOfDay()->addDays(4));
+    $next = nextWorkFromHomeWeekday($start->copy()->addDay());
+    $payload = [
+        'employee_id' => $employee->id,
+        'start_date' => $start->toDateString(),
+        'end_date' => $start->toDateString(),
+        'remarks' => 'Working from home',
+    ];
+    $path = route('api.v1.hr.wfh.apply');
+
+    $this->withToken($user->createToken('test')->plainTextToken)
+        ->postJson($path, $payload)->assertForbidden();
+    Auth::forgetGuards();
+    $this->withToken($hr->createToken('test')->plainTextToken);
+    $this->postJson($path, [...$payload, 'leave_type_id' => $regularType->id])
+        ->assertUnprocessable()->assertJsonValidationErrors(['leave_type_id']);
+    $this->postJson($path, $payload)
+        ->assertUnprocessable()->assertJsonValidationErrors(['start_date']);
+
+    $schedule = createWorkFromHomeSchedule($employee, 3, $start, $next, (int) $hr->id);
+    $this->postJson($path, $payload)
+        ->assertCreated()
+        ->assertJsonPath('request.status', 'applied')
+        ->assertJsonPath('request.employee_id', $employee->id)
+        ->assertJsonPath('request.wfh_schedule_id', $schedule->id)
+        ->assertJsonPath('request.total_days', 1);
+    $wfh = app(WorkFromHomeService::class);
+    expect($wfh->balanceForSchedule($schedule)->pending)->toBe(1.0, 'Pending days after submission');
+    $approvedId = $this->postJson($path, [
+        ...$payload,
+        'start_date' => $next->toDateString(),
+        'end_date' => $next->toDateString(),
+        'status' => 'approved',
+    ])->assertCreated()
+        ->assertJsonPath('request.status', 'approved')
+        ->assertJsonPath('request.wfh_schedule_id', $schedule->id)
+        ->assertJsonPath('request.total_days', 1)
+        ->json('request.id');
+
+    $approval = LeaveRequest::query()->findOrFail($approvedId)->approvals()->sole();
+    expect((int) $approval->approver_id)->toBe((int) $hr->id);
+    $balance = $wfh->balanceForSchedule($schedule);
+    expect($balance->pending)->toBe(1.0, 'Pending days after direct approval')
+        ->and($balance->used)->toBe(1.0, 'Used days after direct approval')
+        ->and($balance->balance)->toBe(2.0);
+});
+
+test('HR leave APIs exclude WFH while employee submission and HR WFH decisions still work', function () {
+    [$user, $employee] = createWorkFromHomeEmployee(106);
+    createHrmsLoginUser('hr');
+    SalesCrmRoles::assignRoles($user->id, ['hr']);
+    $type = createWorkFromHomeLeaveType();
+    $regularType = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL',
+        'is_paid' => true,
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    $start = nextWorkFromHomeWeekday(now()->startOfDay()->addDays(4));
+    $schedule = createWorkFromHomeSchedule($employee, 3, $start, $start->copy()->addDays(30), (int) $user->id);
+    $this->withToken($user->createToken('test')->plainTextToken);
+    $next = nextWorkFromHomeWeekday($start->copy()->addDay());
+    $ids = [];
+
+    foreach ([$start, $next] as $day) {
+        $ids[] = $this->postJson(route('api.v1.leaves.store'), [
+            'leave_type_id' => $type->id,
+            'start_date' => $day->toDateString(),
+            'end_date' => $day->toDateString(),
+            'remarks' => 'Working from home',
+        ])->assertCreated()->json('data.id');
+    }
+
+    $regularDate = nextWorkFromHomeWeekday($next->copy()->addDay())->toDateString();
+    $application = ['start_date' => $regularDate, 'end_date' => $regularDate];
+    $regularId = $this->postJson(route('api.v1.hr.leaves.store'), [
+        ...$application,
+        'leave_type_id' => $regularType->id,
+    ])->assertCreated()->json('data.id');
+    $this->getJson(route('api.v1.hr.leaves.index'))->assertOk()
+        ->assertJsonCount(1, 'data.leave_requests')
+        ->assertJsonPath('data.leave_requests.0.id', $regularId);
+    $this->getJson(route('api.v1.hr.leaves.index', ['leave_type_id' => $type->id]))
+        ->assertOk()->assertJsonCount(0, 'data.leave_requests');
+    $this->getJson(route('api.v1.leaves.index'))->assertOk()->assertJsonCount(3, 'data.leave_requests');
+    $this->getJson(route('api.v1.hr.leaves.meta', ['employee_id' => $employee->id]))
+        ->assertOk()->assertJsonMissing(['code' => 'WFH']);
+    $this->getJson(route('api.v1.leaves.show', $ids[0]))->assertOk();
+    $this->getJson(route('api.v1.hr.leaves.show', $ids[0]))->assertNotFound();
+    $this->patchJson(route('api.v1.hr.leaves.update', $ids[0]), ['remarks' => 'Change'])
+        ->assertNotFound();
+    foreach (['apply', 'store', 'validate'] as $action) {
+        $this->postJson(route("api.v1.hr.leaves.{$action}"), [
+            ...$application,
+            'employee_id' => $employee->id,
+            'leave_type_id' => $type->id,
+            'status' => 'approved',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['leave_type_id']);
+    }
+
+    $this->postJson(route('api.v1.hr.leaves.approve', $ids[0]))
+        ->assertNotFound();
+    $this->postJson(route('api.v1.hr.leaves.reject', $ids[1]), ['remarks' => 'No coverage'])
+        ->assertNotFound();
+    $this->postJson(route('api.v1.hr.wfh.requests.approve', $ids[0]))
+        ->assertOk()->assertJsonPath('request.status', 'approved');
+    $this->postJson(route('api.v1.hr.wfh.requests.reject', $ids[1]), ['remarks' => 'No coverage'])
+        ->assertOk()->assertJsonPath('request.status', 'rejected');
+
+    $balance = app(WorkFromHomeService::class)->balanceForSchedule($schedule);
+    expect($balance->pending)->toBe(0.0)->and($balance->used)->toBe(1.0)->and($balance->balance)->toBe(2.0);
 });

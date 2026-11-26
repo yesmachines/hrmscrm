@@ -4,8 +4,11 @@ namespace App\Models;
 
 use App\Models\SalesCrm\Employee;
 use App\Observers\LeaveRequestObserver;
+use App\Services\WorkFromHomeService;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -24,13 +27,23 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class LeaveRequest extends Model
 {
+    protected $hidden = ['pending_reserved_days'];
+
     protected function casts(): array
     {
         return [
             'start_date' => 'date',
             'end_date' => 'date',
             'total_days' => 'float',
+            'pending_reserved_days' => 'float',
         ];
+    }
+
+    /** @param Builder<self> $query */
+    #[Scope]
+    protected function withoutWorkFromHome(Builder $query): void
+    {
+        $query->whereHas('leaveType', fn (Builder $type) => $type->where('code', '!=', WorkFromHomeService::LEAVE_TYPE_CODE));
     }
 
     public function employee(): BelongsTo

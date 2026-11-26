@@ -1192,6 +1192,195 @@
                 ]
             }
         },
+        "/api/v1/hr/leaves/apply": {
+            "post": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Apply or apply and approve leave on behalf of an employee (HR only)",
+                "description": "Use the employee_id from HR leave metadata and the same application fields as the employee API. Send status=applied to submit or status=approved to apply and approve. WFH is not accepted.",
+                "operationId": "e411208e54d05a129ecda18e1fceee21",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "employee_id",
+                                    "leave_type_id",
+                                    "start_date",
+                                    "end_date",
+                                    "status"
+                                ],
+                                "properties": {
+                                    "employee_id": {
+                                        "type": "integer"
+                                    },
+                                    "leave_type_id": {
+                                        "type": "integer"
+                                    },
+                                    "start_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "end_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "applied",
+                                            "approved"
+                                        ]
+                                    },
+                                    "request_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fullday",
+                                            "firsthalf",
+                                            "secondhalf"
+                                        ]
+                                    },
+                                    "remarks": {
+                                        "type": "string"
+                                    },
+                                    "certificate": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Leave submitted on behalf of the employee"
+                    },
+                    "403": {
+                        "description": "HR role required"
+                    },
+                    "422": {
+                        "description": "Invalid application"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/leaves/{id}/approve": {
+            "post": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Approve an applied non-WFH leave request (HR only)",
+                "operationId": "cfdd3cb7a23ef28ac44fee195c350dde",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "remarks": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Leave approved"
+                    },
+                    "403": {
+                        "description": "HR role required"
+                    },
+                    "404": {
+                        "description": "Leave request not found"
+                    },
+                    "422": {
+                        "description": "Leave request cannot be approved"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/leaves/{id}/reject": {
+            "post": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Reject an applied non-WFH leave request (HR only)",
+                "operationId": "e4068f884cd1d1f57576beef88254d2c",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "remarks"
+                                ],
+                                "properties": {
+                                    "remarks": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Leave rejected"
+                    },
+                    "403": {
+                        "description": "HR role required"
+                    },
+                    "404": {
+                        "description": "Leave request not found"
+                    },
+                    "422": {
+                        "description": "Remarks required or leave request cannot be rejected"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/v1/hr/documents/letters": {
             "get": {
                 "tags": [
@@ -1460,6 +1649,42 @@
                 ]
             }
         },
+        "/api/v1/hr/leaves/meta": {
+            "get": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Get leave application metadata for the selected employee (HR only)",
+                "description": "Same response as employee leave metadata, excluding WFH. Eligibility, balances, policies and field definitions are for the selected employee.",
+                "operationId": "adb56f6e3b14b1810a70794ad61c12b3",
+                "parameters": [
+                    {
+                        "name": "employee_id",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Leave metadata retrieved successfully"
+                    },
+                    "403": {
+                        "description": "HR role required"
+                    },
+                    "422": {
+                        "description": "Employee ID is missing or invalid"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
         "/api/v1/leaves/validate": {
             "post": {
                 "tags": [
@@ -1477,6 +1702,79 @@
                     },
                     "404": {
                         "description": "Employee record not found"
+                    },
+                    "422": {
+                        "description": "Validation errors"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/leaves/validate": {
+            "post": {
+                "tags": [
+                    "Leave Management"
+                ],
+                "summary": "Validate leave for the selected employee (HR only)",
+                "description": "Uses the same leave fields and response as employee validation, with employee_id required. No leave is created.",
+                "operationId": "e69c7e1b5fa64df99e4dfe5ea501026f",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "employee_id",
+                                    "leave_type_id",
+                                    "start_date",
+                                    "end_date"
+                                ],
+                                "properties": {
+                                    "employee_id": {
+                                        "type": "integer"
+                                    },
+                                    "leave_type_id": {
+                                        "type": "integer"
+                                    },
+                                    "start_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "end_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "request_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fullday",
+                                            "firsthalf",
+                                            "secondhalf"
+                                        ]
+                                    },
+                                    "remarks": {
+                                        "type": "string"
+                                    },
+                                    "certificate": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Leave request is valid"
+                    },
+                    "403": {
+                        "description": "HR role required"
                     },
                     "422": {
                         "description": "Validation errors"
@@ -2867,7 +3165,7 @@
                     "Work From Home"
                 ],
                 "summary": "List all employee WFH requests (HR/Admin)",
-                "description": "NOT YET IMPLEMENTED - planned contract. Lists WFH requests (Work From Home leave type) of all employees. Today HR manages these requests in the CRM Leave module.",
+                "description": "Lists WFH requests (Work From Home leave type) of all employees. Today HR manages these requests in the CRM Leave module.",
                 "operationId": "09c45ad4a1bc19d85fd80ad2eadc427a",
                 "parameters": [
                     {
@@ -2984,7 +3282,7 @@
                     "Work From Home"
                 ],
                 "summary": "Get a WFH request with its history (HR/Admin)",
-                "description": "NOT YET IMPLEMENTED - planned contract. Returns the request with its approval and history entries from the Leave module history tables.",
+                "description": "Returns the request with its approval and history entries from the Leave module history tables.",
                 "operationId": "41b86ff9409e7130434c140b45ee14cb",
                 "parameters": [
                     {
@@ -3058,7 +3356,7 @@
                     "Work From Home"
                 ],
                 "summary": "Approve a WFH request (HR/Admin)",
-                "description": "NOT YET IMPLEMENTED - planned contract. Approves an applied request. Pending days move to used days against the schedule allowance. Fails if the schedule is inactive.",
+                "description": "Approves an applied request. Pending days move to used days against the schedule allowance. Fails if the schedule is inactive.",
                 "operationId": "82be7d0bdbe8bd5024c97df5ca08fb83",
                 "parameters": [
                     {
@@ -3136,7 +3434,7 @@
                     "Work From Home"
                 ],
                 "summary": "Reject a WFH request (HR/Admin)",
-                "description": "NOT YET IMPLEMENTED - planned contract. Rejects an applied request. Its pending days are released back to the schedule.",
+                "description": "Rejects an applied request. Its pending days are released back to the schedule.",
                 "operationId": "972573ef940ebec82a012ccad975224c",
                 "parameters": [
                     {
@@ -3202,6 +3500,103 @@
                     },
                     "422": {
                         "description": "Remarks are required, or the request is not in applied status"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/wfh/apply": {
+            "post": {
+                "tags": [
+                    "Work From Home"
+                ],
+                "summary": "Apply for WFH on behalf of an employee (HR/Admin)",
+                "description": "Uses the existing WFH schedule, notice, overlap and balance rules. The WFH leave type is selected automatically. Omit status to submit for review, or send approved to apply and approve.",
+                "operationId": "2377458380bf399fa7ef14c770336743",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "employee_id",
+                                    "start_date",
+                                    "end_date",
+                                    "remarks"
+                                ],
+                                "properties": {
+                                    "employee_id": {
+                                        "type": "integer"
+                                    },
+                                    "start_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "end_date": {
+                                        "type": "string",
+                                        "format": "date"
+                                    },
+                                    "request_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "fullday",
+                                            "firsthalf",
+                                            "secondhalf"
+                                        ]
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "default": "applied",
+                                        "enum": [
+                                            "applied",
+                                            "approved"
+                                        ]
+                                    },
+                                    "remarks": {
+                                        "description": "Reason for the WFH request",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "WFH request created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "success": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "request": {
+                                            "$ref": "#/components/schemas/WfhRequest"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
+                    "403": {
+                        "description": "HR or Admin role required"
+                    },
+                    "422": {
+                        "description": "Invalid application or WFH is unavailable"
                     }
                 },
                 "security": [

@@ -293,7 +293,7 @@ class SystemEventSyncService
 
         $eventType = $this->getOrCreateEventType('EMPLOYEE_ON_LEAVE', 'Employees on Leave', 40);
 
-        $leave->loadMissing(['employee.user:id,name', 'leaveType:id,leave_name']);
+        $leave->loadMissing(['employee.user:id,name', 'leaveType:id,leave_name,code']);
         $employee = $leave->employee;
         if (! $employee) {
             return null;

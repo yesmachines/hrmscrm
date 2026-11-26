@@ -13,11 +13,13 @@ use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Services\FestivalLeaveService;
 use App\Services\LeavePdfGenerationService;
+use App\Services\LeaveRequestBalanceService;
 use App\Services\LeaveTypeEligibilityService;
 use App\Services\LeaveTypeRules;
 use App\Services\LeaveValidationService;
 use App\Services\WorkFromHomeService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -32,6 +34,7 @@ class LeaveController extends Controller
         private readonly LeaveTypeRules $leaveTypeRules,
         private readonly WorkFromHomeService $workFromHomeService,
         private readonly LeavePdfGenerationService $leavePdfGenerationService,
+        private readonly LeaveRequestBalanceService $requestBalances,
     ) {}
 
     /**
@@ -49,6 +52,19 @@ class LeaveController extends Controller
             new OA\Response(response: 404, description: 'Employee not found'),
         ]
     )]
+    #[OA\Get(
+        path: '/api/v1/hr/leaves/meta',
+        summary: 'Get leave application metadata for the selected employee (HR only)',
+        description: 'Same response as employee leave metadata, excluding WFH. Eligibility, balances, policies and field definitions are for the selected employee.',
+        security: [['sanctum' => []]],
+        tags: ['Leave Management'],
+        parameters: [new OA\Parameter(name: 'employee_id', in: 'query', required: true, schema: new OA\Schema(type: 'integer'))],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave metadata retrieved successfully'),
+            new OA\Response(response: 403, description: 'HR role required'),
+            new OA\Response(response: 422, description: 'Employee ID is missing or invalid'),
+        ]
+    )]
     public function meta(Request $request, LeaveTypeEligibilityService $eligibilityService): JsonResponse
     {
         $user = $request->user();
@@ -56,8 +72,7 @@ class LeaveController extends Controller
             return $this->errorResponse('Unauthenticated.', 401);
         }
 
-        // The user ID maps to an Employee in the salescrm DB
-        $employee = Employee::where('user_id', $user->id)->first();
+        $employee = $this->applicationEmployee($request);
 
         if (! $employee) {
             return $this->errorResponse('Employee record not found.', 404);
@@ -73,6 +88,7 @@ class LeaveController extends Controller
                         ->where('organisation_id', $employee->organisation_id),
                 ])
                 ->where('status', 1)
+                ->when($request->routeIs('api.v1.hr.leaves.*'), fn (Builder $query) => $query->where('code', '!=', WorkFromHomeService::LEAVE_TYPE_CODE))
                 ->get(),
             $rawEmployeeGender,
             $rawEmployeeReligion,
@@ -114,7 +130,7 @@ class LeaveController extends Controller
         return $this->successResponse([
             'employee' => [
                 'id' => $employee->id,
-                'name' => $user->name,
+                'name' => $employee->user?->name,
                 'image_url' => $employee->image_url,
             ],
             'leave_types' => $typesData,
@@ -137,6 +153,33 @@ class LeaveController extends Controller
             new OA\Response(response: 422, description: 'Validation errors'),
         ]
     )]
+    #[OA\Post(
+        path: '/api/v1/hr/leaves/validate',
+        summary: 'Validate leave for the selected employee (HR only)',
+        description: 'Uses the same leave fields and response as employee validation, with employee_id required. No leave is created.',
+        security: [['sanctum' => []]],
+        requestBody: new OA\RequestBody(required: true, content: new OA\MediaType(
+            mediaType: 'multipart/form-data',
+            schema: new OA\Schema(
+                required: ['employee_id', 'leave_type_id', 'start_date', 'end_date'],
+                properties: [
+                    new OA\Property(property: 'employee_id', type: 'integer'),
+                    new OA\Property(property: 'leave_type_id', type: 'integer'),
+                    new OA\Property(property: 'start_date', type: 'string', format: 'date'),
+                    new OA\Property(property: 'end_date', type: 'string', format: 'date'),
+                    new OA\Property(property: 'request_type', type: 'string', enum: ['fullday', 'firsthalf', 'secondhalf']),
+                    new OA\Property(property: 'remarks', type: 'string'),
+                    new OA\Property(property: 'certificate', type: 'string', format: 'binary'),
+                ],
+            ),
+        )),
+        tags: ['Leave Management'],
+        responses: [
+            new OA\Response(response: 200, description: 'Leave request is valid'),
+            new OA\Response(response: 403, description: 'HR role required'),
+            new OA\Response(response: 422, description: 'Validation errors'),
+        ]
+    )]
     public function validateForm(LeaveApplicationRequest $request, LeaveValidationService $validationService): JsonResponse
     {
         $user = $request->user();
@@ -144,14 +187,18 @@ class LeaveController extends Controller
             return $this->errorResponse('Unauthenticated.', 401);
         }
 
-        $employee = Employee::query()->where('user_id', $user->id)->first();
+        $validated = $request->validated();
+        $employee = isset($validated['employee_id'])
+            ? Employee::query()->find($validated['employee_id'])
+            : Employee::query()->where('user_id', $user->id)->first();
         if (! $employee) {
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $validated = $request->validated();
         $ignoreLeaveRequestId = $validated['ignore_leave_request_id'] ?? null;
-        $existing = $ignoreLeaveRequestId === null ? null : LeaveRequest::query()->with('details')->whereKey($ignoreLeaveRequestId)->firstOrFail();
+        $existing = $ignoreLeaveRequestId === null
+            ? null
+            : $this->leaveRequests($request)->where('employee_id', $employee->id)->with('details')->findOrFail($ignoreLeaveRequestId);
         if ($existing !== null) {
             $validated = $validationService->dataForUpdate($existing, $validated);
         }
@@ -239,7 +286,7 @@ class LeaveController extends Controller
             return $this->errorResponse('Unauthenticated.', 401);
         }
 
-        $employee = Employee::where('user_id', $user->id)->first();
+        $employee = $this->applicationEmployee($request);
         if (! $employee) {
             return $this->errorResponse('Employee record not found.', 404);
         }
@@ -252,7 +299,7 @@ class LeaveController extends Controller
         $data = $this->getFestivalsAndHolidaysForEmployee($employee, $month, $year);
 
         // Fetch leaves applied by this employee for this month/year (excluding rejected leaves)
-        $leavesQuery = LeaveRequest::with('leaveType:id,leave_name,code,is_paid')
+        $leavesQuery = $this->leaveRequests($request)->with('leaveType:id,leave_name,code,is_paid')
             ->where('employee_id', $employee->id)
             ->where('status', '!=', 'rejected');
 
@@ -366,6 +413,11 @@ class LeaveController extends Controller
     )]
     public function store(LeaveApplicationRequest $request, LeaveValidationService $validationService): JsonResponse
     {
+        return DB::transaction(fn (): JsonResponse => $this->storeApplication($request, $validationService));
+    }
+
+    private function storeApplication(LeaveApplicationRequest $request, LeaveValidationService $validationService): JsonResponse
+    {
         $user = $request->user();
         if (! $user) {
             return $this->errorResponse('Unauthenticated.', 401);
@@ -411,7 +463,7 @@ class LeaveController extends Controller
         $leaveRequest->histories()->create([
             'action_type' => $initialStatus,
             'remarks' => $requiresApproval
-                ? 'Leave application submitted via API.'
+                ? LeaveRequestBalanceService::API_SUBMITTED
                 : 'Automatically approved because this leave type does not require approval.',
             'done_by' => $user->id,
             'action_on' => now(),
@@ -512,24 +564,11 @@ class LeaveController extends Controller
                 $totalDays,
                 (int) $workFromHomeSchedule->id,
             );
-        } elseif ($this->leaveTypeRules->allowsBalance($leaveType, $policy)) {
-            // Update pending balance if balance tracking enabled
-            $currentYear = $startDate->year;
-            $balance = LeaveBalance::where('leave_type_id', $leaveType->id)
-                ->where('employee_id', $employee->id)
-                ->where('year', $currentYear)
-                ->first();
-
-            if ($balance) {
-                if ($initialStatus === 'approved') {
-                    $balance->used = (float) $balance->used + $totalDays;
-                    $balance->balance = max(0.0, (float) $balance->balance - $totalDays);
-                } else {
-                    $balance->pending = (float) $balance->pending + $totalDays;
-                }
-
-                $balance->save();
-            }
+        } elseif ($initialStatus === 'applied') {
+            $this->requestBalances->reservePending($leaveRequest, $leaveType, $policy);
+            $leaveRequest->saveQuietly();
+        } else {
+            $this->requestBalances->deductApproved($leaveRequest, $leaveType, $policy);
         }
 
         if ($initialStatus === 'approved') {
@@ -584,6 +623,11 @@ class LeaveController extends Controller
     )]
     public function update(LeaveApplicationRequest $request, int|string $id, LeaveValidationService $validationService): JsonResponse
     {
+        return DB::transaction(fn (): JsonResponse => $this->updateApplication($request, $id, $validationService));
+    }
+
+    private function updateApplication(LeaveApplicationRequest $request, int|string $id, LeaveValidationService $validationService): JsonResponse
+    {
         $user = $request->user();
         if (! $user) {
             return $this->errorResponse('Unauthenticated.', 401);
@@ -594,8 +638,9 @@ class LeaveController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $leaveRequest = LeaveRequest::with('details')
+        $leaveRequest = $this->leaveRequests($request)->with('details')
             ->where('employee_id', $employee->id)
+            ->lockForUpdate()
             ->find($id);
 
         if (! $leaveRequest) {
@@ -644,10 +689,7 @@ class LeaveController extends Controller
             $validation['remarks'] = $leaveRequest->remarks;
         }
 
-        $oldYear = $leaveRequest->start_date->year;
-        $newYear = $validation['start_date']->year;
         $oldTotalDays = (float) $leaveRequest->total_days;
-        $balanceTrackingEnabled = $this->leaveTypeRules->allowsBalance($leaveType, $validation['policy']);
         $oldScheduleId = $this->workFromHomeService->isWorkFromHomeType($leaveType)
             ? $this->workFromHomeService->scheduleIdForRequest($leaveRequest)
             : null;
@@ -661,13 +703,14 @@ class LeaveController extends Controller
             $validationData,
             $validationService,
             $leaveType,
-            $balanceTrackingEnabled,
-            $oldYear,
-            $newYear,
             $oldTotalDays,
             $oldScheduleId,
             $workFromHomeSchedule,
         ): void {
+            if ($workFromHomeSchedule === null) {
+                $this->requestBalances->releasePending($leaveRequest);
+            }
+
             $leaveRequest->update([
                 'start_date' => $validation['start_date']->toDateString(),
                 'end_date' => $validation['end_date']->toDateString(),
@@ -687,27 +730,9 @@ class LeaveController extends Controller
                     (float) $validation['total_days'],
                     (int) $workFromHomeSchedule->id,
                 );
-            } elseif ($balanceTrackingEnabled) {
-                $pendingChanges = [$oldYear => -$oldTotalDays];
-                $pendingChanges[$newYear] = ($pendingChanges[$newYear] ?? 0.0) + $validation['total_days'];
-
-                foreach ($pendingChanges as $year => $change) {
-                    if ($change === 0.0) {
-                        continue;
-                    }
-
-                    $balance = LeaveBalance::query()
-                        ->where('employee_id', $leaveRequest->employee_id)
-                        ->where('leave_type_id', $leaveRequest->leave_type_id)
-                        ->where('year', $year)
-                        ->lockForUpdate()
-                        ->first();
-
-                    if ($balance) {
-                        $balance->pending = max(0, (float) $balance->pending + $change);
-                        $balance->save();
-                    }
-                }
+            } else {
+                $this->requestBalances->reservePending($leaveRequest, $leaveType, $validation['policy']);
+                $leaveRequest->saveQuietly();
             }
 
             if ($validationService->requiresHandover($leaveType, $validation['policy'], $validation['total_days'])) {
@@ -775,7 +800,7 @@ class LeaveController extends Controller
 
             $leaveRequest->histories()->create([
                 'action_type' => 'applied',
-                'remarks' => 'Leave request updated via API.',
+                'remarks' => LeaveRequestBalanceService::API_UPDATED,
                 'done_by' => $user->id,
                 'action_on' => now(),
             ]);
@@ -834,7 +859,7 @@ class LeaveController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $query = LeaveRequest::with('leaveType:id,leave_name')
+        $query = $this->leaveRequests($request)->with('leaveType:id,leave_name')
             ->where('employee_id', $employee->id)
             ->orderBy('created_at', 'desc');
 
@@ -901,7 +926,7 @@ class LeaveController extends Controller
             return $this->errorResponse('Employee record not found.', 404);
         }
 
-        $leaveRequest = LeaveRequest::with([
+        $leaveRequest = $this->leaveRequests($request)->with([
             'leaveType:id,leave_name,code,is_paid,requires_approval',
             'files',
             'details',
@@ -1001,6 +1026,30 @@ class LeaveController extends Controller
             'histories' => $histories,
             'approvals' => $approvals,
         ], 'Leave request details retrieved successfully.');
+    }
+
+    /** @return Builder<LeaveRequest> */
+    private function leaveRequests(Request $request): Builder
+    {
+        $query = LeaveRequest::query();
+        if ($request->routeIs('api.v1.hr.leaves.*')) {
+            $query->withoutWorkFromHome();
+        }
+
+        return $query;
+    }
+
+    private function applicationEmployee(Request $request): ?Employee
+    {
+        if ($request->routeIs('api.v1.hr.leaves.*')) {
+            $data = $request->validate([
+                'employee_id' => ['required', 'integer', 'exists:salescrm.employees,id'],
+            ]);
+
+            return Employee::query()->find($data['employee_id']);
+        }
+
+        return Employee::query()->where('user_id', $request->user()->id)->first();
     }
 
     /**

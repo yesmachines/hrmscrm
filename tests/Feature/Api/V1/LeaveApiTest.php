@@ -39,6 +39,117 @@ beforeEach(function () {
     ]);
 });
 
+test('only HR can use the general leave decision and on-behalf routes', function () {
+    $paths = [
+        route('api.v1.hr.leaves.apply'),
+        route('api.v1.hr.leaves.approve', 1),
+        route('api.v1.hr.leaves.reject', 1),
+    ];
+
+    foreach ($paths as $path) {
+        $this->postJson($path)->assertUnauthorized();
+    }
+    $this->getJson(route('api.v1.hr.leaves.meta'))->assertUnauthorized();
+    $this->postJson(route('api.v1.hr.leaves.validate'))->assertUnauthorized();
+
+    foreach (['admin', 'finance', 'employee'] as $role) {
+        $user = $role === 'employee' ? SalesCrmUser::factory()->create() : createHrmsLoginUser($role);
+        $this->withToken($user->createToken('test')->plainTextToken);
+        foreach ($paths as $path) {
+            Auth::forgetGuards();
+            $this->postJson($path)->assertForbidden();
+        }
+        $this->getJson(route('api.v1.hr.leaves.meta'))->assertForbidden();
+        $this->postJson(route('api.v1.hr.leaves.validate'))->assertForbidden();
+    }
+});
+
+test('HR can apply on behalf and decide regular leave without consuming another request reservation', function () {
+    $hr = createHrmsLoginUser('hr');
+    $user = SalesCrmUser::factory()->create();
+    $employee = Employee::query()->create([
+        'user_id' => $user->id,
+        'emp_num' => 'EMP-HR-DECISION',
+        'organisation_id' => 1,
+        'designation' => 'Engineer',
+        'division' => 'Technology',
+        'status' => 1,
+        'has_report' => false,
+    ]);
+    $type = LeaveType::query()->create([
+        'leave_name' => 'Personal Leave',
+        'code' => 'PERSONAL',
+        'is_paid' => true,
+        'requires_approval' => true,
+        'status' => 1,
+    ]);
+    $date = now()->startOfYear()->next('Monday');
+    $balance = LeaveBalance::query()->create([
+        'employee_id' => $employee->id,
+        'leave_type_id' => $type->id,
+        'year' => $date->year,
+        'allocated' => 10,
+        'used' => 0,
+        'balance' => 10,
+    ]);
+    $payload = fn ($day): array => [
+        'leave_type_id' => $type->id,
+        'start_date' => $day->toDateString(),
+        'end_date' => $day->toDateString(),
+        'request_type' => 'fullday',
+    ];
+
+    $this->withToken($user->createToken('test')->plainTextToken);
+    $employeeValidation = $this->postJson(route('api.v1.leaves.validate'), $payload($date->copy()->addDay()))
+        ->assertOk()->json();
+    $selfId = $this->postJson(route('api.v1.leaves.store'), $payload($date))->assertCreated()->json('data.id');
+    $employeeMeta = $this->getJson(route('api.v1.leaves.meta'))->assertOk()->json();
+    expect($balance->refresh()->pending)->toBe(1.0);
+
+    Auth::forgetGuards();
+    $this->withToken($hr->createToken('test')->plainTextToken);
+    $this->getJson(route('api.v1.hr.leaves.meta'))
+        ->assertUnprocessable()->assertJsonValidationErrors(['employee_id']);
+    $this->getJson(route('api.v1.hr.leaves.meta', ['employee_id' => $employee->id]))
+        ->assertOk()->assertExactJson($employeeMeta)
+        ->assertJsonPath('data.employee.id', $employee->id)
+        ->assertJsonPath('data.leave_types.0.balance.total', 10);
+    $this->postJson(route('api.v1.hr.leaves.validate'), $payload($date->copy()->addDay()))
+        ->assertUnprocessable()->assertJsonValidationErrors(['employee_id']);
+    $this->postJson(route('api.v1.hr.leaves.validate'), [
+        ...$payload($date->copy()->addDay()),
+        'employee_id' => $employee->id,
+    ])->assertOk()->assertExactJson($employeeValidation);
+    $onBehalfId = $this->postJson(route('api.v1.hr.leaves.apply'), [
+        ...$payload($date->copy()->addDay()),
+        'employee_id' => $employee->id,
+        'status' => 'applied',
+    ])->assertCreated()->assertJsonPath('data.status', 'applied')->json('data.id');
+    $this->postJson(route('api.v1.hr.leaves.reject', $onBehalfId))
+        ->assertUnprocessable()->assertJsonValidationErrors(['remarks']);
+    $this->postJson(route('api.v1.hr.leaves.reject', $onBehalfId), ['remarks' => 'Coverage needed'])
+        ->assertOk()->assertJsonPath('data.status', 'rejected')
+        ->assertJsonPath('data.approvals.0.remarks', 'Coverage needed');
+    expect($balance->refresh()->pending)->toBe(1.0);
+
+    $this->postJson(route('api.v1.hr.leaves.approve', $selfId))
+        ->assertOk()->assertJsonPath('data.status', 'approved')
+        ->assertJsonPath('data.approvals.0.approver_id', $hr->id);
+    $this->postJson(route('api.v1.hr.leaves.approve', $selfId))
+        ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+    expect($balance->refresh()->pending)->toBe(0.0)->and($balance->used)->toBe(1.0);
+
+    $this->postJson(route('api.v1.hr.leaves.apply'), [
+        ...$payload($date->copy()->addDays(2)),
+        'employee_id' => $employee->id,
+        'status' => 'approved',
+    ])->assertCreated()
+        ->assertJsonPath('data.status', 'approved')
+        ->assertJsonPath('data.employee_id', $employee->id)
+        ->assertJsonPath('data.approvals.0.approval_level', 'HR Direct Approval');
+    expect($balance->refresh()->used)->toBe(2.0)->and($balance->balance)->toBe(8.0);
+});
+
 test('leave submission validates emergency and travel contact numbers', function () {
     $user = SalesCrmUser::query()->create([
         'name' => 'Leave User',

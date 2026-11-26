@@ -3,18 +3,19 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Leave\LeaveApplicationRequest;
 use App\Http\Requests\Leave\StoreWorkFromHomeScheduleRequest;
 use App\Models\LeaveHistory;
 use App\Models\LeaveRequest;
+use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
 use App\Models\WorkFromHomeSchedule;
-use App\Services\LeavePdfGenerationService;
-use App\Services\LeaveValidationService;
+use App\Services\LeaveDecisionService;
+use App\Services\LeaveSubmissionService;
 use App\Services\WorkFromHomeService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
@@ -259,6 +260,61 @@ class WorkFromHomeController extends Controller
         ]);
     }
 
+    #[OA\Post(
+        path: '/api/v1/hr/wfh/apply',
+        summary: 'Apply for WFH on behalf of an employee (HR/Admin)',
+        description: 'Uses the existing WFH schedule, notice, overlap and balance rules. The WFH leave type is selected automatically. Omit status to submit for review, or send approved to apply and approve.',
+        security: [['sanctum' => []]],
+        requestBody: new OA\RequestBody(required: true, content: new OA\JsonContent(
+            required: ['employee_id', 'start_date', 'end_date', 'remarks'],
+            properties: [
+                new OA\Property(property: 'employee_id', type: 'integer'),
+                new OA\Property(property: 'start_date', type: 'string', format: 'date'),
+                new OA\Property(property: 'end_date', type: 'string', format: 'date'),
+                new OA\Property(property: 'request_type', type: 'string', enum: ['fullday', 'firsthalf', 'secondhalf']),
+                new OA\Property(property: 'status', type: 'string', default: 'applied', enum: ['applied', 'approved']),
+                new OA\Property(property: 'remarks', description: 'Reason for the WFH request', type: 'string'),
+            ],
+        )),
+        tags: ['Work From Home'],
+        responses: [
+            new OA\Response(response: 201, description: 'WFH request created', content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: 'success', type: 'boolean', example: true),
+                    new OA\Property(property: 'message', type: 'string'),
+                    new OA\Property(property: 'request', ref: '#/components/schemas/WfhRequest'),
+                ],
+            )),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'HR or Admin role required'),
+            new OA\Response(response: 422, description: 'Invalid application or WFH is unavailable'),
+        ],
+    )]
+    public function apply(LeaveApplicationRequest $request, LeaveSubmissionService $submissions): JsonResponse
+    {
+        $data = $request->validated();
+        $data['leave_type_id'] ??= LeaveType::query()
+            ->where('code', WorkFromHomeService::LEAVE_TYPE_CODE)
+            ->value('id');
+        if ($data['leave_type_id'] === null) {
+            throw ValidationException::withMessages(['leave_type_id' => ['The WFH leave type is not configured.']]);
+        }
+        $data['status'] ??= 'applied';
+        $actor = $request->user();
+        $leave = $submissions->submitOnBehalf(
+            Employee::query()->findOrFail($data['employee_id']),
+            $data,
+            (int) $actor->id,
+            $actor->name,
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'WFH request submitted successfully on behalf of employee.',
+            'request' => $this->requestData($leave->load(['employee.user:id,name', 'details'])),
+        ], 201);
+    }
+
     public function requestsIndex(Request $request): JsonResponse
     {
         $filters = $request->validate([
@@ -306,90 +362,32 @@ class WorkFromHomeController extends Controller
         ]);
     }
 
-    public function approveRequest(Request $request, int $id, LeaveValidationService $leaveValidationService): JsonResponse
+    public function approveRequest(Request $request, int $id, LeaveDecisionService $decisions): JsonResponse
     {
         $validated = $request->validate(['remarks' => ['nullable', 'string']]);
 
-        return $this->decideRequest($request, $id, 'approved', $validated['remarks'] ?? null, $leaveValidationService);
+        return $this->decideRequest($request, $id, 'approved', $validated['remarks'] ?? null, $decisions);
     }
 
-    public function rejectRequest(Request $request, int $id, LeaveValidationService $leaveValidationService): JsonResponse
+    public function rejectRequest(Request $request, int $id, LeaveDecisionService $decisions): JsonResponse
     {
         $validated = $request->validate(['remarks' => ['required', 'string']]);
 
-        return $this->decideRequest($request, $id, 'rejected', $validated['remarks'], $leaveValidationService);
+        return $this->decideRequest($request, $id, 'rejected', $validated['remarks'], $decisions);
     }
 
+    /** @param 'approved'|'rejected' $status */
     private function decideRequest(
         Request $request,
         int $id,
         string $status,
         ?string $remarks,
-        LeaveValidationService $leaveValidationService,
+        LeaveDecisionService $decisions,
     ): JsonResponse {
-        $leaveRequest = DB::transaction(function () use ($request, $id, $status, $remarks, $leaveValidationService): ?LeaveRequest {
-            $leaveRequest = $this->workFromHomeRequests()->whereKey($id)->lockForUpdate()->first();
-
-            if ($leaveRequest === null) {
-                return null;
-            }
-
-            if ($leaveRequest->status !== 'applied') {
-                throw ValidationException::withMessages([
-                    'status' => ['Only applied WFH requests can be '.$status.'.'],
-                ]);
-            }
-
-            $scheduleId = $this->workFromHomeService->scheduleIdForRequest($leaveRequest);
-            if ($status === 'approved') {
-                $validation = $leaveValidationService->validateApplication(
-                    Employee::query()->findOrFail($leaveRequest->employee_id),
-                    $leaveValidationService->dataForUpdate($leaveRequest, []),
-                    $leaveRequest->files()->exists(),
-                    (int) $leaveRequest->id,
-                    true,
-                    false,
-                );
-                $schedule = $validation['wfh_schedule'] ?? null;
-                if ($schedule !== null) {
-                    $this->workFromHomeService->linkRequestToSchedule($leaveRequest, $schedule);
-                    $scheduleId = (int) $schedule->id;
-                }
-            }
-
-            $this->workFromHomeService->applyRequestBalanceTransition(
-                $leaveRequest,
-                $leaveRequest->status,
-                (float) $leaveRequest->total_days,
-                $this->workFromHomeService->scheduleIdForRequest($leaveRequest),
-                $status,
-                (float) $leaveRequest->total_days,
-                $scheduleId,
-            );
-
-            $leaveRequest->update(['status' => $status]);
-            $leaveRequest->histories()->create([
-                'action_type' => $status,
-                'remarks' => $remarks,
-                'done_by' => $request->user()->id,
-                'action_on' => now(),
-            ]);
-            $leaveRequest->approvals()->create([
-                'approval_level' => 'Final',
-                'approver_id' => $request->user()->id,
-                'remarks' => $remarks,
-                'approved_date' => now(),
-            ]);
-
-            return $leaveRequest;
-        });
+        $leaveRequest = $decisions->decide($this->workFromHomeRequests(), $id, $status, (int) $request->user()->id, $remarks);
 
         if ($leaveRequest === null) {
             return $this->requestNotFound();
-        }
-
-        if ($status === 'approved') {
-            app(LeavePdfGenerationService::class)->generateIfAvailable($leaveRequest, $request->user()->id);
         }
 
         $leaveRequest->load(['employee.user:id,name', 'details']);
