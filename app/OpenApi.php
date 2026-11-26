@@ -4,6 +4,10 @@ namespace App;
 
 use OpenApi\Attributes as OA;
 
+#[OA\OpenApi(tags: [
+    new OA\Tag(name: 'Leave Management', description: 'Employee leave application and request APIs.'),
+    new OA\Tag(name: 'HR Leave', description: 'HR leave application, listing, and decision APIs.'),
+])]
 #[OA\Info(
     version: '1.0.0',
     title: 'HRMS CRM API Documentation',

@@ -1195,7 +1195,7 @@
         "/api/v1/hr/leaves/apply": {
             "post": {
                 "tags": [
-                    "Leave Management"
+                    "HR Leave"
                 ],
                 "summary": "Apply or apply and approve leave on behalf of an employee (HR only)",
                 "description": "Use the employee_id from HR leave metadata and the same application fields as the employee API. Send status=applied to submit or status=approved to apply and approve. WFH is not accepted.",
@@ -1276,7 +1276,7 @@
         "/api/v1/hr/leaves/{id}/approve": {
             "post": {
                 "tags": [
-                    "Leave Management"
+                    "HR Leave"
                 ],
                 "summary": "Approve an applied non-WFH leave request (HR only)",
                 "operationId": "cfdd3cb7a23ef28ac44fee195c350dde",
@@ -1328,7 +1328,7 @@
         "/api/v1/hr/leaves/{id}/reject": {
             "post": {
                 "tags": [
-                    "Leave Management"
+                    "HR Leave"
                 ],
                 "summary": "Reject an applied non-WFH leave request (HR only)",
                 "operationId": "e4068f884cd1d1f57576beef88254d2c",
@@ -1652,7 +1652,7 @@
         "/api/v1/hr/leaves/meta": {
             "get": {
                 "tags": [
-                    "Leave Management"
+                    "HR Leave"
                 ],
                 "summary": "Get leave application metadata for the selected employee (HR only)",
                 "description": "Same response as employee leave metadata, excluding WFH. Eligibility, balances, policies and field definitions are for the selected employee.",
@@ -1717,7 +1717,7 @@
         "/api/v1/hr/leaves/validate": {
             "post": {
                 "tags": [
-                    "Leave Management"
+                    "HR Leave"
                 ],
                 "summary": "Validate leave for the selected employee (HR only)",
                 "description": "Uses the same leave fields and response as employee validation, with employee_id required. No leave is created.",
@@ -2040,6 +2040,86 @@
                     },
                     "422": {
                         "description": "Validation error"
+                    }
+                },
+                "security": [
+                    {
+                        "sanctum": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/hr/leaves": {
+            "get": {
+                "tags": [
+                    "HR Leave"
+                ],
+                "summary": "List all non-WFH leave requests for HR review",
+                "description": "List non-WFH leave requests across employees for HR review.",
+                "operationId": "bd206f90deb2a917f9b39bff6c6768d8",
+                "parameters": [
+                    {
+                        "name": "employee_id",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "employee_name",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "applied",
+                                "approved",
+                                "rejected",
+                                "cancelled"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "start_date",
+                        "in": "query",
+                        "description": "Requests ending on or after this date",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "end_date",
+                        "in": "query",
+                        "description": "Requests starting on or before this date",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated non-WFH leave requests retrieved successfully"
+                    },
+                    "403": {
+                        "description": "HR, Admin, or Finance role required"
+                    },
+                    "422": {
+                        "description": "Invalid filters"
                     }
                 },
                 "security": [
@@ -3674,6 +3754,14 @@
     },
     "tags": [
         {
+            "name": "Leave Management",
+            "description": "Employee leave application and request APIs."
+        },
+        {
+            "name": "HR Leave",
+            "description": "HR leave application, listing, and decision APIs."
+        },
+        {
             "name": "Assets",
             "description": "Assets"
         },
@@ -3708,10 +3796,6 @@
         {
             "name": "Ideas",
             "description": "Ideas"
-        },
-        {
-            "name": "Leave Management",
-            "description": "Leave Management"
         },
         {
             "name": "Rewards",

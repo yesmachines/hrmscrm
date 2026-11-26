@@ -520,23 +520,26 @@ test('HR leave APIs exclude WFH while employee submission and HR WFH decisions s
 
     $regularDate = nextWorkFromHomeWeekday($next->copy()->addDay())->toDateString();
     $application = ['start_date' => $regularDate, 'end_date' => $regularDate];
-    $regularId = $this->postJson(route('api.v1.hr.leaves.store'), [
+    $regularId = $this->postJson(route('api.v1.hr.leaves.apply'), [
         ...$application,
+        'employee_id' => $employee->id,
         'leave_type_id' => $regularType->id,
+        'status' => 'applied',
     ])->assertCreated()->json('data.id');
     $this->getJson(route('api.v1.hr.leaves.index'))->assertOk()
         ->assertJsonCount(1, 'data.leave_requests')
         ->assertJsonPath('data.leave_requests.0.id', $regularId);
-    $this->getJson(route('api.v1.hr.leaves.index', ['leave_type_id' => $type->id]))
-        ->assertOk()->assertJsonCount(0, 'data.leave_requests');
+    $this->getJson(route('api.v1.hr.leaves.index', ['employee_id' => $employee->id]))
+        ->assertOk()->assertJsonCount(1, 'data.leave_requests')
+        ->assertJsonPath('data.leave_requests.0.id', $regularId);
     $this->getJson(route('api.v1.leaves.index'))->assertOk()->assertJsonCount(3, 'data.leave_requests');
     $this->getJson(route('api.v1.hr.leaves.meta', ['employee_id' => $employee->id]))
         ->assertOk()->assertJsonMissing(['code' => 'WFH']);
     $this->getJson(route('api.v1.leaves.show', $ids[0]))->assertOk();
-    $this->getJson(route('api.v1.hr.leaves.show', $ids[0]))->assertNotFound();
-    $this->patchJson(route('api.v1.hr.leaves.update', $ids[0]), ['remarks' => 'Change'])
+    $this->getJson('/api/v1/hr/leaves/'.$ids[0])->assertNotFound();
+    $this->patchJson('/api/v1/hr/leaves/'.$ids[0], ['remarks' => 'Change'])
         ->assertNotFound();
-    foreach (['apply', 'store', 'validate'] as $action) {
+    foreach (['apply', 'validate'] as $action) {
         $this->postJson(route("api.v1.hr.leaves.{$action}"), [
             ...$application,
             'employee_id' => $employee->id,

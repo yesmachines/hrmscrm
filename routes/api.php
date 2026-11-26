@@ -161,7 +161,7 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
     // Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.hr.leaves.index');
     // Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.hr.leaves.store');
     // Route::match(['put', 'patch'], 'leaves/{id}', [LeaveController::class, 'update'])->name('api.v1.hr.leaves.update');
-    // Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.hr.leaves.show');
+    Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.hr.leaves.show');
 
     // Documents
     Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.hr.documents.categories');
