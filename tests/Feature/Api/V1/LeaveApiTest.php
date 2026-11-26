@@ -816,6 +816,9 @@ test('get leave detail returns full leave request with attachments, history, det
         'approved_date' => now(),
     ]);
 
+    $hrDetailUrl = route('api.v1.hr.leaves.show', $leaveRequest->id);
+    $this->getJson($hrDetailUrl)->assertUnauthorized();
+
     $token = $user->createToken('test')->plainTextToken;
 
     $response = $this->withToken($token)
@@ -832,6 +835,17 @@ test('get leave detail returns full leave request with attachments, history, det
         ->assertJsonPath('data.histories.0.action_type', 'applied')
         ->assertJsonPath('data.histories.0.done_by.name', 'Leave User')
         ->assertJsonPath('data.approvals.0.approver.name', 'Manager Jane');
+
+    $this->getJson($hrDetailUrl)->assertForbidden();
+
+    foreach (['hr', 'admin', 'finance'] as $role) {
+        Auth::forgetGuards();
+        $reviewer = createHrmsLoginUser($role);
+        $this->withToken($reviewer->createToken('test')->plainTextToken)
+            ->getJson($hrDetailUrl)
+            ->assertOk()
+            ->assertExactJson($response->json());
+    }
 });
 
 test('get leave detail returns 404 if leave belongs to another employee', function () {
