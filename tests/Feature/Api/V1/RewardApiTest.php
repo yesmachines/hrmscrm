@@ -118,6 +118,85 @@ test('hr user can filter all rewards by year and month via hr endpoint', functio
         ->assertJsonPath('data.data.0.amount', '1000.00');
 });
 
+test('regular employee can view other employees achieved rewards but not pending or rejected ones', function () {
+    $category = RewardCategory::factory()->create();
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 4000,
+        'status' => 'approved',
+    ]);
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 6000,
+        'status' => 'paid',
+    ]);
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 9000,
+        'status' => 'pending',
+    ]);
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 1500,
+        'status' => 'rejected',
+    ]);
+
+    $response = $this->withToken($this->regularToken)
+        ->getJson('/api/v1/rewards/achievers');
+
+    $response->assertOk()
+        ->assertJsonPath('statusCode', 200)
+        ->assertJsonPath('data.total', 2);
+
+    $amounts = collect($response->json('data.data'))->pluck('amount')->sort()->values()->all();
+    expect($amounts)->toBe(['4000.00', '6000.00']);
+});
+
+test('regular employee achievers endpoint filters by category, year and month', function () {
+    $category = RewardCategory::factory()->create();
+    $otherCategory = RewardCategory::factory()->create();
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 2500,
+        'status' => 'paid',
+        'submitted_date' => '2026-11-10',
+    ]);
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 3500,
+        'status' => 'approved',
+        'submitted_date' => '2026-10-10',
+    ]);
+
+    Reward::factory()->create([
+        'category_id' => $otherCategory->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 7000,
+        'status' => 'paid',
+        'submitted_date' => '2026-11-10',
+    ]);
+
+    $response = $this->withToken($this->regularToken)
+        ->getJson('/api/v1/rewards/achievers?category_id='.$category->id.'&year=2026&month=11');
+
+    $response->assertOk()
+        ->assertJsonPath('statusCode', 200)
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.data.0.amount', '2500.00');
+});
+
 test('hr user can add an existing approved reward for an employee via hr endpoint', function () {
     $category = RewardCategory::factory()->create(['reward_name' => 'Spot Bonus', 'short_code' => 'SPOT']);
 

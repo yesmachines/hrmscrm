@@ -179,6 +179,69 @@ class RewardController extends Controller
     }
 
     /**
+     * Get list of other employees' achieved rewards (approved/paid only), visible to all employees.
+     */
+    #[OA\Get(
+        path: '/api/v1/rewards/achievers',
+        summary: 'List achieved (approved/paid) rewards across all employees',
+        security: [['sanctum' => []]],
+        tags: ['Rewards'],
+        parameters: [
+            new OA\Parameter(name: 'category_id', in: 'query', description: 'Filter by category ID', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'year', in: 'query', description: 'Filter by submission year (e.g. 2026)', required: false, schema: new OA\Schema(type: 'integer', example: 2026)),
+            new OA\Parameter(name: 'month', in: 'query', description: 'Filter by submission month number 1-12', required: false, schema: new OA\Schema(type: 'integer', example: 11)),
+            new OA\Parameter(name: 'status', in: 'query', description: 'Filter by achieved status (approved or paid). Defaults to both.', required: false, schema: new OA\Schema(type: 'string', enum: ['approved', 'paid'])),
+            new OA\Parameter(name: 'per_page', in: 'query', description: 'Pagination page size (default 15)', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'page', in: 'query', description: 'Page number', required: false, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Achievers list retrieved successfully'),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
+    public function achievers(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return $this->errorResponse('Unauthenticated.', 401);
+        }
+
+        $query = Reward::with([
+            'category:id,reward_name,short_code',
+            'employee:id,user_id,emp_num,designation',
+            'employee.user:id,name',
+        ]);
+
+        // Only ever show achieved rewards, never pending/rejected
+        if ($request->filled('status') && in_array($request->input('status'), ['approved', 'paid'], true)) {
+            $query->where('status', $request->input('status'));
+        } else {
+            $query->whereIn('status', ['approved', 'paid']);
+        }
+
+        if ($request->filled('category_id') && $request->input('category_id') !== 'all') {
+            $query->where('category_id', (int) $request->input('category_id'));
+        }
+
+        if ($request->filled('year')) {
+            $query->whereYear('submitted_date', (int) $request->input('year'));
+        }
+
+        if ($request->filled('month')) {
+            $query->whereMonth('submitted_date', (int) $request->input('month'));
+        }
+
+        $perPage = max(1, min(100, (int) $request->input('per_page', 15)));
+        $achievers = $query->orderByDesc('submitted_date')
+            ->orderByDesc('id')
+            ->paginate($perPage, [
+                'id', 'category_id', 'submitted_by', 'claim_no', 'amount', 'currency', 'status', 'submitted_date', 'description',
+            ]);
+
+        return $this->successResponse($achievers, 'Reward achievers fetched successfully.');
+    }
+
+    /**
      * Get list of rewards for the authenticated employee (Self-Service).
      */
     #[OA\Get(

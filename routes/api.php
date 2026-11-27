@@ -95,6 +95,7 @@ Route::prefix('v1')->group(function () {
         // Rewards Endpoints
         Route::get('rewards/categories', [RewardController::class, 'categories'])->name('api.v1.rewards.categories');
         Route::get('rewards/summary', [RewardController::class, 'summary'])->name('api.v1.rewards.summary');
+        Route::get('rewards/achievers', [RewardController::class, 'achievers'])->name('api.v1.rewards.achievers');
         Route::get('rewards', [RewardController::class, 'index'])->name('api.v1.rewards.index');
         Route::post('rewards', [RewardController::class, 'store'])->name('api.v1.rewards.store');
         Route::get('rewards/{id}', [RewardController::class, 'show'])->name('api.v1.rewards.show');
