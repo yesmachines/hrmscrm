@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\EmployeeController;
 use App\Http\Controllers\Api\V1\EventController;
+use App\Http\Controllers\Api\V1\HrLeaveBalanceController;
 use App\Http\Controllers\Api\V1\HrLeaveController;
 use App\Http\Controllers\Api\V1\HrLetterRequestController;
 use App\Http\Controllers\Api\V1\IdeaController;
@@ -159,6 +160,9 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
         Route::post('leaves/{id}/reject', [HrLeaveController::class, 'reject'])->whereNumber('id')->name('reject');
         Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('show');
     });
+
+    // Add manual leave balances
+    Route::post('leave-balances', [HrLeaveBalanceController::class, 'store'])->name('api.v1.hr.leave-balances.store');
 
     // Documents
     Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.hr.documents.categories');

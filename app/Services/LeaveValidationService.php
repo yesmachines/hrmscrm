@@ -434,6 +434,11 @@ class LeaveValidationService
             // An approved edit can reuse the days already deducted for this request.
             $available += $existing ? (float) $existing->total_days : 0.0;
         }
+        if ($balance !== null && $balance->leave_validity !== null && $balance->leave_validity->isPast()) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => ["Your {$leaveType->leave_name} balance validity has expired. Please contact HR."],
+            ]);
+        }
         // if ($available < $totalDays) {
         //     throw ValidationException::withMessages([
         //         'total_days' => ["Insufficient leave balance for {$leaveType->leave_name}. Available: {$available} days, requested: {$totalDays} days."],

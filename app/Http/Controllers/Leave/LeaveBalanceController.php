@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\LeaveBalance;
 use App\Models\LeaveType;
 use App\Models\SalesCrm\Employee;
+use App\Services\LeaveBalanceAdjustmentService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class LeaveBalanceController extends Controller
 {
+    public function __construct(private readonly LeaveBalanceAdjustmentService $leaveBalanceAdjustmentService) {}
+
     public function index()
     {
         $balances = LeaveBalance::with([
@@ -47,7 +50,12 @@ class LeaveBalanceController extends Controller
             'balance' => 'required|numeric|min:0',
         ]);
 
-        LeaveBalance::create($validated);
+        $leaveType = LeaveType::query()->findOrFail($validated['leave_type_id']);
+        $employee = Employee::query()->findOrFail($validated['employee_id']);
+
+        $balance = new LeaveBalance($validated);
+        $this->leaveBalanceAdjustmentService->applyLeaveValidity($balance, $leaveType, $employee->organisation_id);
+        $balance->save();
 
         return redirect()->route('leave-balances.index')->with('success', 'Leave balance added successfully.');
     }
@@ -76,7 +84,12 @@ class LeaveBalanceController extends Controller
             'balance' => 'required|numeric|min:0',
         ]);
 
-        $leave_balance->update($validated);
+        $leaveType = LeaveType::query()->findOrFail($validated['leave_type_id']);
+        $employee = Employee::query()->findOrFail($validated['employee_id']);
+
+        $leave_balance->fill($validated);
+        $this->leaveBalanceAdjustmentService->applyLeaveValidity($leave_balance, $leaveType, $employee->organisation_id);
+        $leave_balance->save();
 
         return redirect()->route('leave-balances.index')->with('success', 'Leave balance updated successfully.');
     }
