@@ -1,6 +1,7 @@
-import { AlertTriangle, Eye, LoaderCircle } from 'lucide-react';
+import { AlertTriangle, Eye, LoaderCircle, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { csrfHeaders } from '@/lib/csrf-headers';
 
 type Props = {
     employeeId: number | string;
@@ -38,20 +39,6 @@ export default function LeaveTemplatePreview({
         previewError?.key === previewKey ? previewError.message : '';
 
     async function previewTemplate() {
-        const csrfToken = document.querySelector<HTMLMetaElement>(
-            'meta[name="csrf-token"]',
-        )?.content;
-
-        if (!csrfToken) {
-            setPreviewError({
-                key: previewKey,
-                message:
-                    'Unable to preview the template because the security token is missing.',
-            });
-
-            return;
-        }
-
         setLoading(true);
         setPreviewError(null);
 
@@ -61,7 +48,7 @@ export default function LeaveTemplatePreview({
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
+                    ...csrfHeaders(),
                     'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: JSON.stringify({
@@ -70,6 +57,13 @@ export default function LeaveTemplatePreview({
                     values,
                 }),
             });
+
+            if (response.status === 419) {
+                throw new Error(
+                    'Your session could not be verified. Reload the page, then try the preview again.',
+                );
+            }
+
             const result = (await response.json()) as PreviewResponse;
 
             if (!response.ok) {
@@ -122,15 +116,24 @@ export default function LeaveTemplatePreview({
                 <Button
                     type="button"
                     variant="outline"
-                    onClick={previewTemplate}
-                    disabled={!templateAvailable || loading}
+                    onClick={
+                        currentPreview ? () => setPreview(null) : previewTemplate
+                    }
+                    disabled={!currentPreview && (!templateAvailable || loading)}
+                    aria-expanded={currentPreview !== null}
                 >
-                    {loading ? (
+                    {currentPreview ? (
+                        <X className="mr-2 size-4" />
+                    ) : loading ? (
                         <LoaderCircle className="mr-2 size-4 animate-spin" />
                     ) : (
                         <Eye className="mr-2 size-4" />
                     )}
-                    {loading ? 'Loading preview...' : 'Preview template'}
+                    {currentPreview
+                        ? 'Close'
+                        : loading
+                          ? 'Loading preview...'
+                          : 'Preview'}
                 </Button>
             </div>
 

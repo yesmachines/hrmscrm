@@ -208,7 +208,7 @@ class LeaveValidationService
             $joiningDate = $employee->joining_date;
             if ($joiningDate === null) {
                 throw ValidationException::withMessages([
-                    'leave_type_id' => ['Joining date is required to verify minimum service eligibility. Please ask HR to complete your joining date.'],
+                    'leave_type_id' => ['Joining date is required to verify minimum service eligibility.'], // Please ask HR to complete your joining date.
                 ]);
             }
             $eligibleFrom = Carbon::parse($joiningDate)->startOfDay()->addMonthsNoOverflow($policy->minimum_service_months);

@@ -122,17 +122,6 @@ Route::middleware(['auth:sanctum', 'role:hr,admin'])->prefix('v1/hr/wfh')->group
     Route::post('requests/{id}/reject', [WorkFromHomeController::class, 'rejectRequest'])->name('api.v1.hr.wfh.requests.reject');
 });
 
-Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr/leaves')->name('api.v1.hr.leaves.')->group(function () {
-    Route::get('', [LeaveController::class, 'hrIndex'])->name('index');
-    Route::get('meta', [LeaveController::class, 'meta'])->name('meta');
-    Route::post('validate', [LeaveController::class, 'validateForm'])->name('validate');
-    Route::get('festivals', [LeaveController::class, 'festivals'])->name('festivals');
-    Route::get('holidays', [LeaveController::class, 'festivals'])->name('holidays');
-    Route::post('apply', [HrLeaveController::class, 'apply'])->name('apply');
-    Route::post('{id}/approve', [HrLeaveController::class, 'approve'])->whereNumber('id')->name('approve');
-    Route::post('{id}/reject', [HrLeaveController::class, 'reject'])->whereNumber('id')->name('reject');
-});
-
 // HR APIs
 Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->group(function () {
     // Assets dashboard for HR
@@ -157,11 +146,18 @@ Route::middleware(['auth:sanctum', 'role:hr,admin,finance'])->prefix('v1/hr')->g
     Route::get('ideas', [IdeaController::class, 'index'])->name('api.v1.hr.ideas.index');
     Route::post('ideas', [IdeaController::class, 'store'])->name('api.v1.hr.ideas.store');
 
-    // // Leaves
-    // Route::get('leaves', [LeaveController::class, 'index'])->name('api.v1.hr.leaves.index');
-    // Route::post('leaves', [LeaveController::class, 'store'])->name('api.v1.hr.leaves.store');
-    // Route::match(['put', 'patch'], 'leaves/{id}', [LeaveController::class, 'update'])->name('api.v1.hr.leaves.update');
-    Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('api.v1.hr.leaves.show');
+    // Leaves
+    Route::name('api.v1.hr.leaves.')->group(function () {
+        Route::get('leaves', [LeaveController::class, 'hrIndex'])->name('index');
+        Route::get('leaves/meta', [LeaveController::class, 'meta'])->name('meta');
+        Route::post('leaves/validate', [LeaveController::class, 'validateForm'])->name('validate');
+        Route::get('leaves/festivals', [LeaveController::class, 'festivals'])->name('festivals');
+        Route::get('leaves/holidays', [LeaveController::class, 'festivals'])->name('holidays');
+        Route::post('leaves/apply', [HrLeaveController::class, 'apply'])->name('apply');
+        Route::post('leaves/{id}/approve', [HrLeaveController::class, 'approve'])->whereNumber('id')->name('approve');
+        Route::post('leaves/{id}/reject', [HrLeaveController::class, 'reject'])->whereNumber('id')->name('reject');
+        Route::get('leaves/{id}', [LeaveController::class, 'show'])->name('show');
+    });
 
     // Documents
     Route::get('documents/categories', [DocumentController::class, 'categories'])->name('api.v1.hr.documents.categories');

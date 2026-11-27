@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/date-format';
 import { dashboard } from '@/routes';
 
 type Profile = {
+    signature_url: string | null;
     gender: string | null;
     dob_personal: string | null;
     marital_status: string | null;
@@ -89,9 +90,9 @@ function Detail({
     value,
 }: {
     label: string;
-    value: string | number | null | undefined | boolean;
+    value: ReactNode;
 }) {
-    let display: string | number = '—';
+    let display: ReactNode = '—';
 
     if (typeof value === 'boolean') {
         display = value ? 'Yes' : 'No';
@@ -231,6 +232,18 @@ export default function EmployeesShow({
                     <Detail label="Nationality" value={profile?.nationality} />
                     <Detail label="Religion" value={profile?.religion} />
                     <Detail label="Blood group" value={profile?.blood_group} />
+                    <Detail
+                        label="Employee signature"
+                        value={
+                            profile?.signature_url ? (
+                                <img
+                                    src={profile.signature_url}
+                                    alt="Employee signature"
+                                    className="h-12 w-48 max-w-full rounded border border-border bg-white object-contain p-1"
+                                />
+                            ) : null
+                        }
+                    />
                 </Section>
 
                 <Section title="Contact (UAE)">

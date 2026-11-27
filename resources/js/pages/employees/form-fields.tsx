@@ -618,38 +618,36 @@ export default function EmployeeProfileFormFields({
                     label="Employee signature (optional)"
                     name="profile_signature"
                     error={errors.profile_signature ?? signatureError}
-                    className="sm:col-span-2"
                 >
-                    <div className="flex items-center gap-3">
-                        {profileDefaults.signature_url ? (
-                            <img
-                                src={profileDefaults.signature_url}
-                                alt="Current employee signature"
-                                className="h-12 max-w-48 rounded border border-border bg-white object-contain p-1"
-                            />
-                        ) : null}
-                        <Input
-                            id="profile_signature"
-                            name="profile_signature"
-                            type="file"
-                            accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
-                            onChange={(event) => {
-                                const file = event.currentTarget.files?.[0];
-                                const error =
-                                    file && file.size > 5 * 1024 * 1024
-                                        ? 'The employee signature must not exceed 5 MB.'
-                                        : '';
+                    <Input
+                        id="profile_signature"
+                        name="profile_signature"
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg,image/gif,image/webp"
+                        onChange={(event) => {
+                            const file = event.currentTarget.files?.[0];
+                            const error =
+                                file && file.size > 5 * 1024 * 1024
+                                    ? 'The employee signature must not exceed 5 MB.'
+                                    : '';
 
-                                event.currentTarget.setCustomValidity(error);
-                                setSignatureError(error);
-                            }}
-                            className="h-10 cursor-pointer file:mr-2 file:h-7 file:rounded-md file:border-0 file:bg-muted file:px-2.5 file:text-xs file:font-medium"
-                        />
-                    </div>
+                            event.currentTarget.setCustomValidity(error);
+                            setSignatureError(error);
+                        }}
+                        className="h-10 cursor-pointer file:mr-2 file:h-7 file:rounded-md file:border-0 file:bg-muted file:px-2.5 file:text-xs file:font-medium"
+                    />
                     <p className="text-[11px] text-muted-foreground">
-                        JPG, PNG, GIF, or WebP. Max 5MB. Leave empty to keep it
-                        blank.
+                        JPG, PNG, GIF, or WebP. Max 5MB.
+                        {profileDefaults.signature_url &&
+                            ' Leave empty to keep the current signature.'}
                     </p>
+                    {profileDefaults.signature_url ? (
+                        <img
+                            src={profileDefaults.signature_url}
+                            alt="Current employee signature"
+                            className="h-12 w-48 max-w-full rounded border border-border bg-white object-contain p-1"
+                        />
+                    ) : null}
                 </Field>
                 <Field label="Gender" name="gender" error={errors.gender}>
                     <select
