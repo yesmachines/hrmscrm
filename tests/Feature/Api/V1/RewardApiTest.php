@@ -90,6 +90,34 @@ test('hr user can list all rewards across employees via hr endpoint', function (
         ->assertJsonPath('data.total', 2);
 });
 
+test('hr user can filter all rewards by year and month via hr endpoint', function () {
+    $category = RewardCategory::factory()->create();
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->regularEmployee->id,
+        'amount' => 1000,
+        'status' => 'approved',
+        'submitted_date' => '2026-11-05',
+    ]);
+
+    Reward::factory()->create([
+        'category_id' => $category->id,
+        'submitted_by' => $this->hrEmployee->id,
+        'amount' => 2000,
+        'status' => 'approved',
+        'submitted_date' => '2026-10-05',
+    ]);
+
+    $response = $this->withToken($this->hrToken)
+        ->getJson('/api/v1/hr/rewards?year=2026&month=11&category_id='.$category->id);
+
+    $response->assertOk()
+        ->assertJsonPath('statusCode', 200)
+        ->assertJsonPath('data.total', 1)
+        ->assertJsonPath('data.data.0.amount', '1000.00');
+});
+
 test('hr user can add an existing approved reward for an employee via hr endpoint', function () {
     $category = RewardCategory::factory()->create(['reward_name' => 'Spot Bonus', 'short_code' => 'SPOT']);
 

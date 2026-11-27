@@ -289,6 +289,8 @@ class RewardController extends Controller
             new OA\Parameter(name: 'employee_id', in: 'query', description: 'Filter by specific employee ID', required: false, schema: new OA\Schema(type: 'integer')),
             new OA\Parameter(name: 'status', in: 'query', description: 'Filter by status (pending, approved, paid, rejected)', required: false, schema: new OA\Schema(type: 'string')),
             new OA\Parameter(name: 'category_id', in: 'query', description: 'Filter by category ID', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'year', in: 'query', description: 'Filter by submission year (e.g. 2026)', required: false, schema: new OA\Schema(type: 'integer', example: 2026)),
+            new OA\Parameter(name: 'month', in: 'query', description: 'Filter by submission month number 1-12', required: false, schema: new OA\Schema(type: 'integer', example: 11)),
             new OA\Parameter(name: 'date_filter', in: 'query', description: 'Quick keyword: today, this_month, last_month', required: false, schema: new OA\Schema(type: 'string')),
             new OA\Parameter(name: 'search', in: 'query', description: 'Search across claim_no, employee name, category or description', required: false, schema: new OA\Schema(type: 'string')),
             new OA\Parameter(name: 'per_page', in: 'query', description: 'Pagination page size (default 15)', required: false, schema: new OA\Schema(type: 'integer')),
@@ -322,6 +324,16 @@ class RewardController extends Controller
 
         if ($request->filled('status') && $request->input('status') !== 'all') {
             $query->where('status', $request->input('status'));
+        }
+
+        // Filter by Year (e.g. ?year=2026)
+        if ($request->filled('year')) {
+            $query->whereYear('submitted_date', (int) $request->input('year'));
+        }
+
+        // Filter by Month (e.g. ?month=11)
+        if ($request->filled('month')) {
+            $query->whereMonth('submitted_date', (int) $request->input('month'));
         }
 
         if ($request->filled('search')) {
